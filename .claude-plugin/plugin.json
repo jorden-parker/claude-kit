@@ -1,0 +1,5 @@
+{
+  "name": "prompt-optimizer",
+  "version": "0.1.0",
+  "description": "/optimize rewrites a draft prompt to be clearer and more specific"
+}

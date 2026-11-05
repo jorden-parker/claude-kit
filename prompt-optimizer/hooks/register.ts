@@ -30,7 +30,7 @@ export const register: Register = (on) => {
       system: OPTIMIZER_RULES,
       prompt: draft,
       effort: "low",
-      timeoutMs: 15000,
+      timeoutMs: 120000,
     });
 
     if (!reply.isAnswered) {

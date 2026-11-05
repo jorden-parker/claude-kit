@@ -35,6 +35,19 @@ test("optimize returns the rewritten prompt and copies it", async ($, on) => {
   expect(prompts).toEqual(["fix bug"]);
 });
 
+test("optimize allows a slow local model two minutes", async ($, on) => {
+  const timeouts: (number | undefined)[] = [];
+  on("ui.copy", () => ({ value: { isCopied: true } }));
+  on("model.complete", (_, e) => {
+    timeouts.push(e.timeoutMs);
+    return { value: { isAnswered: true, text: "Better", usage: USAGE } };
+  });
+
+  await $.command.run(optimize("fix bug"));
+
+  expect(timeouts).toEqual([120000]);
+});
+
 test('only the text after the last "Rewritten prompt:" marker is used', async ($, on) => {
   const copied: string[] = [];
   on("ui.copy", (_, e) => {

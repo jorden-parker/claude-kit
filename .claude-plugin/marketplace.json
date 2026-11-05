@@ -1,0 +1,8 @@
+{
+  "name": "jorden-mods",
+  "owner": { "name": "Jorden Parker" },
+  "plugins": [
+    { "name": "prompt-optimizer", "source": "./prompt-optimizer",
+      "description": "/optimize rewrites a draft prompt to be clearer and more specific" }
+  ]
+}

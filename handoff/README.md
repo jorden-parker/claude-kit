@@ -1,4 +1,4 @@
-# session-recap
+# handoff
 
 `/handoff [focus]` summarizes the current session into a prompt a fresh session can pick up (goal, what is done, what is left, files and commands mentioned, open questions), then fills it into the composer so you can edit it or press Enter. An optional focus argument centers the recap on one topic.
 
@@ -7,6 +7,10 @@
 `/handoff` recaps the whole session.
 
 `/handoff the failing test` centers the recap on the failing test.
+
+`/handoff --new [focus]` hands the work off to a new session: it builds the recap, runs `/clear`, then submits the recap as the first prompt of the fresh session, so the work continues without the prior conversation. The recap is parked in the plugin store until it is submitted; if the process ends before that, the next session finds it and fills it into the composer instead.
+
+If the session cannot be cleared, the recap is filled into the composer as `/handoff` would.
 
 The recap uses the last 40 messages of the conversation. Nothing beyond the conversation is added. With no messages it says "Nothing to recap yet."
 
@@ -18,14 +22,14 @@ Installs at user scope, so it works in every directory. On any machine:
 
 ```
 claude plugin marketplace add jorden-parker/mods
-claude plugin install session-recap@jorden-mods --scope user
+claude plugin install handoff@jorden-mods --scope user
 ```
 
 On the dev machine, add the local checkout instead:
 
 ```
 claude plugin marketplace add ~/src/mods
-claude plugin install session-recap@jorden-mods --scope user
+claude plugin install handoff@jorden-mods --scope user
 ```
 
 The marketplace is defined in `.claude-plugin/marketplace.json` at the repo root.
@@ -41,7 +45,7 @@ Don't load this mod with `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir`. It then lo
 ## Uninstall
 
 ```
-claude plugin uninstall session-recap@jorden-mods
+claude plugin uninstall handoff@jorden-mods
 claude plugin marketplace remove jorden-mods
 ```
 

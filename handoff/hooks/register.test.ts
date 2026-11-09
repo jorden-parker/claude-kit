@@ -1,4 +1,5 @@
-import { expect, test, type TestBody } from "claude-code/testing";
+import type { On } from "claude-code";
+import { expect, mock, test, type TestBody } from "claude-code/testing";
 
 const MODEL_USAGE = {
   input_tokens: 0,
@@ -284,5 +285,182 @@ testWithSession(
       "Resume prompt",
       '"Resume prompt"',
     ]);
+  }
+);
+
+const HANDING_OFF_MESSAGE = "Handing off to a new session…";
+const PENDING_HANDOFF_KEY = "pendingHandoff";
+
+const sessionStart = () => ({
+  cwd: "/repo",
+  surface: "terminal" as const,
+  isInteractive: true,
+});
+
+const ignoreToasts = (on: On) => {
+  on("ui.toast", () => ({ value: undefined }));
+};
+
+const mockStore = (on: On, entries: Record<string, unknown> = {}) => {
+  const store = new Map(Object.entries(entries));
+  on("store.get", (_, e) => ({ value: store.get(e.key) }));
+  on("store.set", (_, e) => {
+    store.set(e.key, e.value);
+    return { value: undefined };
+  });
+  on("store.delete", (_, e) => {
+    store.delete(e.key);
+    return { value: undefined };
+  });
+  return store;
+};
+
+const allowSessionStart = (on: On) => {
+  on("command.register", (_, e) => ({ value: { command: e.name } }));
+  on("session.start", (_, e) => ({ cwd: e.cwd }));
+};
+
+testWithSession(
+  "--new clears the session, then submits the recap as the first prompt",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    const store = mockStore(on);
+    const handoffSteps: string[] = [];
+    let fills = 0;
+    on("model.complete", () => ({
+      value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+    }));
+    on("prompt.fill", () => {
+      fills += 1;
+      return { isFilled: true };
+    });
+    on("command.run", { command: "clear" }, () => {
+      handoffSteps.push("clear");
+      return { text: "" };
+    });
+    on("prompt.submit", (_, e) => {
+      handoffSteps.push(`submit:${e.text}:${e.origin?.kind}`);
+      return { text: e.text };
+    });
+
+    const reply = await $.command.run(handoff("--new"));
+    expect(reply.text).toBe(HANDING_OFF_MESSAGE);
+    expect(handoffSteps).toEqual([]);
+
+    await clock.settle();
+
+    expect(handoffSteps).toEqual(["clear", "submit:Resume prompt:plugin"]);
+    expect(fills).toBe(0);
+    expect(store.has(PENDING_HANDOFF_KEY)).toBe(false);
+  }
+);
+
+testWithSession(
+  "--new keeps the rest of the arguments as the focus",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    const store = mockStore(on);
+    const prompts: string[] = [];
+    on("model.complete", (_, e) => {
+      prompts.push(e.prompt);
+      return {
+        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+      };
+    });
+    on("command.run", { command: "clear" }, () => ({ text: "" }));
+    on("prompt.submit", (_, e) => ({ text: e.text }));
+
+    await $.command.run(handoff("the auth change --new"));
+    await clock.settle();
+
+    expect(prompts[0]).toContain("<focus>\nthe auth change\n</focus>");
+  }
+);
+
+testWithSession(
+  "--new falls back to the composer when the session cannot be cleared",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    const store = mockStore(on);
+    const fills: string[] = [];
+    let submits = 0;
+    on("model.complete", () => ({
+      value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+    }));
+    on("command.run", { command: "clear" }, () => {
+      throw new Error("not now");
+    });
+    on("prompt.submit", (_, e) => {
+      submits += 1;
+      return { text: e.text };
+    });
+    on("prompt.fill", (_, e) => {
+      fills.push(e.text);
+      return { isFilled: true };
+    });
+
+    await $.command.run(handoff("--new"));
+    await clock.settle();
+
+    expect(fills).toEqual(["Resume prompt"]);
+    expect(submits).toBe(0);
+    expect(store.has(PENDING_HANDOFF_KEY)).toBe(false);
+  }
+);
+
+testWithSession(
+  "a pending handoff is filled into the composer when a session starts",
+  [],
+  async ($, on) => {
+    allowSessionStart(on);
+    const store = mockStore(on, { [PENDING_HANDOFF_KEY]: "Resume prompt" });
+    const fills: { text: string; mode?: string }[] = [];
+    on("prompt.fill", (_, e) => {
+      fills.push({ text: e.text, mode: e.mode });
+      return { isFilled: true };
+    });
+
+    await $.session.start(sessionStart());
+
+    expect(fills).toEqual([{ text: "Resume prompt", mode: "replace" }]);
+    expect(store.has(PENDING_HANDOFF_KEY)).toBe(false);
+  }
+);
+
+testWithSession(
+  "a pending handoff stays stored when the composer refuses it",
+  [],
+  async ($, on) => {
+    allowSessionStart(on);
+    const store = mockStore(on, { [PENDING_HANDOFF_KEY]: "Resume prompt" });
+    on("prompt.fill", refuseFill);
+
+    await $.session.start(sessionStart());
+
+    expect(store.get(PENDING_HANDOFF_KEY)).toBe("Resume prompt");
+  }
+);
+
+testWithSession(
+  "a session with nothing pending starts without touching the composer",
+  [],
+  async ($, on) => {
+    allowSessionStart(on);
+    mockStore(on);
+    let fills = 0;
+    on("prompt.fill", () => {
+      fills += 1;
+      return { isFilled: true };
+    });
+
+    await $.session.start(sessionStart());
+
+    expect(fills).toBe(0);
   }
 );

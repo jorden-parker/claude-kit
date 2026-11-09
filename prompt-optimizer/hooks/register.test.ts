@@ -565,3 +565,77 @@ testWithEmptySession(
     expect(contexts).toEqual([undefined, undefined, undefined]);
   }
 );
+
+testWithEmptySession(
+  "a reply that opens by saying what the rewriter could not see keeps only the rewrite",
+  async ($, on) => {
+    const filledPromptTexts: string[] = [];
+    on("model.complete", () => ({
+      value: {
+        isAnswered: true,
+        text: "I can't see the codebase or the referenced \"[Image #4]\" from here, so the rewrite below keeps the draft's requests intact and marks where specifics are needed.\n\nWorking directory: /repo\n\nUsing the /frontend-design skill, make the following changes:\n\n1. Fix the layout bug shown in [Image #4].",
+        usage: USAGE,
+      },
+    }));
+    on("prompt.fill", (_, e) => {
+      filledPromptTexts.push(e.text);
+      return { isFilled: true };
+    });
+
+    await $.command.run(optimize("fix the layout bug [Image #4]"));
+
+    expect(filledPromptTexts).toEqual([
+      "Using the /frontend-design skill, make the following changes:\n\n1. Fix the layout bug shown in [Image #4].",
+    ]);
+  }
+);
+
+testWithEmptySession(
+  "the rules tell the rewriter it has no file or image access and to keep image references verbatim",
+  async ($, on) => {
+    const systemPrompts: (string | undefined)[] = [];
+    on("model.complete", (_, e) => {
+      systemPrompts.push(e.system);
+      return {
+        value: { isAnswered: true, text: "Better prompt", usage: USAGE },
+      };
+    });
+    on("prompt.fill", () => ({ isFilled: true }));
+
+    await $.command.run(optimize("fix bug"));
+
+    const [system] = systemPrompts;
+    expect(system).toContain("You cannot open files or view images");
+    expect(system).toContain("Never say what you cannot see");
+    expect(system).toContain("[Image #N]");
+    expect(system).toContain("Do not restate the working directory");
+  }
+);
+
+testWithEmptySession(
+  "images attached to the /optimize submission are listed for the rewriter once",
+  async ($, on) => {
+    const prompts: string[] = [];
+    on("prompt.submit", (_, e) => ({ text: e.text }));
+    on("model.complete", (_, e) => {
+      prompts.push(e.prompt);
+      return {
+        value: { isAnswered: true, text: "Better prompt", usage: USAGE },
+      };
+    });
+    on("prompt.fill", () => ({ isFilled: true }));
+
+    await $.prompt.submit(
+      submitFromComposer("/optimize fix the layout bug", [
+        { type: "image", mediaType: "image/png", filename: "before.png" },
+      ])
+    );
+    await $.command.run(optimize("fix the layout bug"));
+    await $.command.run(optimize("fix the other bug"));
+
+    expect(prompts[0]).toContain(
+      "Attached images (the agent will see them; the rewriter does not): before.png (image/png)"
+    );
+    expect(prompts[1]).not.toContain("Attached images");
+  }
+);

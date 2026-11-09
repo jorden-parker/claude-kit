@@ -10,9 +10,11 @@
 
 The rewrite is grounded in the current working directory and the last few messages of the conversation, so references like "the bug" or "that file" resolve to what they name. Nothing the draft or the conversation does not imply is added.
 
+The rewrite model cannot open files or view images, and it is told so: the rewritten prompt is written for the agent that can. It keeps `[Image #N]` tokens verbatim, never mentions what it could not see, and does not restate the working directory. If the model still opens with such an aside, the leading paragraphs that contain one are dropped before the prompt is filled.
+
 When the composer cannot take the text (a headless run, or a dialog holding the keys), the rewrite is copied to the clipboard and printed instead. The rewrite is also handed to the model as hidden context, so a follow-up like "do it" refers to the optimized prompt.
 
-Images pasted into the composer alongside `/optimize` are noted for the model: a hidden line names each attached image and says it belongs with the optimized prompt, so a follow-up like "do it" treats them as part of it. The rewrite itself is text-only, and the composer cannot take images back, so the rewritten prompt does not re-attach them.
+Images pasted into the composer alongside `/optimize` are noted for the model: a hidden line names each attached image and says it belongs with the optimized prompt, so a follow-up like "do it" treats them as part of it. The same list is given to the rewrite model, so it knows the images exist and that the agent will see them. The rewrite itself is text-only, and the composer cannot take images back, so the rewritten prompt does not re-attach them.
 
 In a headless run (`claude -p "/optimize fix the bug"`) the process exits with code 1 when the rewrite fails or there is nothing to rewrite, so a script can tell.
 

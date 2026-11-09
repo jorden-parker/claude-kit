@@ -3,7 +3,7 @@
   "owner": { "name": "Jorden Parker" },
   "plugins": [
     { "name": "prompt-optimizer", "source": "./prompt-optimizer",
-      "description": "/optimize rewrites a draft prompt to be clearer and more specific" },
+      "description": "/optimize rewrites a draft prompt with repo context and fills it into the composer" },
     { "name": "session-recap", "source": "./session-recap",
       "description": "/recap summarizes the session into a resume prompt and fills it into the composer" }
   ]

@@ -1,7 +1,7 @@
 {
   "name": "prompt-optimizer",
-  "version": "0.1.0",
-  "description": "/optimize rewrites a draft prompt to be clearer and more specific",
+  "version": "0.2.0",
+  "description": "/optimize rewrites a draft prompt with repo context and fills it into the composer",
   "scripts": {
     "test": "claude plugin test .",
     "prepare": "husky",

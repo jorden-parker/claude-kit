@@ -1,5 +1,20 @@
 {
   "name": "prompt-optimizer",
-  "version": "0.1.0",
-  "description": "/optimize rewrites a draft prompt to be clearer and more specific"
+  "version": "0.2.0",
+  "description": "/optimize rewrites a draft prompt with repo context and fills it into the composer",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Rewrite model",
+      "description": "Which model rewrites the draft. haiku is fastest; sonnet and opus give more careful rewrites.",
+      "default": "haiku",
+      "options": ["haiku", "sonnet", "opus"]
+    },
+    "instructions": {
+      "type": "string",
+      "title": "Extra instructions",
+      "description": "Added to the rewrite rules, such as a house style every rewritten prompt should follow. Empty adds nothing.",
+      "default": ""
+    }
+  }
 }

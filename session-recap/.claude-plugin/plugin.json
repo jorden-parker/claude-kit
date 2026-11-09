@@ -1,0 +1,5 @@
+{
+  "name": "session-recap",
+  "version": "0.1.0",
+  "description": "/recap summarizes the session into a resume prompt and fills it into the composer"
+}

@@ -1,0 +1,9 @@
+{
+  // Each plugin is installed as a copy of its own folder, so hooks modules cannot import across plugins.
+  // Fallow cannot see that hooks.json loads register.ts, so the hooks files are declared as entry points.
+  "entry": ["*/hooks/register.ts", "*/hooks/*.test.ts"],
+  "duplicates": {
+    // Helpers copied between prompt-optimizer and session-recap on purpose: plugins must be self-contained.
+    "ignoredClones": ["dup:e67f2e0e:2", "dup:a6241677:2"]
+  }
+}

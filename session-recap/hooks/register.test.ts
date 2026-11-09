@@ -1,6 +1,6 @@
 import { expect, test, type TestBody } from "claude-code/testing";
 
-const USAGE = {
+const MODEL_USAGE = {
   input_tokens: 0,
   output_tokens: 0,
   cache_read_input_tokens: 0,
@@ -50,7 +50,7 @@ testWithSession(
     let modelCalls = 0;
     on("model.complete", () => {
       modelCalls += 1;
-      return { value: { isAnswered: true, text: "x", usage: USAGE } };
+      return { value: { isAnswered: true, text: "x", usage: MODEL_USAGE } };
     });
 
     const reply = await $.command.run(recap(""));
@@ -67,7 +67,7 @@ testWithSession(
     let modelCalls = 0;
     on("model.complete", () => {
       modelCalls += 1;
-      return { value: { isAnswered: true, text: "x", usage: USAGE } };
+      return { value: { isAnswered: true, text: "x", usage: MODEL_USAGE } };
     });
 
     const reply = await $.command.run(recap(""));
@@ -86,7 +86,7 @@ testWithSession(
     on("model.complete", (_, e) => {
       prompts.push(e.prompt);
       return {
-        value: { isAnswered: true, text: "Resume prompt", usage: USAGE },
+        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
       };
     });
 
@@ -114,7 +114,7 @@ testWithSession(
     on("model.complete", (_, e) => {
       prompts.push(e.prompt);
       return {
-        value: { isAnswered: true, text: "Resume prompt", usage: USAGE },
+        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
       };
     });
 
@@ -137,7 +137,7 @@ testWithSession(
     on("model.complete", (_, e) => {
       prompts.push(e.prompt);
       return {
-        value: { isAnswered: true, text: "Resume prompt", usage: USAGE },
+        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
       };
     });
 
@@ -154,7 +154,7 @@ testWithSession(
     const fills: { text: string; mode?: string }[] = [];
     let copies = 0;
     on("model.complete", () => ({
-      value: { isAnswered: true, text: "Resume prompt", usage: USAGE },
+      value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
     }));
     on("prompt.fill", (_, e) => {
       fills.push({ text: e.text, mode: e.mode });
@@ -179,20 +179,20 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     on("prompt.fill", refuseFill);
-    const copied: string[] = [];
+    const copiedTexts: string[] = [];
     on("ui.copy", (_, e) => {
-      copied.push(e.text);
+      copiedTexts.push(e.text);
       return { value: { isCopied: true } };
     });
     on("model.complete", () => ({
-      value: { isAnswered: true, text: " Resume prompt\n", usage: USAGE },
+      value: { isAnswered: true, text: " Resume prompt\n", usage: MODEL_USAGE },
     }));
 
     const reply = await $.command.run(recap(""));
 
     expect(reply.text).toBe("Resume prompt\n\n(Copied to clipboard)");
     expect(reply.context).toEqual(["Resume prompt"]);
-    expect(copied).toEqual(["Resume prompt"]);
+    expect(copiedTexts).toEqual(["Resume prompt"]);
   }
 );
 
@@ -202,7 +202,7 @@ testWithSession(
   async ($, on) => {
     on("prompt.fill", refuseFill);
     on("model.complete", () => ({
-      value: { isAnswered: true, text: "Resume prompt", usage: USAGE },
+      value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
     }));
     on("ui.copy", () => ({
       value: { isCopied: false, reason: "no-clipboard" },
@@ -230,7 +230,7 @@ testWithSession(
         reason: "api-error",
         status: 500,
         error: "server_error",
-        usage: USAGE,
+        usage: MODEL_USAGE,
       },
     }));
 
@@ -246,7 +246,7 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     on("model.complete", () => ({
-      value: { isAnswered: true, text: "```\n```", usage: USAGE },
+      value: { isAnswered: true, text: "```\n```", usage: MODEL_USAGE },
     }));
 
     const reply = await $.command.run(recap(""));
@@ -267,7 +267,7 @@ testWithSession(
       '```\n"Resume prompt"\n```\n',
     ];
     on("model.complete", () => ({
-      value: { isAnswered: true, text: modelReplies.shift()!, usage: USAGE },
+      value: { isAnswered: true, text: modelReplies.shift()!, usage: MODEL_USAGE },
     }));
     on("prompt.fill", (_, e) => {
       fills.push(e.text);

@@ -44,7 +44,7 @@ const buildRecapPrompt = (
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     await $.command.register({
-      name: "recap",
+      name: "handoff",
       description: "Summarize the session into a prompt that resumes the work",
       argumentHint: "[focus]",
     });
@@ -52,7 +52,7 @@ export const register: Register = (on) => {
     return next(e);
   });
 
-  on("command.run", { command: "recap" }, async ($, e) => {
+  on("command.run", { command: "handoff" }, async ($, e) => {
     const focus = e.args.trim();
     const recentMessages = await describeRecentMessages($);
     if (!recentMessages) return { text: NO_RECAP_MESSAGE };

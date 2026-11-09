@@ -36,8 +36,8 @@ const testWithSession = (
 
 const refuseFill = () => ({ isFilled: false, refusal: "no_composer" as const });
 
-const recap = (args: string) => ({
-  command: "recap",
+const handoff = (args: string) => ({
+  command: "handoff",
   args,
   origin: { kind: "composer" as const },
   presentation: { isFullscreen: false, columns: 80 },
@@ -53,7 +53,7 @@ testWithSession(
       return { value: { isAnswered: true, text: "x", usage: MODEL_USAGE } };
     });
 
-    const reply = await $.command.run(recap(""));
+    const reply = await $.command.run(handoff(""));
 
     expect(reply.text).toBe("Nothing to recap yet.");
     expect(modelCalls).toBe(0);
@@ -70,7 +70,7 @@ testWithSession(
       return { value: { isAnswered: true, text: "x", usage: MODEL_USAGE } };
     });
 
-    const reply = await $.command.run(recap(""));
+    const reply = await $.command.run(handoff(""));
 
     expect(reply.text).toBe("Nothing to recap yet.");
     expect(modelCalls).toBe(0);
@@ -90,7 +90,7 @@ testWithSession(
       };
     });
 
-    await $.command.run(recap(""));
+    await $.command.run(handoff(""));
 
     expect(prompts[0]).toContain("Working directory: /repo");
     expect(prompts[0]).toContain("user: Fix the login bug in auth.ts");
@@ -118,7 +118,7 @@ testWithSession(
       };
     });
 
-    await $.command.run(recap(""));
+    await $.command.run(handoff(""));
 
     expect(prompts[0]).not.toContain("user: message 5\n");
     expect(prompts[0]).toContain("user: message 6\n");
@@ -141,7 +141,7 @@ testWithSession(
       };
     });
 
-    await $.command.run(recap("  the auth change  "));
+    await $.command.run(handoff("  the auth change  "));
 
     expect(prompts[0]).toContain("<focus>\nthe auth change\n</focus>");
   }
@@ -165,7 +165,7 @@ testWithSession(
       return { value: { isCopied: true } };
     });
 
-    const reply = await $.command.run(recap(""));
+    const reply = await $.command.run(handoff(""));
 
     expect(fills).toEqual([{ text: "Resume prompt", mode: "replace" }]);
     expect(copies).toBe(0);
@@ -188,7 +188,7 @@ testWithSession(
       value: { isAnswered: true, text: " Resume prompt\n", usage: MODEL_USAGE },
     }));
 
-    const reply = await $.command.run(recap(""));
+    const reply = await $.command.run(handoff(""));
 
     expect(reply.text).toBe("Resume prompt\n\n(Copied to clipboard)");
     expect(reply.context).toEqual(["Resume prompt"]);
@@ -208,7 +208,7 @@ testWithSession(
       value: { isCopied: false, reason: "no-clipboard" },
     }));
 
-    const reply = await $.command.run(recap(""));
+    const reply = await $.command.run(handoff(""));
 
     expect(reply.text).toBe("Resume prompt");
     expect(reply.context).toEqual(["Resume prompt"]);
@@ -234,7 +234,7 @@ testWithSession(
       },
     }));
 
-    const reply = await $.command.run(recap(""));
+    const reply = await $.command.run(handoff(""));
 
     expect(reply.text).toBe("Could not build the recap (api-error).");
     expect(copies).toBe(0);
@@ -249,7 +249,7 @@ testWithSession(
       value: { isAnswered: true, text: "```\n```", usage: MODEL_USAGE },
     }));
 
-    const reply = await $.command.run(recap(""));
+    const reply = await $.command.run(handoff(""));
 
     expect(reply.text).toBe("Could not build the recap (empty reply).");
   }
@@ -277,7 +277,7 @@ testWithSession(
       return { isFilled: true };
     });
 
-    for (let i = 0; i < 3; i++) await $.command.run(recap(""));
+    for (let i = 0; i < 3; i++) await $.command.run(handoff(""));
 
     expect(fills).toEqual([
       "Resume prompt",

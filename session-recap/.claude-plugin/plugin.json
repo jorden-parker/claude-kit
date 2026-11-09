@@ -1,5 +1,5 @@
 {
   "name": "session-recap",
   "version": "0.1.0",
-  "description": "/recap summarizes the session into a resume prompt and fills it into the composer"
+  "description": "/handoff summarizes the session into a prompt a fresh session can pick up and fills it into the composer"
 }

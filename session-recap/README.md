@@ -1,12 +1,12 @@
 # session-recap
 
-`/recap [focus]` summarizes the current session into a prompt a fresh session can pick up (goal, what is done, what is left, files and commands mentioned, open questions), then fills it into the composer so you can edit it or press Enter. An optional focus argument centers the recap on one topic.
+`/handoff [focus]` summarizes the current session into a prompt a fresh session can pick up (goal, what is done, what is left, files and commands mentioned, open questions), then fills it into the composer so you can edit it or press Enter. An optional focus argument centers the recap on one topic.
 
 ## Usage
 
-`/recap` recaps the whole session.
+`/handoff` recaps the whole session.
 
-`/recap the failing test` centers the recap on the failing test.
+`/handoff the failing test` centers the recap on the failing test.
 
 The recap uses the last 40 messages of the conversation. Nothing beyond the conversation is added. With no messages it says "Nothing to recap yet."
 

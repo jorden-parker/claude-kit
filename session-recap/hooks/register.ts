@@ -14,20 +14,9 @@ const FILLED_MESSAGE =
   "Recap filled into the composer. Edit it or press Enter.";
 
 const WRAPPING_CODE_FENCE = /^```[^\n]*\n([\s\S]*?)\n?```$/;
-const WRAPPING_QUOTES = /^(["'])([\s\S]*)\1$/;
 
-const stripWrappingQuotes = (text: string) => {
-  const wrappingQuoteMatch = WRAPPING_QUOTES.exec(text);
-  if (!wrappingQuoteMatch) return text;
-  const quote = wrappingQuoteMatch[1] ?? "";
-  const innerText = wrappingQuoteMatch[2] ?? "";
-  return innerText.includes(quote) ? text : innerText;
-};
-
-const stripWrappingFenceAndQuotes = (text: string) =>
-  stripWrappingQuotes(
-    text.trim().replace(WRAPPING_CODE_FENCE, "$1").trim()
-  ).trim();
+const stripWrappingCodeFence = (text: string) =>
+  text.trim().replace(WRAPPING_CODE_FENCE, "$1").trim();
 
 const truncateMessageText = (text: string) =>
   text.length > RECENT_MESSAGE_MAX_LENGTH
@@ -81,7 +70,7 @@ export const register: Register = (on) => {
       return { text: `Could not build the recap (${reply.reason}).` };
     }
 
-    const recap = stripWrappingFenceAndQuotes(reply.text);
+    const recap = stripWrappingCodeFence(reply.text);
     if (!recap) {
       return { text: "Could not build the recap (empty reply)." };
     }

@@ -256,31 +256,33 @@ testWithSession(
 );
 
 testWithSession(
-  "wrapping code fences and quotes are stripped from the model output",
+  "a wrapping code fence is stripped and any other text is filled verbatim",
   CONVERSATION,
   async ($, on) => {
     const fills: string[] = [];
     const modelReplies = [
       "```text\nResume prompt\n```",
+      "```\nResume prompt\n```\n",
       '"Resume prompt"',
-      "'Resume prompt'",
-      '```\n"Resume prompt"\n```\n',
     ];
     on("model.complete", () => ({
-      value: { isAnswered: true, text: modelReplies.shift()!, usage: MODEL_USAGE },
+      value: {
+        isAnswered: true,
+        text: modelReplies.shift()!,
+        usage: MODEL_USAGE,
+      },
     }));
     on("prompt.fill", (_, e) => {
       fills.push(e.text);
       return { isFilled: true };
     });
 
-    for (let i = 0; i < 4; i++) await $.command.run(recap(""));
+    for (let i = 0; i < 3; i++) await $.command.run(recap(""));
 
     expect(fills).toEqual([
       "Resume prompt",
       "Resume prompt",
-      "Resume prompt",
-      "Resume prompt",
+      '"Resume prompt"',
     ]);
   }
 );

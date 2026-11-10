@@ -89,12 +89,16 @@ test("session start registers the command and the render tool", async ($, on) =>
     isInteractive: true,
   });
 
-  expect(ranCommands).toEqual(["brainstorm"]);
+  expect(ranCommands).toEqual([
+    "brainstorm",
+    "brainstorm-plan",
+    "brainstorm-build",
+  ]);
   expect(tools).toEqual([{ name: "render_brainstorm", isDeferred: false }]);
 });
 
 const recordSubmittedPrompts = (on: On) => {
-  const clock = mock.clock(on);
+  const clock = mock.clock(on, { now: NOVEMBER_NINTH_NOON });
   const submittedPrompts: string[] = [];
   on("prompt.submit", (_, e) => {
     submittedPrompts.push(e.text);
@@ -235,4 +239,263 @@ test("a page that cannot be written is refused with the reason", async ($, on) =
 
   expect(reply.deny).toContain("Could not write the brainstorm page");
   expect(reply.deny).toContain("EACCES");
+});
+
+test("the render tool saves the ideas as numbered data beside the page", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  const ideasWrite = writes.find((write) => write.path.endsWith(".json"));
+  expect(ideasWrite?.path).toBe(
+    `${BRAINSTORM_FOLDER}/brainstorm-2026-11-09-1200.json`
+  );
+  const savedIdeasFile = JSON.parse(ideasWrite?.text ?? "{}");
+  expect(savedIdeasFile.project).toBe("acme-cli");
+  expect(
+    savedIdeasFile.ideas.map((idea: { number: number; title: string }) => [
+      idea.number,
+      idea.title,
+    ])
+  ).toEqual([
+    [1, "Stop logging the API token"],
+    [2, "Replay mode for bug reports"],
+  ]);
+});
+
+test("the page numbers each idea and offers a plan picker", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  const html = findPage(writes)?.text ?? "";
+  expect(html).toContain('data-plan="1"');
+  expect(html).toContain('data-plan="2"');
+  expect(html).toContain("#1");
+  expect(html).toContain("/brainstorm-plan");
+});
+
+const SAVED_BRAINSTORM = {
+  project: "acme-cli",
+  summary: "A CLI that syncs notes to the cloud.",
+  ideas: [
+    { ...SECURITY_IDEA, number: 1 },
+    { ...CREATIVE_IDEA, files: [], number: 2 },
+  ],
+};
+
+const buildCommandRun = (command: string, args: string) => ({
+  ...buildBrainstormCommand(args),
+  command,
+});
+
+type FolderListing = Record<string, string[]>;
+
+const mockFiles = (
+  on: On,
+  folderListing: FolderListing,
+  fileTexts: Record<string, string>
+) => {
+  on("session.cwd", () => ({ value: "/repo" }));
+  on("fs.list", (_, e) => {
+    const fileNames = folderListing[e.path];
+    if (!fileNames) return { deny: `ENOENT: ${e.path}` };
+    return {
+      value: fileNames.map((name) => ({
+        name,
+        kind: "file" as const,
+        size: 1,
+        mtimeMs: 1,
+        isLink: false,
+      })),
+    };
+  });
+  on("fs.read", (_, e) => {
+    const fileText = fileTexts[e.path];
+    if (fileText === undefined) return { deny: `ENOENT: ${e.path}` };
+    return { value: fileText };
+  });
+};
+
+const mockSavedBrainstorm = (on: On) =>
+  mockFiles(
+    on,
+    {
+      [BRAINSTORM_FOLDER]: [
+        ".gitignore",
+        "brainstorm-2026-11-01-0900.json",
+        "brainstorm-2026-11-08-1500.html",
+        "brainstorm-2026-11-08-1500.json",
+      ],
+    },
+    {
+      [`${BRAINSTORM_FOLDER}/brainstorm-2026-11-08-1500.json`]:
+        JSON.stringify(SAVED_BRAINSTORM),
+      [`${BRAINSTORM_FOLDER}/brainstorm-2026-11-01-0900.json`]: JSON.stringify({
+        ...SAVED_BRAINSTORM,
+        ideas: [],
+      }),
+    }
+  );
+
+test("brainstorm-plan submits a planning turn for the picked ideas from the newest brainstorm", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "2"));
+  await clock.settle();
+
+  expect(reply.text).toContain("Replay mode for bug reports");
+  expect(submittedPrompts).toHaveLength(1);
+  const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain("Replay mode for bug reports");
+  expect(instructions).toContain("Sketch the event log format");
+  expect(instructions).not.toContain("Stop logging the API token");
+  expect(instructions).toContain(
+    `${BRAINSTORM_FOLDER}/plans/plan-2026-11-09-1200.md`
+  );
+  expect(instructions).toContain("/brainstorm-build");
+});
+
+test("brainstorm-plan takes several numbers separated by commas or spaces", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  await $.command.run(buildCommandRun("brainstorm-plan", "1, 2"));
+  await clock.settle();
+
+  const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain("Stop logging the API token");
+  expect(instructions).toContain("Replay mode for bug reports");
+});
+
+test("brainstorm-plan with no numbers lists the ideas and submits nothing", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-plan", ""));
+  await clock.settle();
+
+  expect(submittedPrompts).toEqual([]);
+  expect(reply.text).toContain("1. Stop logging the API token");
+  expect(reply.text).toContain("2. Replay mode for bug reports");
+});
+
+test("brainstorm-plan refuses a number the brainstorm does not have", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "2 9"));
+  await clock.settle();
+
+  expect(submittedPrompts).toEqual([]);
+  expect(reply.text).toContain("9");
+  expect(reply.text).toContain("1 to 2");
+});
+
+test("brainstorm-plan without a saved brainstorm points at /brainstorm", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(on, {}, {});
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "1"));
+  await clock.settle();
+
+  expect(submittedPrompts).toEqual([]);
+  expect(reply.text).toContain("/brainstorm");
+});
+
+const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
+
+test("brainstorm-build runs the newest plan with cheap implementers and a strong reviewer", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(
+    on,
+    {
+      [PLANS_FOLDER]: ["plan-2026-11-01-0900.md", "plan-2026-11-08-1500.md"],
+    },
+    {}
+  );
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
+  await clock.settle();
+
+  const planPath = `${PLANS_FOLDER}/plan-2026-11-08-1500.md`;
+  expect(reply.text).toContain(planPath);
+  const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain(planPath);
+  expect(instructions).toContain("brainstorm:step-implementer");
+  expect(instructions).toContain("brainstorm:plan-reviewer");
+});
+
+test("brainstorm-build runs the plan it is given", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(on, {}, {});
+
+  await $.command.run(
+    buildCommandRun("brainstorm-build", "plans/002-cache.md")
+  );
+  await clock.settle();
+
+  expect(submittedPrompts[0]).toContain("/repo/plans/002-cache.md");
+});
+
+test("brainstorm-build without a plan points at /brainstorm-plan", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(on, {}, {});
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
+  await clock.settle();
+
+  expect(submittedPrompts).toEqual([]);
+  expect(reply.text).toContain("/brainstorm-plan");
+});
+
+test("brainstorm-build finds a bare plan file name in the plans folder", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(on, {}, {});
+
+  await $.command.run(
+    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500.md")
+  );
+  await clock.settle();
+
+  expect(submittedPrompts[0]).toContain(
+    `${PLANS_FOLDER}/plan-2026-11-08-1500.md`
+  );
+});
+
+test("brainstorm-build runs several plans in the order given", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(on, {}, {});
+
+  await $.command.run(
+    buildCommandRun(
+      "brainstorm-build",
+      "plan-2026-11-08-1500.md plans/002-cache.md"
+    )
+  );
+  await clock.settle();
+
+  const instructions = submittedPrompts[0] ?? "";
+  const firstPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500.md`;
+  const secondPlan = "/repo/plans/002-cache.md";
+  expect(instructions).toContain(firstPlan);
+  expect(instructions).toContain(secondPlan);
+  expect(instructions.indexOf(firstPlan)).toBeLessThan(
+    instructions.indexOf(secondPlan)
+  );
+});
+
+test("brainstorm-build does not stop on changes an earlier plan in the run made", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(on, {}, {});
+
+  await $.command.run(
+    buildCommandRun("brainstorm-build", "plan-one.md plan-two.md")
+  );
+  await clock.settle();
+
+  expect(submittedPrompts[0]).toContain(
+    "uncommitted changes that this run did not make"
+  );
 });

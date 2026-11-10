@@ -7,6 +7,6 @@
     { "name": "handoff", "source": "./handoff",
       "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session" },
     { "name": "brainstorm", "source": "./brainstorm",
-      "description": "/brainstorm has Claude study the project and brainstorm creative ideas, must-haves and security fixes, shown as an ADHD-friendly page in the browser" }
+      "description": "/brainstorm studies the project and brainstorms ideas in the browser; /brainstorm-plan turns picked ideas into a small-step plan; /brainstorm-build has small-model subagents implement it and a strong model review it" }
   ]
 }

@@ -1,5 +1,5 @@
 {
   "name": "brainstorm",
-  "version": "0.1.0",
-  "description": "/brainstorm has Claude study the project and brainstorm creative ideas, must-haves and security fixes, shown as an ADHD-friendly page in the browser"
+  "version": "0.2.0",
+  "description": "/brainstorm studies the project and brainstorms ideas in the browser; /brainstorm-plan turns picked ideas into a small-step plan; /brainstorm-build has small-model subagents implement it and a strong model review it"
 }

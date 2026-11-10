@@ -1,5 +1,5 @@
 {
   "name": "handoff",
   "version": "0.1.0",
-  "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session"
+  "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session; --save stores it; --each stores one per suggested plan; --list and --resume <id> revisit stored handoffs"
 }

@@ -24,7 +24,7 @@ Both rows appear in `/config` under the plugin, and a change reloads the plugin 
 
 | Row                | Default | What it does                                                                           |
 | ------------------ | ------- | -------------------------------------------------------------------------------------- |
-| Rewrite model      | `haiku` | Which model rewrites the draft: `haiku`, `sonnet` or `opus`.                           |
+| Rewrite model      | `sonnet` | Which model rewrites the draft: `haiku`, `sonnet` or `opus`. `sonnet` stays on the draft; `haiku` drifts more. |
 | Extra instructions | empty   | Appended to the rewrite rules, for a house style every rewritten prompt should follow. |
 
 ## Install

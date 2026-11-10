@@ -486,7 +486,7 @@ test(
 );
 
 testWithEmptySession(
-  "by default the rewrite uses haiku and the rules end without extra instructions",
+  "by default the rewrite uses sonnet and the rules end without extra instructions",
   async ($, on) => {
     const requests: { model: string; system?: string }[] = [];
     on("model.complete", (_, e) => {
@@ -499,7 +499,10 @@ testWithEmptySession(
 
     await $.command.run(optimize("fix bug"));
 
-    expect(requests[0]?.model).toBe("haiku");
+    expect(requests[0]?.model).toBe("sonnet");
+    expect(requests[0]?.system).toContain(
+      "Keep every action, target and constraint"
+    );
     expect(
       requests[0]?.system?.endsWith(
         "Output only the rewritten prompt, with no preamble, quotes or explanation."

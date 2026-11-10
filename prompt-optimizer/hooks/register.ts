@@ -14,6 +14,9 @@ runs inside the working directory and sees every attached image. Never say what 
 never apologise for it, and never ask the agent to check something on your behalf.
 A token like [Image #N] names an image the agent will see: keep it verbatim where the draft uses it.
 Keep the author's intent exactly. State the goal and any constraints.
+Keep every action, target and constraint in the draft. Do not add, drop, swap or reorder tasks, and do not widen or narrow the scope.
+Use the recent conversation only to name what a reference points to. If a reference is ambiguous, keep the draft's wording rather than guess.
+If the draft is already clear, return it with minimal edits.
 Name the files, inputs or commands the draft mentions, and say what "done" means.
 Invent nothing the draft or the context does not imply: no new files, requirements or facts.
 Do not restate the working directory; the agent already knows it.
@@ -159,7 +162,7 @@ const buildFailureResult = (text: string) => ({
 });
 
 export const register: Register = (on, options) => {
-  const optimizerModel = readStringOption(options, "model") || "haiku";
+  const optimizerModel = readStringOption(options, "model") || "sonnet";
   const optimizerRules = buildOptimizerRules(
     readStringOption(options, "instructions")
   );

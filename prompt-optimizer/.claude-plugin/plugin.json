@@ -6,8 +6,8 @@
     "model": {
       "type": "string",
       "title": "Rewrite model",
-      "description": "Which model rewrites the draft. haiku is fastest; sonnet and opus give more careful rewrites.",
-      "default": "haiku",
+      "description": "Which model rewrites the draft. sonnet is the default; haiku is faster but drifts from the draft more often; opus is the most careful.",
+      "default": "sonnet",
       "options": ["haiku", "sonnet", "opus"]
     },
     "instructions": {

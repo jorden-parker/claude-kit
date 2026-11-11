@@ -31,15 +31,15 @@ When the composer cannot take the text (a headless run, or a dialog holding the 
 Installs at user scope, so it works in every directory. On any machine:
 
 ```
-claude plugin marketplace add jorden-parker/mods
-claude plugin install handoff@jorden-mods --scope user
+claude plugin marketplace add jorden-parker/claude-kit
+claude plugin install handoff@claude-kit --scope user
 ```
 
 On the dev machine, add the local checkout instead:
 
 ```
-claude plugin marketplace add ~/src/mods
-claude plugin install handoff@jorden-mods --scope user
+claude plugin marketplace add ~/src/claude-kit
+claude plugin install handoff@claude-kit --scope user
 ```
 
 The marketplace is defined in `.claude-plugin/marketplace.json` at the repo root.
@@ -50,13 +50,12 @@ The plugin is read from this folder. After a change, run `/reload-plugins`. No r
 
 ## Don't
 
-Don't load this mod with `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir`. It then loads twice: once as `@inline` and once as `@jorden-mods`.
+Don't load this mod with `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir`. It then loads twice: once as `@inline` and once as `@claude-kit`.
 
 ## Uninstall
 
 ```
-claude plugin uninstall handoff@jorden-mods
-claude plugin marketplace remove jorden-mods
+claude plugin uninstall handoff@claude-kit
 ```
 
 ## Dev

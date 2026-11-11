@@ -22,35 +22,28 @@ In a headless run (`claude -p "/optimize fix the bug"`) the process exits with c
 
 Both rows appear in `/config` under the plugin, and a change reloads the plugin at once.
 
-| Row                | Default | What it does                                                                           |
-| ------------------ | ------- | -------------------------------------------------------------------------------------- |
+| Row                | Default  | What it does                                                                                                   |
+| ------------------ | -------- | -------------------------------------------------------------------------------------------------------------- |
 | Rewrite model      | `sonnet` | Which model rewrites the draft: `haiku`, `sonnet` or `opus`. `sonnet` stays on the draft; `haiku` drifts more. |
-| Extra instructions | empty   | Appended to the rewrite rules, for a house style every rewritten prompt should follow. |
+| Extra instructions | empty    | Appended to the rewrite rules, for a house style every rewritten prompt should follow.                         |
 
 ## Install
 
-Installs at user scope, so it works in every directory:
+Installs at user scope, so it works in every directory. On any machine:
 
 ```
-claude plugin marketplace add ~/src/mods
-claude plugin install prompt-optimizer@jorden-mods --scope user
+claude plugin marketplace add jorden-parker/claude-kit
+claude plugin install prompt-optimizer@claude-kit --scope user
 ```
 
-This needs `~/src/mods/.claude-plugin/marketplace.json`, which sits outside this repo. To recreate it:
+On the dev machine, add the local checkout instead:
 
-```json
-{
-  "name": "jorden-mods",
-  "owner": { "name": "Jorden Parker" },
-  "plugins": [
-    {
-      "name": "prompt-optimizer",
-      "source": "./prompt-optimizer",
-      "description": "/optimize rewrites a draft prompt with repo context and fills it into the composer"
-    }
-  ]
-}
 ```
+claude plugin marketplace add ~/src/claude-kit
+claude plugin install prompt-optimizer@claude-kit --scope user
+```
+
+The marketplace is defined in `.claude-plugin/marketplace.json` at the repo root.
 
 ## Edits
 
@@ -58,13 +51,12 @@ The plugin is read from this folder. After a change, run `/reload-plugins`. No r
 
 ## Don't
 
-Don't load this mod with `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir`. It then loads twice: once as `@inline` and once as `@jorden-mods`.
+Don't load this mod with `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir`. It then loads twice: once as `@inline` and once as `@claude-kit`.
 
 ## Uninstall
 
 ```
-claude plugin uninstall prompt-optimizer@jorden-mods
-claude plugin marketplace remove jorden-mods
+claude plugin uninstall prompt-optimizer@claude-kit
 ```
 
 ## Dev

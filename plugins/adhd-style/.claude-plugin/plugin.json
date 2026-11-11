@@ -1,0 +1,5 @@
+{
+  "name": "adhd-style",
+  "version": "0.1.0",
+  "description": "ADHD output style: answer first, short chunks, one next step. Turns on when the plugin is enabled."
+}

@@ -221,7 +221,7 @@ test("the model prompt carries the working directory, the last six non-blank mes
   const prompts: string[] = [];
   const longText = "x".repeat(600);
   on("session.cwd", () => ({
-    value: "/Users/jorden/src/mods/prompt-optimizer",
+    value: "/Users/jorden/src/claude-kit/plugins/prompt-optimizer",
   }));
   on("session.messages", () => ({
     value: [
@@ -247,7 +247,7 @@ test("the model prompt carries the working directory, the last six non-blank mes
 
   const [prompt] = prompts;
   expect(prompt).toContain(
-    "Working directory: /Users/jorden/src/mods/prompt-optimizer"
+    "Working directory: /Users/jorden/src/claude-kit/plugins/prompt-optimizer"
   );
   expect(prompt).not.toContain("dropped");
   expect(prompt).toContain("assistant: first kept");

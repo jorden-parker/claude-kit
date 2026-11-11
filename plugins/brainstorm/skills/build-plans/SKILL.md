@@ -1,6 +1,7 @@
 ---
 name: build-plans
 description: Implement brainstorm plans from .claude/brainstorm/plans/. Each run folder (plan-YYYY-MM-DD-HHMM/) holds index.md, which lists every plan with its status and build order, and one folder per plan with its plan.md and step files. Use whenever the user asks to implement, build, run, resume or carry out a plan, "the plan", "the latest plan", several plans or a plan path, even when they give no path. Checks each run, delegates each step to small-model subagents, has a strong-model subagent review the finished work, and records each plan's status in its plan.md and in the index.
+user-invocable: false
 ---
 
 # Build brainstorm plans

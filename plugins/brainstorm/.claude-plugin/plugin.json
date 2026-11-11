@@ -1,5 +1,5 @@
 {
   "name": "brainstorm",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "/brainstorm studies the project and brainstorms ideas in the browser; /brainstorm plan turns picked ideas into a small-step plan; /brainstorm build has small-model subagents implement it and a strong model review it"
 }

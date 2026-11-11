@@ -104,6 +104,8 @@ For each run, the build:
 
 A stopped build is resumed by running `/brainstorm build` again: `done` plans are left alone and every other plan carries on at its first unticked step. Nothing is committed. The whole flow is written once, in `skills/build-plans/SKILL.md`.
 
+The skill has `user-invocable: false`, so it stays out of the slash menu and `/brainstorm` is the plugin's only entry there. Claude still loads it for `/brainstorm build` and for plain-word requests.
+
 ## Where things live
 
 | File                          | Holds                                                            |

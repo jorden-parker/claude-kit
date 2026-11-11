@@ -1,9 +1,11 @@
 {
   // Each plugin is installed as a copy of its own folder, so hooks modules cannot import across plugins.
   // Fallow cannot see that hooks.json loads register.ts, so the hooks files are declared as entry points.
-  "entry": ["plugins/*/hooks/register.ts", "plugins/*/hooks/*.test.ts"],
+  // draft-pr starts its server script with node, which fallow cannot see either.
+  "entry": ["plugins/*/hooks/register.ts", "plugins/*/hooks/*.test.ts", "plugins/*/server/*.mjs"],
   "duplicates": {
     // describeRecentMessages is copied between prompt-optimizer and handoff on purpose: plugins must be self-contained.
-    "ignoredClones": ["dup:e67f2e0e:2"]
+    // formatFileStamp, readPlanFiles/readTemplateFiles and escapeHtml are copied between brainstorm and draft-pr for the same reason.
+    "ignoredClones": ["dup:e67f2e0e:2", "dup:05fc0bb2:2", "dup:f469e6dc:2", "dup:8038f0a0:2"]
   }
 }

@@ -1,0 +1,5 @@
+{
+  "name": "draft-pr",
+  "version": "0.1.0",
+  "description": "/draft-pr drafts a pull request in the project's PR template; /draft-pr-review drafts a review as Conventional Comments; each opens an editable page in the browser that posts to GitHub only when you click"
+}

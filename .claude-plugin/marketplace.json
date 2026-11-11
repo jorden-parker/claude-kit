@@ -8,6 +8,8 @@
       "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session" },
     { "name": "brainstorm", "source": "./plugins/brainstorm",
       "description": "/brainstorm studies the project and brainstorms ideas in the browser; /brainstorm plan turns picked ideas into a small-step plan; /brainstorm build has small-model subagents implement it and a strong model review it" },
+    { "name": "draft-pr", "source": "./plugins/draft-pr",
+      "description": "/draft-pr drafts a pull request in the project's PR template; /draft-pr-review drafts a review as Conventional Comments; each opens an editable page in the browser that posts to GitHub only when you click" },
     { "name": "adhd-style", "source": "./plugins/adhd-style",
       "description": "ADHD output style: answer first, short chunks, one next step" }
   ]

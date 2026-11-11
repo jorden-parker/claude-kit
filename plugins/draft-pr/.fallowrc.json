@@ -1,0 +1,8 @@
+{
+  // Fallow cannot see that hooks.json loads register.ts, or that register.ts starts the server with node, so both are declared as entry points.
+  // Mirrors the repo root config, which fallow does not read when it audits this folder on its own.
+  "entry": ["hooks/register.ts", "hooks/*.test.ts", "server/*.mjs"],
+  // The engine provides the claude-code module and the claude binary; neither is an npm package.
+  "ignoreDependencies": ["claude-code"],
+  "ignoreBinaries": ["claude"]
+}

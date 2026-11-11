@@ -86,7 +86,7 @@ Drafts go to `.claude/draft-pr/` in the project, as `pr-YYYY-MM-DD-HHMM.html` or
 | --------------------------------- | ------------------------------------------------------- |
 | `hooks/register.ts`               | The two render tools and their checks.                  |
 | `hooks/pr-template.ts`            | Finding the PR template and checking a body against it. |
-| `hooks/conventional-comment.ts`   | The labels, the decorations and the comment format.     |
+| `hooks/conventional-comment.ts`   | The labels, the decorations and reading a comment.      |
 | `hooks/diff-lines.ts`             | Reading a diff: which lines a comment can sit on.       |
 | `hooks/draft-page.ts`             | The HTML of both pages.                                 |
 | `hooks/page-style.ts`             | The pages' CSS.                                         |
@@ -94,8 +94,6 @@ Drafts go to `.claude/draft-pr/` in the project, as `pr-YYYY-MM-DD-HHMM.html` or
 | `server/draft-server.mjs`         | The local helper that serves a page and posts for it.   |
 | `skills/draft-pr/SKILL.md`        | How Claude drafts a PR.                                 |
 | `skills/draft-pr-review/SKILL.md` | How Claude drafts a review.                             |
-
-The comment format is written twice and must change together: `formatConventionalComment` in `hooks/conventional-comment.ts`, and `formatComment` in `hooks/page-script.ts`.
 
 ## Install
 

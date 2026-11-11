@@ -1,33 +1,8 @@
 import { expect, test } from "claude-code/testing";
 import {
   COMMENT_LABELS,
-  formatConventionalComment,
   readConventionalComment,
 } from "./conventional-comment";
-
-test("formats label, decorations, subject and discussion", () => {
-  const formattedComment = formatConventionalComment({
-    label: "suggestion",
-    decorations: ["non-blocking", "test"],
-    subject: "Cover the empty list.",
-    discussion: "The loop is skipped when `ideas` is empty.",
-  });
-
-  expect(formattedComment).toBe(
-    "**suggestion (non-blocking, test):** Cover the empty list.\n\nThe loop is skipped when `ideas` is empty."
-  );
-});
-
-test("formats a comment with neither decorations nor discussion on one line", () => {
-  const formattedComment = formatConventionalComment({
-    label: "praise",
-    decorations: [],
-    subject: "Clear naming throughout.",
-    discussion: "",
-  });
-
-  expect(formattedComment).toBe("**praise:** Clear naming throughout.");
-});
 
 test("the labels are the Conventional Comments labels", () => {
   expect(Object.keys(COMMENT_LABELS)).toEqual([

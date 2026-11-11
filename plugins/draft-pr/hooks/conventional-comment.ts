@@ -44,19 +44,6 @@ const DECORATION_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const readText = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
 
-const describeDecorations = (decorations: string[]) =>
-  decorations.length ? ` (${decorations.join(", ")})` : "";
-
-export const formatConventionalComment = ({
-  label,
-  decorations,
-  subject,
-  discussion,
-}: ConventionalComment) => {
-  const subjectLine = `**${label}${describeDecorations(decorations)}:** ${subject}`;
-  return discussion ? `${subjectLine}\n\n${discussion}` : subjectLine;
-};
-
 const findDecorationProblems = (decorations: string[]) => {
   const hasClashingDecorations =
     decorations.includes("blocking") && decorations.includes("non-blocking");

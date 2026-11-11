@@ -854,7 +854,7 @@ The user picked ideas ${listPickedNumbers(pickedIdeas)} on the brainstorm page a
 
 ${pickedIdeas.map(describeIdeaForPlanner).join("\n\n")}
 
-Who reads the plan: each step file goes alone to a fresh small-model subagent that sees only that file; it cannot ask questions, and it makes poor judgement calls. After the steps run one after another, a strong model reviews the finished work against the plan.
+Who reads the plan: one small-model subagent builds each plan, working through its step files one at a time; it cannot ask questions, and it makes poor judgement calls. After the steps run one after another, a strong model reviews the finished work against the plan.
 
 Write the plan as a run folder at ${runFolderPath}. Work in this order:
 
@@ -886,7 +886,7 @@ Rules for every step file:
 - One small change per step: one file, or one test with the code it tests. Its Replace and Contents blocks hold at most ${MAX_CHANGED_LINES_PER_STEP} changed lines in total; aim under 40.
 - An edit is Action: replace or Action: create, with exactly the blocks the template shows for it.
 - Find text is copied exactly from the file as earlier steps of the run leave it.
-- Copy into each step every Context line that the step needs. The implementer sees nothing else.
+- Copy into each step every Context line that the step needs. A build can resume at any step, so no step relies on another step's Context.
 - Where the project has tests, a test step comes before its code step. The test step's Expect is exit non-zero, output contains the failure text, which proves the test runs before the code exists. The code step's Expect is exit 0 and its passing text.
 - Each Check runs one narrow command: one test file or one test name, never the whole suite. State its exact exit code and exact output text.
 - Give new code in full. Leave no judgement to the implementer.
@@ -894,7 +894,7 @@ Rules for every step file:
 - A spike step has no Edits. It has a numbered Questions list, and its Check is test -s on its findings.md path.
 
 6. Check. Call the ${QUALIFIED_CHECK_TOOL_NAME} tool with the run folder path. Fix every problem it returns, and call it again until it returns OK.
-7. Clarity pass. For every step file, call the Agent tool with subagent_type "brainstorm:step-reader" and the step file's absolute path as its prompt. Send them all in one message so they run in parallel. Rewrite each step that replies QUESTIONS, then run the checker again. Do at most two rounds of this.
+7. Clarity pass. For every plan folder, call the Agent tool once with subagent_type "brainstorm:step-reader" and the plan folder's absolute path as its prompt. One call reads every step of that plan: never call it once per step. Send the calls for all plans in one message so they run in parallel. Rewrite each step a QUESTIONS reply names, then run the checker again. Do at most two rounds of this.
 8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run ${BUILD_INVOCATION} to implement it.`;
 
 const describeRunsToBuild = (requestedRuns: string) =>

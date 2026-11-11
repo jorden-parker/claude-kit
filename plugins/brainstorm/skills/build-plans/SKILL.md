@@ -1,6 +1,6 @@
 ---
 name: build-plans
-description: Implement brainstorm plans from .claude/brainstorm/plans/. Each run folder (plan-YYYY-MM-DD-HHMM/) holds index.md, which lists every plan with its status and build order, and one folder per plan with its plan.md and step files. Use whenever the user asks to implement, build, run, resume or carry out a plan, "the plan", "the latest plan", several plans or a plan path, even when they give no path. Checks each run, delegates each step to small-model subagents, has a strong-model subagent review the finished work, and records each plan's status in its plan.md and in the index.
+description: Implement brainstorm plans from .claude/brainstorm/plans/. Each run folder (plan-YYYY-MM-DD-HHMM/) holds index.md, which lists every plan with its status and build order, and one folder per plan with its plan.md and step files. Use whenever the user asks to implement, build, run, resume or carry out a plan, "the plan", "the latest plan", several plans or a plan path, even when they give no path. Checks each run, delegates each plan's steps to one small-model subagent, has a strong-model subagent review the finished work, and records each plan's status in its plan.md and in the index.
 user-invocable: false
 ---
 
@@ -8,7 +8,7 @@ user-invocable: false
 
 You coordinate the build. You do not write source code. You keep your own context small: pass paths between agents, never file contents.
 
-You write only inside a run folder, and only two things: ticks on the checkbox lines of a plan.md, and the step files the reviewer returns. Do not commit anything.
+You write only inside a run folder, and only two things: the checkbox lines of a plan.md, and the step files the reviewer returns. The implementer ticks the lines it builds. Do not commit anything.
 
 ## The files
 
@@ -56,20 +56,22 @@ A `pending` plan starts at its first step. An `in-progress` or `blocked` plan wa
 1. If the plan is `pending`, look for uncommitted changes: run `git status --short`, and get the files the plan names with `grep -h -- '- File:' <plan folder>/step-*.md`. If one of those files is already dirty, and no earlier plan in this build changed it, ask the user with AskUserQuestion before building this plan.
 2. Base: if the plan is `pending`, run `git stash create`. If it prints nothing, or the plan is not `pending`, use `git rev-parse HEAD`. Keep that commit as this plan's base.
 3. Set the plan's status to `in-progress`.
-4. Build every unticked line of plan.md, in file order, one at a time.
+4. Build the unticked lines of plan.md, as "Build the steps" says.
 5. When every line is ticked, do the final review.
 
 Whenever these steps say the plan stops, set its status to `blocked` and go on with the next row of the index.
 
-### Build one line
+### Build the steps
 
-1. Call the Agent tool with subagent_type `brainstorm:step-implementer`. Its prompt is the absolute path of the line's step file, and nothing else. Wait for the reply before the next line.
-2. On DONE, change the line's `- [ ]` to `- [x]` in plan.md.
-3. On BLOCKED, retry once: the same subagent_type with `model: "sonnet"`. Its prompt is the absolute step path, a blank line, then the first BLOCKED reply verbatim. On DONE, tick the line.
-4. If the retry is BLOCKED too, call the Agent tool with subagent_type `brainstorm:plan-reviewer`. Its prompt is the word "unblock", the absolute step path, and both replies verbatim.
+One implementer builds the whole plan. It takes every unticked line of plan.md in file order, ticks each line when its step is done, and stops at the first step it cannot finish. Never call the implementer once per step.
+
+1. Call the Agent tool with subagent_type `brainstorm:step-implementer`. Its prompt is the absolute plan folder path, and nothing else.
+2. On DONE, read plan.md. If a line is still unticked, the plan stops. Otherwise the steps are built.
+3. On BLOCKED, the reply's `Step:` line names the step that blocked. Every line before it is ticked. Retry once: the same subagent_type with `model: "sonnet"`. Its prompt is the absolute plan folder path, a blank line, then the BLOCKED reply verbatim. The retry carries on at the blocked step and goes on with the lines after it.
+4. If the retry is BLOCKED on the same step, call the Agent tool with subagent_type `brainstorm:plan-reviewer`. Its prompt is the word "unblock", the absolute step path, and both replies verbatim.
    - If it replies PLAN WRONG, the plan stops. Report its explanation.
-   - Otherwise it returns replacement step files: `step-NNa.md`, `step-NNb.md`, and so on. Write them into the plan folder. Delete the blocked `step-NN.md`, because the checker reports a step file that plan.md does not list. In plan.md, replace the blocked step's line with one unticked line for each replacement, in order.
-   - Give each replacement line one implementer call and tick it on DONE. A replacement gets no retry and no unblock: if it is BLOCKED, the plan stops.
+   - Otherwise it returns replacement step files: `step-NNa.md`, `step-NNb.md`, and so on. Write them into the plan folder. Delete the blocked `step-NN.md`, because the checker reports a step file that plan.md does not list. In plan.md, replace the blocked step's line with one unticked line for each replacement, in order. Then start again at 1.
+5. Treat every later reply the same way. A step's first BLOCKED gets the retry, and its second gets the unblock. A replacement step written in this build gets neither: if a reply is BLOCKED on one, the plan stops.
 
 ### Final review
 
@@ -77,7 +79,7 @@ Whenever these steps say the plan stops, set its status to `blocked` and go on w
 2. If it replies APPROVED, set the plan's status to `done`.
 3. If it replies FIXES NEEDED, it returns fix steps as more step files. Write them into the plan folder, and add one unticked line for each at the end of `## Steps` in plan.md: `- [ ] [step-NN](step-NN.md): <title>`.
    - If this build has already done two fix rounds for this plan, the plan stops. Its unticked lines are the open fixes, and the next build picks them up.
-   - Otherwise build those lines as "Build one line" says, then do the final review again.
+   - Otherwise build those lines as "Build the steps" says, with one implementer call for all of them, then do the final review again.
 
 ### Spike plans
 

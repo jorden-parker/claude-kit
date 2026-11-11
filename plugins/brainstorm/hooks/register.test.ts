@@ -505,12 +505,13 @@ test("the planning prompt forbids implementing and asks for every picked idea to
   expect(instructions).toContain("Plan every picked idea.");
 });
 
-test("the planning prompt says who reads each step and that no one can ask questions", async ($, on) => {
+test("the planning prompt says one subagent builds each plan and that no one can ask questions", async ($, on) => {
   const instructions = await planningInstructions($, on);
 
   expect(instructions).toContain(
-    "each step file goes alone to a fresh small-model subagent that sees only that file"
+    "one small-model subagent builds each plan, working through its step files one at a time"
   );
+  expect(instructions).not.toContain("each step file goes alone");
   expect(instructions).toContain("it cannot ask questions");
   expect(instructions).toContain("a strong model reviews");
 });
@@ -564,6 +565,10 @@ test("the planning prompt runs the checker and the step-reader clarity pass", as
 
   expect(instructions).toContain("mcp__brainstorm__check_brainstorm_plan");
   expect(instructions).toContain("brainstorm:step-reader");
+  expect(instructions).toContain(
+    "For every plan folder, call the Agent tool once"
+  );
+  expect(instructions).not.toContain("For every step file, call the Agent");
   expect(instructions).toContain("QUESTIONS");
   expect(instructions).toContain("at most two rounds");
   expect(instructions).toContain("Run /brainstorm build to implement it.");

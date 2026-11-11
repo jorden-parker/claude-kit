@@ -61,7 +61,7 @@ plan-2026-11-11-1200/
 
 - `index.md`: the index of the run. One table row per plan, in build order, with its title, the link to its `plan.md`, its status, its kind, the plans it depends on and the ideas it covers. Below the table: the ideas that were dropped, and why.
 - `NN-slug/plan.md`: one plan per idea, merged only when two ideas change the same code. It holds the plan's own `Status` line, the goal, the Context every step needs (CLAUDE.md rules and every hook that can block an edit), a checkbox per step, and the done criteria.
-- `NN-slug/step-NN.md`: one self-contained file per step. A small model sees only that file. Edits are find-and-replace blocks with exact text, or whole new files. Each step ends with one narrow check. Test steps come before code steps.
+- `NN-slug/step-NN.md`: one self-contained file per step. A small model builds the plan from these files, one at a time. Edits are find-and-replace blocks with exact text, or whole new files. Each step ends with one narrow check. Test steps come before code steps.
 - Spike plans: ideas with large effort or the moonshot category. Their steps answer questions in `findings.md` and change no product code. Such an idea needs a new `/brainstorm plan` run before anything is built.
 
 The index table looks like this:
@@ -88,7 +88,7 @@ The planner writes `pending` in both places. After that, every change goes throu
 
 ### Planning
 
-Before it finishes, the planner calls the `check_brainstorm_plan` tool on the run folder. The tool checks the format, the statuses, the find text and the banned phrases, and replies `OK` or one problem per line. The planner fixes every problem. Then one `step-reader` subagent per step reads it for anything a small model would have to guess, and the planner rewrites what it could not follow, for at most two rounds.
+Before it finishes, the planner calls the `check_brainstorm_plan` tool on the run folder. The tool checks the format, the statuses, the find text and the banned phrases, and replies `OK` or one problem per line. The planner fixes every problem. Then one `step-reader` subagent per plan reads its steps for anything a small model would have to guess, and the planner rewrites what it could not follow, for at most two rounds.
 
 ### Building
 
@@ -98,7 +98,7 @@ For each run, the build:
 
 1. Checks the run again, so find text that went stale since planning is caught. `plan-reviewer` repairs what the checker rejects.
 2. Takes the plans in index order. It leaves `done` plans alone, and skips a plan whose dependencies are not `done`.
-3. Sends each unticked step to a `step-implementer` subagent on Haiku. A blocked step is retried once on Sonnet, then `plan-reviewer` splits it into smaller steps.
+3. Sends each plan to one `step-implementer` subagent on Haiku, which builds the unticked steps in order and ticks each one. A blocked step is retried once on Sonnet, which also builds the steps after it, then `plan-reviewer` splits it into smaller steps.
 4. Ends each plan with a `plan-reviewer` review. Fixes come back as more steps of the same plan, for at most two rounds per build.
 5. Sets the plan to `done`, or to `blocked` with the reason in the report.
 
@@ -114,8 +114,8 @@ The skill has `user-invocable: false`, so it stays out of the slash menu and `/b
 | `hooks/plan-check.ts`         | The `check_brainstorm_plan` rules and limits.                    |
 | `hooks/plan-status.ts`        | The statuses, and how they are read and written in both files.   |
 | `skills/build-plans/SKILL.md` | The build flow.                                                  |
-| `agents/step-reader.md`       | Reads a step for ambiguity before the build. Haiku.              |
-| `agents/step-implementer.md`  | Builds one step. Haiku.                                          |
+| `agents/step-reader.md`       | Reads a plan's steps for ambiguity before the build. Haiku.      |
+| `agents/step-implementer.md`  | Builds a plan's steps, one at a time. Haiku.                     |
 | `agents/plan-reviewer.md`     | Reviews, unblocks and repairs. Opus.                             |
 
 To use other models, change `model` in the agent files. The retry of a blocked step runs on Sonnet, which is set in `skills/build-plans/SKILL.md`.

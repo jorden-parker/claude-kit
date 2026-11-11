@@ -64,3 +64,10 @@ cd plugins/<name>
 pnpm test
 pnpm typecheck
 ```
+
+Run this once per clone. Git then runs Prettier, the type check and the
+tests of every plugin with staged changes before each commit:
+
+```
+git config core.hooksPath .githooks
+```

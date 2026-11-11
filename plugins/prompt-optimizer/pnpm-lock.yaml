@@ -7,9 +7,6 @@ settings:
 importers:
   .:
     devDependencies:
-      husky:
-        specifier: ^9.1.7
-        version: 9.1.7
       lint-staged:
         specifier: ^17.6.0
         version: 17.6.0
@@ -201,14 +198,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  husky@9.1.7:
-    resolution:
-      {
-        integrity: sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA==,
-      }
-    engines: { node: ">=18" }
-    hasBin: true
-
   lint-staged@17.6.0:
     resolution:
       {
@@ -322,8 +311,6 @@ snapshots:
 
   "@typescript/typescript-win32-x64@7.0.2":
     optional: true
-
-  husky@9.1.7: {}
 
   lint-staged@17.6.0:
     dependencies:

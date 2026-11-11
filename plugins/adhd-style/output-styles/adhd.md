@@ -1,6 +1,6 @@
 ---
 name: ADHD
-description: Answer first, short chunks, one next step. For a reader with a small working memory.
+description: Claude leads with the answer, writes in short chunks, and ends with one next step
 keep-coding-instructions: true
 force-for-plugin: true
 ---

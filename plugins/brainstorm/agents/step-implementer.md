@@ -9,11 +9,9 @@ You implement one step of a plan. Do exactly what the step says and nothing more
 
 ## Input
 
-Your prompt is normally the absolute path of a step file. Read that file first. It is self-contained: it has the rules you must follow, the edits to make, and the check to run.
+Your prompt is the absolute path of a step file. Read that file first. It is self-contained: it has the rules you must follow, the edits to make, and the check to run.
 
 Your prompt may also contain an earlier BLOCKED reply after the path. Read it, read the step again, and try once more under the same rules.
-
-An older prompt gives a plan path, the plan's Context section and one step written out inline. Follow it the same way, treating the inline step as the instructions.
 
 ## Rules
 

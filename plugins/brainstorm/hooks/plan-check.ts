@@ -1,3 +1,12 @@
+import {
+  INDEX_FILE_NAME,
+  PLAN_FILE_NAME,
+  PLAN_STATUSES_AS_TEXT,
+  PLAN_STATUSES,
+  readIndexEntries,
+  readPlanStatus,
+} from "./plan-status";
+
 export type PlanFiles = {
   read: (path: string) => Promise<string | undefined>;
   list: (folder: string) => Promise<string[]>;
@@ -8,9 +17,6 @@ const joinPath = (...segments: string[]) =>
     .filter((segment) => segment !== "")
     .join("/")
     .replace(/\/{2,}/g, "/");
-
-const PLAN_FILE_NAME = "plan.md";
-const INDEX_FILE_NAME = "index.md";
 
 type MarkdownSegment =
   | { isCode: false; rawLines: string[]; line: string }
@@ -75,32 +81,24 @@ const readTextOutsideFences = (text: string) =>
     .flatMap((segment) => (segment.isCode ? [] : [segment.line]))
     .join("\n");
 
-const readIndexPlanFolders = (indexText: string) => {
-  const orderBody = readSectionBody(indexText, "## ", "Order");
-  const planLinkTargets = [
-    ...orderBody.matchAll(/\]\(([^)]*\/plan\.md)\)/g),
-  ].map((match) => match[1] ?? "");
-  return planLinkTargets.map((target) =>
-    target.slice(0, -`/${PLAN_FILE_NAME}`.length)
-  );
-};
+const SECTION_HEADING_PREFIX = "## ";
 
-const readSectionBody = (
-  text: string,
-  headingPrefix: string,
-  heading: string
-) => {
-  const sections = splitIntoSections(text, headingPrefix);
-  return sections.find((section) => section.heading === heading)?.body ?? "";
-};
+const findSection = (text: string, heading: string) =>
+  splitIntoSections(text, SECTION_HEADING_PREFIX).find(
+    (section) => section.heading === heading
+  );
+
+const readSectionHeadings = (text: string) =>
+  splitIntoSections(text, SECTION_HEADING_PREFIX).map(
+    (section) => section.heading
+  );
 
 const splitIntoSections = (text: string, headingPrefix: string) => {
   const sections: { heading: string; body: string }[] = [];
   let currentLines: string[] = [];
   let currentHeading: string | undefined;
   for (const segment of readMarkdownSegments(text)) {
-    const isHeading = !segment.isCode && segment.line.startsWith(headingPrefix);
-    if (!segment.isCode && isHeading) {
+    if (!segment.isCode && segment.line.startsWith(headingPrefix)) {
       if (currentHeading !== undefined) {
         sections.push({
           heading: currentHeading,
@@ -132,27 +130,23 @@ export const checkPlan = async (
     simulatedContents: new Map(),
   };
   if (indexText === undefined) {
-    const singlePlanText = await planFiles.read(
-      joinPath(folderPath, PLAN_FILE_NAME)
-    );
-    if (singlePlanText === undefined) {
-      return ["index.md: missing"];
-    }
-    return checkPlanText(session, "", singlePlanText);
+    return [`${INDEX_FILE_NAME}: missing`];
   }
   const problems: string[] = checkBannedPhrases(INDEX_FILE_NAME, indexText);
-  const listedPlanFolders = readIndexPlanFolders(indexText);
+  const indexEntries = readIndexEntries(indexText);
+  const listedPlanFolders = indexEntries.map((entry) => entry.planFolder);
   const planTexts: { planFolder: string; planText: string }[] = [];
-  for (const planFolder of listedPlanFolders) {
+  for (const { planFolder, status: indexStatus } of indexEntries) {
     const planText = await planFiles.read(
       joinPath(folderPath, planFolder, PLAN_FILE_NAME)
     );
     if (planText === undefined) {
       problems.push(
-        `${INDEX_FILE_NAME}: Order entry ${planFolder} has no ${PLAN_FILE_NAME}`
+        `${INDEX_FILE_NAME}: ${planFolder} has no ${PLAN_FILE_NAME}`
       );
     } else {
       planTexts.push({ planFolder, planText });
+      problems.push(...checkIndexStatus(planFolder, indexStatus, planText));
     }
   }
   const entryNames = await planFiles.list(folderPath);
@@ -178,6 +172,22 @@ export const checkPlan = async (
     problems.push(...(await checkPlanText(session, planFolder, planText)));
   }
   return problems;
+};
+
+const readIsKnownStatus = (status: string | undefined) =>
+  status !== undefined && PLAN_STATUSES.includes(status);
+
+const checkIndexStatus = (
+  planFolder: string,
+  indexStatus: string,
+  planText: string
+) => {
+  const planStatus = readPlanStatus(planText);
+  return !readIsKnownStatus(planStatus) || planStatus === indexStatus
+    ? []
+    : [
+        `${INDEX_FILE_NAME}: ${planFolder} is "${indexStatus}", but ${joinPath(planFolder, PLAN_FILE_NAME)} says "${planStatus}"`,
+      ];
 };
 
 type CheckSession = {
@@ -209,12 +219,13 @@ const checkPlanText = async (
 ) => {
   const { planFiles, folderPath } = session;
   const planPath = joinPath(planFolder, PLAN_FILE_NAME);
-  const sectionHeadings = splitIntoSections(planText, "## ").map(
-    (section) => section.heading
-  );
+  const sectionHeadings = readSectionHeadings(planText);
   const problems = REQUIRED_PLAN_SECTIONS.filter(
     (heading) => !sectionHeadings.includes(heading)
   ).map((heading) => `${planPath}: missing ## ${heading} section`);
+  if (!readIsKnownStatus(readPlanStatus(planText))) {
+    problems.push(`${planPath}: Status must be ${PLAN_STATUSES_AS_TEXT}`);
+  }
   problems.push(...checkBannedPhrases(planPath, planText));
   const stepFileNames = readStepLinkTargets(planText);
   const builtStepFileNames = readTickedStepLinkTargets(planText);
@@ -258,7 +269,7 @@ const readFieldValue = (text: string, fieldName: string) => {
   return fieldMatch?.[1]?.trim();
 };
 
-const BANNED_PHRASES = [
+export const BANNED_PHRASES = [
   "as appropriate",
   "if needed",
   "as needed",
@@ -304,9 +315,7 @@ const checkStepKind = (stepPath: string, stepText: string) => {
 };
 
 const checkStepCheckSection = (stepPath: string, stepText: string) => {
-  const checkSection = splitIntoSections(stepText, "## ").find(
-    (section) => section.heading === "Check"
-  );
+  const checkSection = findSection(stepText, "Check");
   if (checkSection === undefined)
     return [`${stepPath}: missing ## Check section`];
   const problems: string[] = [];
@@ -350,9 +359,7 @@ const checkStepEditBlocks = (
 };
 
 const checkStepStructure = (stepPath: string, stepText: string) => {
-  const stepSectionHeadings = splitIntoSections(stepText, "## ").map(
-    (section) => section.heading
-  );
+  const stepSectionHeadings = readSectionHeadings(stepText);
   const contextProblems = stepSectionHeadings.includes("Context")
     ? []
     : [`${stepPath}: missing ## Context section`];
@@ -366,7 +373,7 @@ const checkStepStructure = (stepPath: string, stepText: string) => {
   ];
 };
 
-const MAX_CHANGED_LINES_PER_STEP = 60;
+export const MAX_CHANGED_LINES_PER_STEP = 60;
 
 const countLines = (blockText: string | undefined) =>
   blockText === undefined || blockText === ""
@@ -381,9 +388,6 @@ const checkStepEdits = async (
   stepPath: string,
   stepText: string
 ) => {
-  if (readIsSpikeStep(stepText)) {
-    return [];
-  }
   const problems: string[] = [];
   for (const edit of readStepEdits(stepText)) {
     problems.push(...(await checkEditAgainstFiles(session, stepPath, edit)));
@@ -417,10 +421,11 @@ const checkEditAgainstFiles = async (
       `${stepPath}: ${edit.label} replaces ${edit.file}, which does not exist`,
     ];
   }
-  if (edit.findText === undefined || edit.replaceText === undefined) {
+  const { findText, replaceText } = edit;
+  if (findText === undefined || replaceText === undefined) {
     return [];
   }
-  const findOccurrenceCount = countOccurrences(currentContents, edit.findText);
+  const findOccurrenceCount = countOccurrences(currentContents, findText);
   if (findOccurrenceCount !== 1) {
     return [
       `${stepPath}: ${edit.label} Find text appears ${findOccurrenceCount} times in ${edit.file}, expected exactly once`,
@@ -428,7 +433,7 @@ const checkEditAgainstFiles = async (
   }
   session.simulatedContents.set(
     edit.file,
-    replaceSingleOccurrence(currentContents, edit.findText, edit.replaceText)
+    currentContents.replace(findText, () => replaceText)
   );
   return [];
 };
@@ -451,19 +456,6 @@ const checkCreateEdit = async (
 const countOccurrences = (text: string, searchText: string) =>
   searchText === "" ? 0 : text.split(searchText).length - 1;
 
-const replaceSingleOccurrence = (
-  text: string,
-  searchText: string,
-  replacementText: string
-) => {
-  const matchIndex = text.indexOf(searchText);
-  return (
-    text.slice(0, matchIndex) +
-    replacementText +
-    text.slice(matchIndex + searchText.length)
-  );
-};
-
 type StepEdit = {
   label: string;
   file: string | undefined;
@@ -474,15 +466,11 @@ type StepEdit = {
 };
 
 const readStepEdits = (stepText: string): StepEdit[] => {
-  const editsSection = splitIntoSections(stepText, "## ").find(
-    (section) => section.heading === "Edits"
-  );
-  if (editsSection === undefined) {
+  const editsSection = findSection(stepText, "Edits");
+  if (editsSection === undefined || readIsSpikeStep(stepText)) {
     return [];
   }
-  return splitIntoSections(editsSection.body, "### ").map((section) =>
-    readStepEdit(section)
-  );
+  return splitIntoSections(editsSection.body, "### ").map(readStepEdit);
 };
 
 const readStepEdit = (section: {
@@ -543,21 +531,21 @@ const STEP_FILE_NAME_PATTERN = /^step-.+\.md$/;
 const isStepFileName = (entryName: string) =>
   STEP_FILE_NAME_PATTERN.test(entryName);
 
-const readStepLinkTargets = (planText: string) => {
-  const stepsBody = readSectionBody(planText, "## ", "Steps");
-  return [
-    ...readTextOutsideFences(stepsBody).matchAll(/\]\(([^)\s]+\.md)\)/g),
-  ].map((match) => match[1] ?? "");
-};
-
+const STEP_LINK_PATTERN = /\]\(([^)\s]+\.md)\)/g;
 const TICKED_STEP_LINK_PATTERN = /^\s*- \[x\].*\]\(([^)\s]+\.md)\)/gim;
 
-const readTickedStepLinkTargets = (planText: string) => {
-  const stepsBody = readSectionBody(planText, "## ", "Steps");
-  return [
-    ...readTextOutsideFences(stepsBody).matchAll(TICKED_STEP_LINK_PATTERN),
+const matchLinksInStepsSection = (planText: string, linkPattern: RegExp) =>
+  [
+    ...readTextOutsideFences(
+      findSection(planText, "Steps")?.body ?? ""
+    ).matchAll(linkPattern),
   ].map((match) => match[1] ?? "");
-};
+
+const readStepLinkTargets = (planText: string) =>
+  matchLinksInStepsSection(planText, STEP_LINK_PATTERN);
+
+const readTickedStepLinkTargets = (planText: string) =>
+  matchLinksInStepsSection(planText, TICKED_STEP_LINK_PATTERN);
 
 const PLAN_FOLDER_NAME_PATTERN = /^\d{2}-[a-z0-9-]+$/;
 

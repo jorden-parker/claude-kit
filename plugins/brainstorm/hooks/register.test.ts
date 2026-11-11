@@ -3,6 +3,7 @@ import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const RENDER_TOOL = "mcp__brainstorm__render_brainstorm";
 const CHECK_TOOL = "mcp__brainstorm__check_brainstorm_plan";
+const STATUS_TOOL = "mcp__brainstorm__set_brainstorm_plan_status";
 const BRAINSTORM_FOLDER = "/repo/.claude/brainstorm";
 const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
 const NOVEMBER_NINTH_NOON = Date.UTC(2026, 10, 9, 12, 0, 0);
@@ -99,10 +100,11 @@ test("session start registers the command and the render tool", async ($, on) =>
   expect(tools).toEqual([
     { name: "render_brainstorm", isDeferred: false },
     { name: "check_brainstorm_plan", isDeferred: false },
+    { name: "set_brainstorm_plan_status", isDeferred: false },
   ]);
 });
 
-test("the build command's argument hint names run folders as well as plan files", async ($, on) => {
+test("the build command's argument hint names run folders", async ($, on) => {
   const argumentHintByCommand: Record<string, string | undefined> = {};
   on("command.register", (_, e) => {
     argumentHintByCommand[e.name] = e.argumentHint;
@@ -120,7 +122,7 @@ test("the build command's argument hint names run folders as well as plan files"
   });
 
   expect(argumentHintByCommand["brainstorm-build"]).toBe(
-    "[plan names, run folders or paths, or all]"
+    "[run folder names or paths, or all]"
   );
 });
 
@@ -587,6 +589,20 @@ test("the planning prompt carries the index, plan and step templates", async ($,
   expect(instructions).toContain("## Done criteria");
 });
 
+test("the planning prompt gives every plan a pending status in its own file and in the index", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain(
+    "| Order | Plan | Status | Kind | Depends on | Ideas |"
+  );
+  expect(instructions).toContain(
+    "| 1 | [<title>](01-<slug>/plan.md) | pending |"
+  );
+  expect(instructions).toContain("- Status: pending");
+  expect(instructions).toContain("pending, in-progress, done or blocked");
+  expect(instructions).toContain("the same status");
+});
+
 test("brainstorm-plan with no numbers lists the ideas and submits nothing", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
@@ -620,23 +636,6 @@ test("brainstorm-plan without a saved brainstorm points at /brainstorm", async (
 
   expect(submittedPrompts).toEqual([]);
   expect(reply.text).toContain("/brainstorm");
-});
-
-test("brainstorm-build runs the newest legacy plan file through the build-plans skill", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {
-    [`${PLANS_FOLDER}/plan-2026-11-01-0900.md`]: "",
-    [`${PLANS_FOLDER}/plan-2026-11-08-1500.md`]: "",
-  });
-
-  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
-  await clock.settle();
-
-  const planPath = `${PLANS_FOLDER}/plan-2026-11-08-1500.md`;
-  expect(reply.text).toContain(planPath);
-  const instructions = submittedPrompts[0] ?? "";
-  expect(instructions).toContain(planPath);
-  expect(instructions).not.toContain("brainstorm:step-implementer");
 });
 
 test("brainstorm-build runs the newest run folder, skipping folders that are not plans", async ($, on) => {
@@ -675,16 +674,27 @@ test("brainstorm-build hands the build to the build-plans skill and does not rep
   expect(instructions).not.toContain("brainstorm:plan-reviewer");
 });
 
-test("brainstorm-build runs the plan it is given", async ($, on) => {
+test("brainstorm-build runs the run folder path it is given", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockFileTree(on, {});
 
-  await $.command.run(
-    buildCommandRun("brainstorm-build", "plans/002-cache.md")
-  );
+  await $.command.run(buildCommandRun("brainstorm-build", "plans/002-cache"));
   await clock.settle();
 
-  expect(submittedPrompts[0]).toContain("/repo/plans/002-cache.md");
+  expect(submittedPrompts[0]).toContain("/repo/plans/002-cache");
+});
+
+test("brainstorm-build does not treat a single plan file as a run", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, {
+    [`${PLANS_FOLDER}/plan-2026-11-08-1500.md`]: "",
+  });
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
+  await clock.settle();
+
+  expect(submittedPrompts).toEqual([]);
+  expect(reply.text).toContain("/brainstorm-plan");
 });
 
 test("brainstorm-build without a plan points at /brainstorm-plan", async ($, on) => {
@@ -696,20 +706,6 @@ test("brainstorm-build without a plan points at /brainstorm-plan", async ($, on)
 
   expect(submittedPrompts).toEqual([]);
   expect(reply.text).toContain("/brainstorm-plan");
-});
-
-test("brainstorm-build finds a bare plan file name in the plans folder", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {});
-
-  await $.command.run(
-    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500.md")
-  );
-  await clock.settle();
-
-  expect(submittedPrompts[0]).toContain(
-    `${PLANS_FOLDER}/plan-2026-11-08-1500.md`
-  );
 });
 
 test("brainstorm-build finds a bare run folder name in the plans folder", async ($, on) => {
@@ -724,21 +720,18 @@ test("brainstorm-build finds a bare run folder name in the plans folder", async 
   expect(submittedPrompts[0]).toContain(`${PLANS_FOLDER}/plan-2026-11-08-1500`);
 });
 
-test("brainstorm-build runs several plans in the order given", async ($, on) => {
+test("brainstorm-build runs several runs in the order given", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockFileTree(on, {});
 
   await $.command.run(
-    buildCommandRun(
-      "brainstorm-build",
-      "plan-2026-11-08-1500.md plans/002-cache.md"
-    )
+    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500 plans/002-cache")
   );
   await clock.settle();
 
   const instructions = submittedPrompts[0] ?? "";
-  const firstPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500.md`;
-  const secondPlan = "/repo/plans/002-cache.md";
+  const firstPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500`;
+  const secondPlan = "/repo/plans/002-cache";
   expect(instructions).toContain(firstPlan);
   expect(instructions).toContain(secondPlan);
   expect(instructions.indexOf(firstPlan)).toBeLessThan(
@@ -746,12 +739,13 @@ test("brainstorm-build runs several plans in the order given", async ($, on) => 
   );
 });
 
-test("brainstorm-build all runs every run folder and legacy file, oldest first", async ($, on) => {
+test("brainstorm-build all runs every run folder, oldest first", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockFileTree(on, {
     [`${PLANS_FOLDER}/plan-2026-11-08-1500/index.md`]: "",
     [`${PLANS_FOLDER}/notes.txt`]: "",
-    [`${PLANS_FOLDER}/plan-2026-11-01-0900.md`]: "",
+    [`${PLANS_FOLDER}/plan-2026-11-01-0900/index.md`]: "",
+    [`${PLANS_FOLDER}/plan-2026-11-05-1000.md`]: "",
     [`${PLANS_FOLDER}/notes/readme.md`]: "",
   });
 
@@ -759,12 +753,13 @@ test("brainstorm-build all runs every run folder and legacy file, oldest first",
   await clock.settle();
 
   const instructions = submittedPrompts[0] ?? "";
-  const olderPlan = `${PLANS_FOLDER}/plan-2026-11-01-0900.md`;
+  const olderPlan = `${PLANS_FOLDER}/plan-2026-11-01-0900`;
   const newerPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500`;
   expect(instructions).toContain(olderPlan);
   expect(instructions).toContain(newerPlan);
   expect(instructions).not.toContain("notes.txt");
   expect(instructions).not.toContain("notes/readme.md");
+  expect(instructions).not.toContain("plan-2026-11-05-1000");
   expect(instructions.indexOf(olderPlan)).toBeLessThan(
     instructions.indexOf(newerPlan)
   );
@@ -778,9 +773,11 @@ const CLEAN_INDEX = joinLines(
   "- Ideas: #2 Replay mode for bug reports",
   "- Written against: abc1234 on main",
   "",
-  "## Order",
+  "## Plans",
   "",
-  "1. [01-replay](01-replay/plan.md): Add the replay test. Ideas: #2. Kind: change. Depends on: none",
+  "| Order | Plan | Status | Kind | Depends on | Ideas |",
+  "| ----- | ---- | ------ | ---- | ---------- | ----- |",
+  "| 1 | [Add the replay test](01-replay/plan.md) | pending | change | none | #2 |",
   "",
   "## Dropped",
   "",
@@ -790,6 +787,7 @@ const CLEAN_INDEX = joinLines(
 const CLEAN_PLAN = joinLines(
   "# Plan: Add the replay test",
   "",
+  "- Status: pending",
   "- Ideas: #2 Replay mode for bug reports",
   "- Kind: change",
   "- Depends on: none",
@@ -887,10 +885,111 @@ test("the check tool returns each problem on its own line as a result, not a den
   );
 });
 
-test("the check tool reports a folder with no index.md or plan.md as missing", async ($, on) => {
+test("the check tool reports a folder with no index.md as missing", async ($, on) => {
   mockFileTree(on, {});
 
   const reply = await checkBrainstormPlan($, CLEAN_RUN_FOLDER);
 
   expect(reply.result).toBe("index.md: missing");
+});
+
+const recordFileWrites = (on: On) => {
+  const writes: FileWrite[] = [];
+  on("fs.write", (_, e) => {
+    writes.push({ path: e.path, text: e.text });
+    return { value: undefined };
+  });
+  return writes;
+};
+
+const setBrainstormPlanStatus = ($: Engine, path: string, status: string) =>
+  $.tool.call({ tool: STATUS_TOOL, path, status } as never);
+
+test("the status tool writes the new status to the plan file and the index", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+  const writes = recordFileWrites(on);
+
+  const reply = await setBrainstormPlanStatus(
+    $,
+    `${CLEAN_RUN_FOLDER}/01-replay`,
+    "in-progress"
+  );
+
+  expect(reply.result).toBe("01-replay: in-progress");
+  expect(writes).toEqual([
+    {
+      path: `${CLEAN_RUN_FOLDER}/01-replay/plan.md`,
+      text: CLEAN_PLAN.replace("- Status: pending", "- Status: in-progress"),
+    },
+    {
+      path: `${CLEAN_RUN_FOLDER}/index.md`,
+      text: CLEAN_INDEX.replace("| pending |", "| in-progress |"),
+    },
+  ]);
+});
+
+test("the status tool resolves a relative plan folder against the session folder", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+  const writes = recordFileWrites(on);
+
+  const reply = await setBrainstormPlanStatus(
+    $,
+    ".claude/brainstorm/plans/plan-2026-11-09-1200/01-replay",
+    "done"
+  );
+
+  expect(reply.result).toBe("01-replay: done");
+  expect(writes.map((write) => write.path)).toEqual([
+    `${CLEAN_RUN_FOLDER}/01-replay/plan.md`,
+    `${CLEAN_RUN_FOLDER}/index.md`,
+  ]);
+});
+
+test("a run the status tool has updated still passes the checker", async ($, on) => {
+  const fileTexts = { ...CLEAN_RUN_FILES };
+  mockFileTree(on, fileTexts);
+  on("fs.write", (_, e) => {
+    fileTexts[e.path] = e.text;
+    return { value: undefined };
+  });
+
+  await setBrainstormPlanStatus($, `${CLEAN_RUN_FOLDER}/01-replay`, "blocked");
+  const reply = await checkBrainstormPlan($, CLEAN_RUN_FOLDER);
+
+  expect(reply.result).toBe("OK");
+});
+
+test("the status tool denies a status that is not one of the four and writes nothing", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+  const writes = recordFileWrites(on);
+
+  const reply = await setBrainstormPlanStatus(
+    $,
+    `${CLEAN_RUN_FOLDER}/01-replay`,
+    "finished"
+  );
+
+  expect(reply.deny).toBe(
+    "Status must be pending, in-progress, done or blocked"
+  );
+  expect(writes).toEqual([]);
+});
+
+test("the status tool denies a plan folder the index does not list", async ($, on) => {
+  mockFileTree(on, {
+    ...CLEAN_RUN_FILES,
+    [`${CLEAN_RUN_FOLDER}/02-extra/plan.md`]: CLEAN_PLAN,
+  });
+  const writes = recordFileWrites(on);
+
+  const reply = await setBrainstormPlanStatus(
+    $,
+    `${CLEAN_RUN_FOLDER}/02-extra`,
+    "done"
+  );
+
+  expect(reply.deny).toBe(
+    `${CLEAN_RUN_FOLDER}/index.md: has no row for 02-extra`
+  );
+  expect(writes).toEqual([]);
 });

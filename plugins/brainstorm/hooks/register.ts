@@ -1,45 +1,76 @@
 import type { EngineInterface, Register } from "claude-code";
-import { checkPlan, type PlanFiles } from "./plan-check";
+import {
+  BANNED_PHRASES,
+  checkPlan,
+  MAX_CHANGED_LINES_PER_STEP,
+  type PlanFiles,
+} from "./plan-check";
+import {
+  PLAN_STATUSES_AS_TEXT,
+  PLAN_STATUSES,
+  readPlanFolderName,
+  setPlanStatus,
+  type StatusFiles,
+} from "./plan-status";
+
+const BRAINSTORM_COMMAND = "brainstorm";
+const PLAN_COMMAND = "brainstorm-plan";
+const BUILD_COMMAND = "brainstorm-build";
+const ALL_KEYWORD = "all";
 
 const TOOL_NAME = "render_brainstorm";
 const QUALIFIED_TOOL_NAME = `mcp__brainstorm__${TOOL_NAME}`;
 const CHECK_TOOL_NAME = "check_brainstorm_plan";
 const QUALIFIED_CHECK_TOOL_NAME = `mcp__brainstorm__${CHECK_TOOL_NAME}`;
+const STATUS_TOOL_NAME = "set_brainstorm_plan_status";
+const QUALIFIED_STATUS_TOOL_NAME = `mcp__brainstorm__${STATUS_TOOL_NAME}`;
+
 const BRAINSTORM_FOLDER = ".claude/brainstorm";
+const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
+const FILE_STAMP_PATTERN = String.raw`\d{4}-\d{2}-\d{2}-\d{4}`;
+const SAVED_BRAINSTORM_PATTERN = new RegExp(
+  `^brainstorm-${FILE_STAMP_PATTERN}\\.json$`
+);
+const PLAN_RUN_FOLDER_PATTERN = new RegExp(`^plan-${FILE_STAMP_PATTERN}$`);
 const START_HERE_COUNT = 3;
 
 declare module "claude-code" {
   interface McpToolInputs {
     [QUALIFIED_TOOL_NAME]: Record<string, unknown>;
     [QUALIFIED_CHECK_TOOL_NAME]: { path: string };
+    [QUALIFIED_STATUS_TOOL_NAME]: { path: string; status: string };
   }
 }
 
 const CATEGORIES = {
-  security: { label: "Security", tone: "red", rank: 0 },
-  "must-have": { label: "Must-have", tone: "amber", rank: 1 },
-  "quick-win": { label: "Quick win", tone: "green", rank: 2 },
-  performance: { label: "Performance", tone: "blue", rank: 3 },
-  "developer-experience": { label: "Dev experience", tone: "teal", rank: 4 },
-  creative: { label: "Creative", tone: "purple", rank: 5 },
-  moonshot: { label: "Moonshot", tone: "pink", rank: 6 },
+  security: { label: "Security", tone: "red" },
+  "must-have": { label: "Must-have", tone: "amber" },
+  "quick-win": { label: "Quick win", tone: "green" },
+  performance: { label: "Performance", tone: "blue" },
+  "developer-experience": { label: "Dev experience", tone: "teal" },
+  creative: { label: "Creative", tone: "purple" },
+  moonshot: { label: "Moonshot", tone: "pink" },
 } as const;
 
 const PRIORITIES = {
-  now: { label: "Do now", rank: 0 },
-  next: { label: "Next up", rank: 1 },
-  later: { label: "Later", rank: 2 },
+  now: { label: "Do now" },
+  next: { label: "Next up" },
+  later: { label: "Later" },
 } as const;
 
 const EFFORTS = {
-  small: { label: "S · under an hour", rank: 0 },
-  medium: { label: "M · a day or so", rank: 1 },
-  large: { label: "L · a project", rank: 2 },
+  small: { label: "S · under an hour" },
+  medium: { label: "M · a day or so" },
+  large: { label: "L · a project" },
 } as const;
 
 type Category = keyof typeof CATEGORIES;
 type Priority = keyof typeof PRIORITIES;
 type Effort = keyof typeof EFFORTS;
+
+const CATEGORIES_MOST_URGENT_FIRST = Object.keys(CATEGORIES) as Category[];
+const PRIORITIES_MOST_URGENT_FIRST = Object.keys(PRIORITIES) as Priority[];
+const EFFORTS_SMALLEST_FIRST = Object.keys(EFFORTS) as Effort[];
 
 type Idea = {
   title: string;
@@ -51,22 +82,15 @@ type Idea = {
   files: string[];
 };
 
-type Brainstorm = { project: string; summary: string; ideas: Idea[] };
-
 type NumberedIdea = Idea & { number: number };
 
-type SavedBrainstorm = {
+type Brainstorm<SomeIdea extends Idea = Idea> = {
   project: string;
   summary: string;
-  ideas: NumberedIdea[];
+  ideas: SomeIdea[];
 };
 
-const PLAN_COMMAND = "brainstorm-plan";
-const BUILD_COMMAND = "brainstorm-build";
-const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
-const SAVED_BRAINSTORM_PATTERN = /^brainstorm-\d{4}-\d{2}-\d{2}-\d{4}\.json$/;
-const PLAN_RUN_FOLDER_PATTERN = /^plan-\d{4}-\d{2}-\d{2}-\d{4}$/;
-const LEGACY_PLAN_FILE_PATTERN = /^plan-\d{4}-\d{2}-\d{2}-\d{4}\.md$/;
+type SavedBrainstorm = Brainstorm<NumberedIdea>;
 
 const BRAINSTORM_INSTRUCTIONS = `Brainstorm improvements for the project in the current working directory.
 
@@ -106,9 +130,9 @@ const RENDER_TOOL_SCHEMA = {
         type: "object",
         properties: {
           title: { type: "string", description: "Under 10 words." },
-          category: { type: "string", enum: Object.keys(CATEGORIES) },
-          priority: { type: "string", enum: Object.keys(PRIORITIES) },
-          effort: { type: "string", enum: Object.keys(EFFORTS) },
+          category: { type: "string", enum: CATEGORIES_MOST_URGENT_FIRST },
+          priority: { type: "string", enum: PRIORITIES_MOST_URGENT_FIRST },
+          effort: { type: "string", enum: EFFORTS_SMALLEST_FIRST },
           why: { type: "string", description: "One or two sentences." },
           nextStep: {
             type: "string",
@@ -140,23 +164,33 @@ const CHECK_TOOL_SCHEMA = {
     path: {
       type: "string",
       description:
-        "The run folder, or one plan folder, to check. A relative path is under the project.",
+        "The run folder to check. A relative path is under the project.",
     },
   },
   required: ["path"],
 };
 
+const STATUS_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    path: {
+      type: "string",
+      description:
+        "The plan folder (NN-slug) inside a run folder. A relative path is under the project.",
+    },
+    status: { type: "string", enum: PLAN_STATUSES },
+  },
+  required: ["path", "status"],
+};
+
 const readText = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
 
-const pickKey = <Options extends object>(
-  options: Options,
+const pickKnownKey = <Key extends string>(
+  knownKeys: Key[],
   value: unknown,
-  fallback: keyof Options
-): keyof Options =>
-  typeof value === "string" && value in options
-    ? (value as keyof Options)
-    : fallback;
+  fallback: Key
+) => knownKeys.find((knownKey) => knownKey === value) ?? fallback;
 
 const readIdea = (rawIdea: unknown): Idea | undefined => {
   if (typeof rawIdea !== "object" || rawIdea === null) return undefined;
@@ -171,36 +205,66 @@ const readIdea = (rawIdea: unknown): Idea | undefined => {
     title,
     nextStep,
     why: readText(fields.why),
-    category: pickKey(CATEGORIES, fields.category, "creative"),
-    priority: pickKey(PRIORITIES, fields.priority, "next"),
-    effort: pickKey(EFFORTS, fields.effort, "medium"),
+    category: pickKnownKey(
+      CATEGORIES_MOST_URGENT_FIRST,
+      fields.category,
+      "creative"
+    ),
+    priority: pickKnownKey(
+      PRIORITIES_MOST_URGENT_FIRST,
+      fields.priority,
+      "next"
+    ),
+    effort: pickKnownKey(EFFORTS_SMALLEST_FIRST, fields.effort, "medium"),
     files,
   };
 };
 
-const readBrainstorm = (input: Record<string, unknown>) => {
-  const rawIdeas = Array.isArray(input.ideas) ? input.ideas : [];
+const readNumberedIdea = (
+  rawIdea: unknown,
+  index: number
+): NumberedIdea | undefined => {
+  const idea = readIdea(rawIdea);
+  if (!idea) return undefined;
+  const rawNumber = (rawIdea as Record<string, unknown>).number;
+  const number =
+    typeof rawNumber === "number" && Number.isInteger(rawNumber)
+      ? rawNumber
+      : index + 1;
+  return { ...idea, number };
+};
+
+const readBrainstorm = <SomeIdea extends Idea>(
+  rawBrainstorm: unknown,
+  readOneIdea: (rawIdea: unknown, index: number) => SomeIdea | undefined
+): Brainstorm<SomeIdea> | undefined => {
+  if (typeof rawBrainstorm !== "object" || rawBrainstorm === null)
+    return undefined;
+  const fields = rawBrainstorm as Record<string, unknown>;
+  const rawIdeas: unknown[] = Array.isArray(fields.ideas) ? fields.ideas : [];
   const ideas = rawIdeas
-    .map(readIdea)
-    .filter((idea): idea is Idea => idea !== undefined);
-  if (ideas.length === 0) {
-    return {
-      failure:
-        "The brainstorm needs at least one idea with a title and a nextStep.",
-    };
-  }
-  const brainstorm: Brainstorm = {
-    project: readText(input.project) || "This project",
-    summary: readText(input.summary),
+    .map(readOneIdea)
+    .filter((idea): idea is SomeIdea => idea !== undefined);
+  if (!ideas.length) return undefined;
+  return {
+    project: readText(fields.project) || "This project",
+    summary: readText(fields.summary),
     ideas,
   };
-  return { brainstorm };
 };
 
 const compareUrgency = (first: Idea, second: Idea) =>
-  PRIORITIES[first.priority].rank - PRIORITIES[second.priority].rank ||
-  CATEGORIES[first.category].rank - CATEGORIES[second.category].rank ||
-  EFFORTS[first.effort].rank - EFFORTS[second.effort].rank;
+  PRIORITIES_MOST_URGENT_FIRST.indexOf(first.priority) -
+    PRIORITIES_MOST_URGENT_FIRST.indexOf(second.priority) ||
+  CATEGORIES_MOST_URGENT_FIRST.indexOf(first.category) -
+    CATEGORIES_MOST_URGENT_FIRST.indexOf(second.category) ||
+  EFFORTS_SMALLEST_FIRST.indexOf(first.effort) -
+    EFFORTS_SMALLEST_FIRST.indexOf(second.effort);
+
+const listPresentCategories = (ideas: Idea[]) =>
+  CATEGORIES_MOST_URGENT_FIRST.filter((category) =>
+    ideas.some((idea) => idea.category === category)
+  );
 
 const escapeHtml = (text: string) =>
   text
@@ -223,8 +287,8 @@ const renderWhy = (why: string) =>
 const renderCategoryBadge = (category: Category) =>
   `<span class="badge"><span class="dot tone-${CATEGORIES[category].tone}"></span>${CATEGORIES[category].label}</span>`;
 
-const renderIdeaCard = (idea: NumberedIdea, cardKey: string) =>
-  `<article class="card" data-category="${idea.category}" data-card="${cardKey}">
+const renderIdeaCard = (idea: NumberedIdea) =>
+  `<article class="card" data-category="${idea.category}">
   <div class="card-top">
     <span class="number">#${idea.number}</span>
     ${renderCategoryBadge(idea.category)}
@@ -235,7 +299,7 @@ const renderIdeaCard = (idea: NumberedIdea, cardKey: string) =>
   ${renderWhy(idea.why)}
   ${renderFiles(idea.files)}
   <div class="card-actions">
-    <label class="toggle"><input type="checkbox" data-done="${cardKey}"> Done</label>
+    <label class="toggle"><input type="checkbox" data-done="${idea.number}"> Done</label>
     <label class="toggle"><input type="checkbox" data-plan="${idea.number}"> Plan</label>
   </div>
 </article>`;
@@ -254,21 +318,16 @@ const renderStartHere = (ideas: NumberedIdea[]) => {
 const renderPrioritySection = (priority: Priority, ideas: NumberedIdea[]) => {
   const matchingIdeas = ideas.filter((idea) => idea.priority === priority);
   if (!matchingIdeas.length) return "";
-  const cards = matchingIdeas
-    .map((idea) => renderIdeaCard(idea, `${priority}-${ideas.indexOf(idea)}`))
-    .join("\n");
+  const cards = matchingIdeas.map((idea) => renderIdeaCard(idea)).join("\n");
   return `<section class="priority"><h2>${PRIORITIES[priority].label} <span class="count">${matchingIdeas.length}</span></h2><div class="grid">${cards}</div></section>`;
 };
 
 const renderStats = (ideas: NumberedIdea[]) => {
-  const countByPriority = (priority: Priority) =>
-    ideas.filter((idea) => idea.priority === priority).length;
-  const statCells = [
-    ["Ideas", String(ideas.length)],
-    [PRIORITIES.now.label, String(countByPriority("now"))],
-    [PRIORITIES.next.label, String(countByPriority("next"))],
-    [PRIORITIES.later.label, String(countByPriority("later"))],
-  ]
+  const priorityStats = PRIORITIES_MOST_URGENT_FIRST.map((priority) => [
+    PRIORITIES[priority].label,
+    ideas.filter((idea) => idea.priority === priority).length,
+  ]);
+  const statCells = [["Ideas", ideas.length], ...priorityStats]
     .map(
       ([statLabel, statValue]) =>
         `<div class="stat"><span class="muted">${statLabel}</span><strong>${statValue}</strong></div>`
@@ -278,10 +337,7 @@ const renderStats = (ideas: NumberedIdea[]) => {
 };
 
 const renderToolbar = (ideas: Idea[]) => {
-  const presentCategories = (Object.keys(CATEGORIES) as Category[]).filter(
-    (category) => ideas.some((idea) => idea.category === category)
-  );
-  const categoryTabs = presentCategories
+  const categoryTabs = listPresentCategories(ideas)
     .map((category) => {
       const { label, tone } = CATEGORIES[category];
       const count = ideas.filter((idea) => idea.category === category).length;
@@ -463,7 +519,7 @@ const PAGE_SCRIPT = `
     });
   }
   function describePicks(pickedNumbers){
-    if (pickedNumbers.length === planCheckboxes.length) return "all";
+    if (pickedNumbers.length === planCheckboxes.length) return "${ALL_KEYWORD}";
     return findMatchingCategory(pickedNumbers) || compressNumbers(pickedNumbers);
   }
   function listPickedCheckboxes(){
@@ -474,7 +530,7 @@ const PAGE_SCRIPT = `
     pickedNumbers.sort(function(first, second){ return first - second; });
     planCheckboxes.forEach(function(checkbox){ checkbox.closest(".card").classList.toggle("is-picked", checkbox.checked); });
     pickedCountLabel.textContent = pickedNumbers.length + " selected";
-    planCommand.textContent = "/brainstorm-plan " + describePicks(pickedNumbers);
+    planCommand.textContent = "/${PLAN_COMMAND} " + describePicks(pickedNumbers);
     planPicker.classList.toggle("is-hidden", pickedNumbers.length === 0);
   }
   function setPicked(shouldPickCard){
@@ -534,9 +590,9 @@ const renderBrainstormPage = ({
   summary,
   ideas: sortedIdeas,
 }: SavedBrainstorm) => {
-  const prioritySections = (Object.keys(PRIORITIES) as Priority[])
-    .map((priority) => renderPrioritySection(priority, sortedIdeas))
-    .join("\n");
+  const prioritySections = PRIORITIES_MOST_URGENT_FIRST.map((priority) =>
+    renderPrioritySection(priority, sortedIdeas)
+  ).join("\n");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -620,85 +676,47 @@ const writeBrainstormPage = async (
   return pagePath;
 };
 
-const listMatchingFiles = async (
+type FolderEntry = { name: string; kind: string };
+
+const listEntryPathsOldestFirst = async (
   engine: EngineInterface,
   folder: string,
-  fileNamePattern: RegExp
+  isWantedEntry: (entry: FolderEntry) => boolean
 ) => {
   const entries = await engine.fs.list(folder).catch(() => []);
   return entries
-    .filter(
-      (entry) => entry.kind === "file" && fileNamePattern.test(entry.name)
-    )
+    .filter(isWantedEntry)
     .map((entry) => entry.name)
     .sort()
-    .map((fileName) => `${folder}/${fileName}`);
+    .map((entryName) => `${folder}/${entryName}`);
 };
 
-const findNewestFile = async (
-  engine: EngineInterface,
-  folder: string,
-  fileNamePattern: RegExp
-) => (await listMatchingFiles(engine, folder, fileNamePattern)).at(-1);
+const isSavedBrainstorm = (entry: FolderEntry) =>
+  entry.kind === "file" && SAVED_BRAINSTORM_PATTERN.test(entry.name);
 
-const readNumberedIdea = (
-  rawIdea: unknown,
-  index: number
-): NumberedIdea | undefined => {
-  const idea = readIdea(rawIdea);
-  if (!idea) return undefined;
-  const rawNumber = (rawIdea as Record<string, unknown>).number;
-  const number =
-    typeof rawNumber === "number" && Number.isInteger(rawNumber)
-      ? rawNumber
-      : index + 1;
-  return { ...idea, number };
-};
-
-const readSavedBrainstorm = async (
+const loadNewestBrainstorm = async (
   engine: EngineInterface,
-  savedPath: string
+  workingDirectory: string
 ): Promise<SavedBrainstorm | undefined> => {
+  const savedPaths = await listEntryPathsOldestFirst(
+    engine,
+    `${workingDirectory}/${BRAINSTORM_FOLDER}`,
+    isSavedBrainstorm
+  );
+  const newestSavedPath = savedPaths.at(-1);
+  if (!newestSavedPath) return undefined;
   try {
-    const parsedBrainstorm = JSON.parse(
-      String(await engine.fs.read(savedPath))
+    return readBrainstorm(
+      JSON.parse(String(await engine.fs.read(newestSavedPath))),
+      readNumberedIdea
     );
-    const rawIdeas: unknown[] = Array.isArray(parsedBrainstorm.ideas)
-      ? parsedBrainstorm.ideas
-      : [];
-    const ideas = rawIdeas
-      .map(readNumberedIdea)
-      .filter((idea): idea is NumberedIdea => idea !== undefined);
-    if (!ideas.length) return undefined;
-    return {
-      project: readText(parsedBrainstorm.project) || "This project",
-      summary: readText(parsedBrainstorm.summary),
-      ideas,
-    };
   } catch {
     return undefined;
   }
 };
 
-const loadNewestBrainstorm = async (
-  engine: EngineInterface,
-  workingDirectory: string
-) => {
-  const savedPath = await findNewestFile(
-    engine,
-    `${workingDirectory}/${BRAINSTORM_FOLDER}`,
-    SAVED_BRAINSTORM_PATTERN
-  );
-  return savedPath ? readSavedBrainstorm(engine, savedPath) : undefined;
-};
-
 const describeIdeaLine = (idea: NumberedIdea) =>
   `${idea.number}. ${idea.title} · ${CATEGORIES[idea.category].label} · ${EFFORTS[idea.effort].label}`;
-
-const listPresentCategories = (ideas: Idea[]) =>
-  (Object.keys(CATEGORIES) as Category[]).filter((category) =>
-    ideas.some((idea) => idea.category === category)
-  );
 
 const listIdeasToPick = (brainstorm: SavedBrainstorm) => {
   const presentCategories = listPresentCategories(brainstorm.ideas);
@@ -730,12 +748,12 @@ const INDEX_TEMPLATE = `# Plans: <short title>
 - Ideas: <#number title, for each idea>
 - Written against: <git rev-parse --short HEAD> on <branch>
 
-## Order
+## Plans
 
-1. [01-<slug>](01-<slug>/plan.md): <title>. Ideas: <#numbers>. Kind: <change or spike>. Depends on: <none, or NN-slug>
-2. [02-<slug>](02-<slug>/plan.md): <title>. Ideas: <#numbers>. Kind: <change or spike>. Depends on: <none, or NN-slug>
-
-<For each spike plan: a line saying it needs re-planning after its findings.md is written.>
+| Order | Plan | Status | Kind | Depends on | Ideas |
+| ----- | ---- | ------ | ---- | ---------- | ----- |
+| 1 | [<title>](01-<slug>/plan.md) | pending | <change or spike> | <none, or NN-slug> | <#numbers> |
+| 2 | [<title>](02-<slug>/plan.md) | pending | <change or spike> | <none, or NN-slug, NN-slug> | <#numbers> |
 
 ## Dropped
 
@@ -743,6 +761,7 @@ const INDEX_TEMPLATE = `# Plans: <short title>
 
 const PLAN_TEMPLATE = `# Plan: <title>
 
+- Status: pending
 - Ideas: <#number title, for each idea in this plan>
 - Kind: <change or spike>
 - Depends on: <none, or NN-slug, NN-slug>
@@ -753,7 +772,7 @@ const PLAN_TEMPLATE = `# Plan: <title>
 
 ## Context
 
-<Language, test command, formatter, conventions, every CLAUDE.md rule that applies, and every hook that can block an edit (for example: a TDD hook that blocks code edits until a failing test run is recorded, a hook that rejects code comments, a naming hook). Under 15 lines.>
+<Language, test command, formatter, conventions, and every rule and edit-blocking hook from your study of the code that applies to this plan. Under 15 lines.>
 
 ## Steps
 
@@ -839,9 +858,9 @@ Write the plan as a run folder at ${runFolderPath}. Work in this order:
 
 1. Study the code. Read the real files each idea touches. Read ~/.claude/CLAUDE.md, the CLAUDE.md files of the project, and the hooks in .claude/settings*.json and ~/.claude/settings.json. Copy every rule and every edit-blocking hook you find into the Context of each plan that needs it: TDD red-first, no code comments, naming, and any other hook that can block an edit. Say in Context that a blocked edit means reply BLOCKED.
 2. Split into plans. Make one plan folder per idea by default. Merge ideas into one plan only when they change the same code. Name each folder NN-slug, numbered in build order. Order the plans so each depends only on earlier ones, and record Depends on in each plan.md and in index.md.
-3. Spikes. An idea whose effort is large, or whose category is moonshot, gets a plan with Kind: spike. A spike has spike steps with Questions, which write findings.md in the plan folder, and no product code. Note in index.md that the spike needs re-planning after its findings are in.
+3. Spikes. An idea whose effort is large, or whose category is moonshot, gets a plan with Kind: spike. A spike has spike steps with Questions, which write findings.md in the plan folder, and no product code. Its idea needs re-planning, with a new /${PLAN_COMMAND} run, once findings.md is written.
 4. Decide. Ask the user with AskUserQuestion only for a choice that changes the plan materially. Make every smaller decision yourself and write it down in the plan. Drop an idea that the code contradicts, and list it with its reason under Dropped in index.md.
-5. Write the files in exactly these formats. The run folder holds index.md. Each plan folder holds plan.md and its step files.
+5. Write the files in exactly these formats. The run folder holds index.md, the index of the run: one table row per plan, in build order. Each plan folder holds plan.md and its step files. A status is one of ${PLAN_STATUSES_AS_TEXT}. Every plan starts as pending, and a plan.md and its index.md row always show the same status. Keep the | character out of plan titles.
 
 index.md:
 
@@ -862,14 +881,14 @@ ${STEP_TEMPLATE}
 ${OUTER_FENCE}
 
 Rules for every step file:
-- One small change per step: one file, or one test with the code it tests. Its Replace and Contents blocks hold at most 60 changed lines in total; aim under 40.
-- Action: replace gives Find and Replace blocks, plus Near line and Surrounding. Action: create gives a Contents block with the whole file.
-- Find text is copied exactly from the file as earlier steps leave it, and it appears exactly once in that file. Surrounding is two or three unchanged lines around it, for orientation only.
+- One small change per step: one file, or one test with the code it tests. Its Replace and Contents blocks hold at most ${MAX_CHANGED_LINES_PER_STEP} changed lines in total; aim under 40.
+- An edit is Action: replace or Action: create, with exactly the blocks the template shows for it.
+- Find text is copied exactly from the file as earlier steps of the run leave it.
 - Copy into each step every Context line that the step needs. The implementer sees nothing else.
 - Where the project has tests, a test step comes before its code step. The test step's Expect is exit non-zero, output contains the failure text, which proves the test runs before the code exists. The code step's Expect is exit 0 and its passing text.
 - Each Check runs one narrow command: one test file or one test name, never the whole suite. State its exact exit code and exact output text.
 - Give new code in full. Leave no judgement to the implementer.
-- Never write these phrases outside code fences, in any case: as appropriate, if needed, as needed, where appropriate, consider, similar to, etc., and so on, you may, TODO.
+- Never write these phrases outside code fences, in any case: ${BANNED_PHRASES.join(", ")}.
 - A spike step has no Edits. It has a numbered Questions list, and its Check is test -s on its findings.md path.
 
 6. Check. Call the ${QUALIFIED_CHECK_TOOL_NAME} tool with the run folder path. Fix every problem it returns, and call it again until it returns OK.
@@ -877,12 +896,11 @@ Rules for every step file:
 8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run /${BUILD_COMMAND} to implement it.`;
 
 const buildImplementationPrompt = (planPaths: string[]) =>
-  `Build these brainstorm plans, one after another, in this order:
+  `Build these brainstorm plan runs, one after another, in this order:
 ${planPaths.map((planPath, index) => `${index + 1}. ${planPath}`).join("\n")}
 
 The paths are already resolved, so no plan selection is needed. Load the brainstorm:build-plans skill with the Skill tool and follow it exactly for these paths. Do not commit anything.`;
 
-const ALL_KEYWORD = "all";
 const NUMBER_RANGE_PATTERN = /^(\d+)-(\d+)$/;
 
 const parseRequestedPicks = (args: string) =>
@@ -910,14 +928,13 @@ const expandNumberRange = (
 const expandPick = (ideas: NumberedIdea[], pick: string) => {
   const normalizedPick = pick.toLowerCase();
   if (normalizedPick === ALL_KEYWORD) return listIdeaNumbers(ideas);
-  if (normalizedPick in CATEGORIES) {
-    return listIdeaNumbers(
-      ideas.filter((idea) => idea.category === normalizedPick)
-    );
-  }
   const rangeMatch = NUMBER_RANGE_PATTERN.exec(pick);
   if (rangeMatch) return expandNumberRange(ideas, rangeMatch);
-  return listIdeaNumbers(ideas.filter((idea) => String(idea.number) === pick));
+  return listIdeaNumbers(
+    ideas.filter(
+      (idea) => idea.category === normalizedPick || String(idea.number) === pick
+    )
+  );
 };
 
 const resolvePicks = (ideas: NumberedIdea[], requestedPicks: string[]) => {
@@ -935,18 +952,8 @@ const resolvePicks = (ideas: NumberedIdea[], requestedPicks: string[]) => {
   return { pickedIdeas, unknownPicks };
 };
 
-const isPlanEntry = (entry: { name: string; kind: string }) =>
-  (entry.kind === "dir" && PLAN_RUN_FOLDER_PATTERN.test(entry.name)) ||
-  (entry.kind === "file" && LEGACY_PLAN_FILE_PATTERN.test(entry.name));
-
-const listPlanPaths = async (engine: EngineInterface, plansFolder: string) => {
-  const entries = await engine.fs.list(plansFolder).catch(() => []);
-  return entries
-    .filter(isPlanEntry)
-    .map((entry) => entry.name)
-    .sort()
-    .map((entryName) => `${plansFolder}/${entryName}`);
-};
+const isPlanRunFolder = (entry: FolderEntry) =>
+  entry.kind === "dir" && PLAN_RUN_FOLDER_PATTERN.test(entry.name);
 
 const resolveRequestedPlanPath = (
   workingDirectory: string,
@@ -963,17 +970,19 @@ const resolvePlanPaths = async (
   workingDirectory: string,
   requestedPaths: string[]
 ) => {
-  const plansFolder = `${workingDirectory}/${PLANS_FOLDER}`;
-  if (requestedPaths.length === 1 && requestedPaths[0] === ALL_KEYWORD) {
-    return listPlanPaths(engine, plansFolder);
-  }
-  if (requestedPaths.length) {
+  const isEveryPlanRequested =
+    requestedPaths.length === 1 && requestedPaths[0] === ALL_KEYWORD;
+  if (requestedPaths.length && !isEveryPlanRequested) {
     return requestedPaths.map((requestedPath) =>
       resolveRequestedPlanPath(workingDirectory, requestedPath)
     );
   }
-  const newestPlanPath = (await listPlanPaths(engine, plansFolder)).at(-1);
-  return newestPlanPath ? [newestPlanPath] : [];
+  const planPaths = await listEntryPathsOldestFirst(
+    engine,
+    `${workingDirectory}/${PLANS_FOLDER}`,
+    isPlanRunFolder
+  );
+  return isEveryPlanRequested ? planPaths : planPaths.slice(-1);
 };
 
 const describeError = (error: unknown) =>
@@ -1010,10 +1019,17 @@ const checkBrainstormPlanPath = async (
   return problems.length ? problems.join("\n") : "OK";
 };
 
+const readStatusFiles = (engine: EngineInterface): StatusFiles => ({
+  read: readPlanFiles(engine).read,
+  write: async (filePath, fileText) => {
+    await engine.fs.write(filePath, fileText);
+  },
+});
+
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     await $.command.register({
-      name: "brainstorm",
+      name: BRAINSTORM_COMMAND,
       description:
         "Brainstorm creative ideas, must-haves and security fixes for this project, shown in the browser",
       argumentHint: "[focus]",
@@ -1021,14 +1037,14 @@ export const register: Register = (on) => {
     await $.command.register({
       name: PLAN_COMMAND,
       description:
-        "Turn ideas from the newest brainstorm into a plan folder of small, checked steps that a small model can build",
+        "Turn ideas from the newest brainstorm into plans, one folder each, with an index and small, checked steps that a small model can build",
       argumentHint: "<idea numbers, ranges, a category, or all>",
     });
     await $.command.register({
       name: BUILD_COMMAND,
       description:
-        "Implement a brainstorm plan: small-model subagents do each step, a strong model reviews the result",
-      argumentHint: "[plan names, run folders or paths, or all]",
+        "Build brainstorm plans: small-model subagents do each step, a strong model reviews the result, and each plan's status is recorded",
+      argumentHint: "[run folder names or paths, or all]",
     });
     await $.tool.register({
       name: TOOL_NAME,
@@ -1040,14 +1056,21 @@ export const register: Register = (on) => {
     await $.tool.register({
       name: CHECK_TOOL_NAME,
       description:
-        "Checks a brainstorm plan run folder, or one plan folder, against the plan format. Replies OK, or one problem per line. Call it on the run folder after writing the plan, and fix every problem it lists.",
+        "Checks a brainstorm plan run folder against the plan format: index.md, each plan.md, the step files, and that every plan's status matches its index row. Replies OK, or one problem per line. Call it on the run folder after writing the plans, and fix every problem it lists.",
       inputSchema: CHECK_TOOL_SCHEMA,
+      isDeferred: false,
+    });
+    await $.tool.register({
+      name: STATUS_TOOL_NAME,
+      description:
+        "Sets one brainstorm plan's status in its plan.md and in its row of the run's index.md, so the two always match. Call it with the plan folder path each time a plan's status changes.",
+      inputSchema: STATUS_TOOL_SCHEMA,
       isDeferred: false,
     });
     return next(e);
   });
 
-  on("command.run", { command: "brainstorm" }, ($, e) => {
+  on("command.run", { command: BRAINSTORM_COMMAND }, ($, e) => {
     const prompt = buildBrainstormPrompt(e.args.trim());
     $.clock.after(0, () => void $.prompt.submit({ text: prompt }));
     return { text: "Brainstorming improvements for this project…" };
@@ -1079,7 +1102,7 @@ export const register: Register = (on) => {
       .map((idea) => `#${idea.number} ${idea.title}`)
       .join(", ");
     return {
-      text: `Planning ${pickedTitles} into the plan folder ${runFolderPath}…`,
+      text: `Planning ${pickedTitles} into the run folder ${runFolderPath}…`,
     };
   });
 
@@ -1093,7 +1116,7 @@ export const register: Register = (on) => {
     );
     if (!planPaths.length) {
       return {
-        text: `No plan found in ${PLANS_FOLDER}. Run /${PLAN_COMMAND} first, or pass a plan's path.`,
+        text: `No plan found in ${PLANS_FOLDER}. Run /${PLAN_COMMAND} first, or pass a run folder's path.`,
       };
     }
     const prompt = buildImplementationPrompt(planPaths);
@@ -1104,29 +1127,50 @@ export const register: Register = (on) => {
   });
 
   on("tool.call", { tool: QUALIFIED_TOOL_NAME }, async ($, e) => {
-    const brainstormReading = readBrainstorm(
-      e as unknown as Record<string, unknown>
-    );
-    if (!brainstormReading.brainstorm)
-      return { deny: brainstormReading.failure };
-    const pageWrite = await writeBrainstormPage(
-      $,
-      brainstormReading.brainstorm
-    ).catch((error: unknown) => ({ failure: describeError(error) }));
-    if (typeof pageWrite !== "string") {
+    const brainstorm = readBrainstorm(e, readIdea);
+    if (!brainstorm) {
       return {
-        deny: `Could not write the brainstorm page: ${pageWrite.failure}`,
+        deny: "The brainstorm needs at least one idea with a title and a nextStep.",
       };
     }
-    const pagePath = pageWrite;
-    const isOpened = await openInBrowser($, pagePath);
-    const openOutcome = isOpened
-      ? `Opened ${pagePath} in the browser.`
-      : `Could not open the browser. The page is saved at ${pagePath}.`;
-    return { result: openOutcome };
+    try {
+      const pagePath = await writeBrainstormPage($, brainstorm);
+      const isOpened = await openInBrowser($, pagePath);
+      return {
+        result: isOpened
+          ? `Opened ${pagePath} in the browser.`
+          : `Could not open the browser. The page is saved at ${pagePath}.`,
+      };
+    } catch (error) {
+      return {
+        deny: `Could not write the brainstorm page: ${describeError(error)}`,
+      };
+    }
   });
 
   on("tool.call", { tool: QUALIFIED_CHECK_TOOL_NAME }, async ($, e) => ({
     result: await checkBrainstormPlanPath($, readText(e.path)),
   }));
+
+  on("tool.call", { tool: QUALIFIED_STATUS_TOOL_NAME }, async ($, e) => {
+    const planFolderPath = resolveProjectPath(
+      await $.session.cwd(),
+      readText(e.path)
+    );
+    const status = readText(e.status);
+    try {
+      const problems = await setPlanStatus(
+        readStatusFiles($),
+        planFolderPath,
+        status
+      );
+      return problems.length
+        ? { deny: problems.join("\n") }
+        : { result: `${readPlanFolderName(planFolderPath)}: ${status}` };
+    } catch (error) {
+      return {
+        deny: `Could not write the plan status: ${describeError(error)}`,
+      };
+    }
+  });
 };

@@ -15,16 +15,18 @@ const createPlanFiles = (textByPath: Record<string, string>): PlanFiles => ({
   },
 });
 
-const buildIndexText = (orderLines: string[]) =>
+const buildIndexText = (planRows: string[]) =>
   [
     "# Plans: Test run",
     "",
     "- Ideas: #1 Test idea",
     "- Written against: abc1234 on main",
     "",
-    "## Order",
+    "## Plans",
     "",
-    ...orderLines,
+    "| Order | Plan | Status | Kind | Depends on | Ideas |",
+    "| ----- | ---- | ------ | ---- | ---------- | ----- |",
+    ...planRows,
     "",
     "## Dropped",
     "",
@@ -36,6 +38,7 @@ const buildPlanText = (stepLinkLines: string[] = []) =>
   [
     "# Plan: Alpha change",
     "",
+    "- Status: pending",
     "- Ideas: #1 Test idea",
     "- Kind: change",
     "- Depends on: none",
@@ -65,7 +68,7 @@ const buildPlanText = (stepLinkLines: string[] = []) =>
 const ALPHA_PLAN_PATH = `${PLAN_RUN_FOLDER}/01-alpha/plan.md`;
 const BETA_PLAN_PATH = `${PLAN_RUN_FOLDER}/02-beta/plan.md`;
 const ALPHA_INDEX_LINE =
-  "1. [01-alpha](01-alpha/plan.md): Alpha. Ideas: #1. Kind: change. Depends on: none";
+  "| 1 | [Alpha change](01-alpha/plan.md) | pending | change | none | #1 |";
 
 test("a plan folder on disk but not listed in index.md is reported", async () => {
   const problems = await checkPlan(
@@ -401,16 +404,68 @@ test("a banned phrase inside a code fence is allowed", async () => {
   expect(problems).toEqual([]);
 });
 
-test("a single plan folder without index.md is checked on its own plan.md", async () => {
+test("a plan folder checked on its own reports the missing index", async () => {
   const problems = await checkPlan(
     createPlanFiles({
-      [ALPHA_PLAN_PATH]: buildPlanText().replace("## Context", "## Background"),
+      [ALPHA_PLAN_PATH]: buildPlanText(),
     }),
     `${PLAN_RUN_FOLDER}/01-alpha`,
     PROJECT_ROOT,
   );
 
-  expect(problems).toEqual(["plan.md: missing ## Context section"]);
+  expect(problems).toEqual(["index.md: missing"]);
+});
+
+const checkAlphaPlan = (indexRow: string, planText: string) =>
+  checkPlan(
+    createPlanFiles({
+      [`${PLAN_RUN_FOLDER}/index.md`]: buildIndexText([indexRow]),
+      [ALPHA_PLAN_PATH]: planText,
+    }),
+    PLAN_RUN_FOLDER,
+    PROJECT_ROOT,
+  );
+
+test("a plan.md without a Status line is reported", async () => {
+  const problems = await checkAlphaPlan(
+    ALPHA_INDEX_LINE,
+    buildPlanText().replace("- Status: pending\n", ""),
+  );
+
+  expect(problems).toEqual([
+    "01-alpha/plan.md: Status must be pending, in-progress, done or blocked",
+  ]);
+});
+
+test("a plan.md with an unknown status is reported", async () => {
+  const problems = await checkAlphaPlan(
+    ALPHA_INDEX_LINE,
+    buildPlanText().replace("- Status: pending", "- Status: finished"),
+  );
+
+  expect(problems).toEqual([
+    "01-alpha/plan.md: Status must be pending, in-progress, done or blocked",
+  ]);
+});
+
+test("an index row whose status differs from its plan.md is reported", async () => {
+  const problems = await checkAlphaPlan(
+    ALPHA_INDEX_LINE,
+    buildPlanText().replace("- Status: pending", "- Status: done"),
+  );
+
+  expect(problems).toEqual([
+    'index.md: 01-alpha is "pending", but 01-alpha/plan.md says "done"',
+  ]);
+});
+
+test("an index row and plan.md that agree on a later status are clean", async () => {
+  const problems = await checkAlphaPlan(
+    ALPHA_INDEX_LINE.replace("| pending |", "| blocked |"),
+    buildPlanText().replace("- Status: pending", "- Status: blocked"),
+  );
+
+  expect(problems).toEqual([]);
 });
 
 test("an unlisted plan folder has its plan.md checked too", async () => {
@@ -481,7 +536,7 @@ test("a spike step needs no Edits section", async () => {
   expect(problems).toEqual([]);
 });
 
-test("a folder with no index.md and no plan.md reports the missing index", async () => {
+test("a folder with no index.md reports the missing index", async () => {
   const problems = await checkPlan(
     createPlanFiles({}),
     PLAN_RUN_FOLDER,
@@ -491,19 +546,17 @@ test("a folder with no index.md and no plan.md reports the missing index", async
   expect(problems).toEqual(["index.md: missing"]);
 });
 
-test("an Order entry whose plan folder has no plan.md is reported in index.md", async () => {
+test("an index row whose plan folder has no plan.md is reported in index.md", async () => {
   const indexPath = `${PLAN_RUN_FOLDER}/index.md`;
   const problems = await checkPlan(
     createPlanFiles({
-      [indexPath]: buildIndexText([
-        "1. [01-alpha](01-alpha/plan.md): Alpha. Ideas: #1. Kind: change. Depends on: none",
-      ]),
+      [indexPath]: buildIndexText([ALPHA_INDEX_LINE]),
     }),
     PLAN_RUN_FOLDER,
     PROJECT_ROOT,
   );
 
-  expect(problems).toEqual(["index.md: Order entry 01-alpha has no plan.md"]);
+  expect(problems).toEqual(["index.md: 01-alpha has no plan.md"]);
 });
 
 test("a ticked step is already built, so its edits are not checked against the files", async () => {

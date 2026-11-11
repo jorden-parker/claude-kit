@@ -31,7 +31,7 @@ Stop, and say why in one line, when there is no PR.
 - `gh pr view <number> --json title,body,author,baseRefName,headRefName,headRefOid,files`
 - `gh pr diff <number>`
 - The code around each change. When `git rev-parse HEAD` equals `headRefOid`, read the files in the working tree. Otherwise read a file at the PR's head with `gh api "repos/{owner}/{repo}/contents/<path>?ref=<headRefOid>" -H "Accept: application/vnd.github.raw"`.
-- The project's rules: CLAUDE.md, CONTRIBUTING.md and the linter config, where they exist.
+- The project's rules: `CLAUDE.md`, `CONTRIBUTING.md` and the linter config, where they exist.
 
 ## 3. Review
 
@@ -50,7 +50,7 @@ Check each finding against the code before you write it. Drop what you cannot sh
 
 Every comment has four parts:
 
-```
+```text
 <label> [decorations]: <subject>
 
 [discussion]
@@ -84,6 +84,8 @@ Rules for every comment:
 - One point per comment.
 - The subject is one sentence that stands alone.
 - The discussion gives the reason and the next step. Leave it empty when the subject says it all.
+- Put every identifier, file name, path, command and flag in backticks, in the subject and in the discussion, so it renders as inline code: `parseToken`, `src/auth.ts`, `pnpm test`.
+- Put other code of more than one line in a fenced code block that names its language.
 - For a concrete replacement of the commented lines, put a GitHub suggestion block in the discussion: a code fence whose language is `suggestion`.
 - Write to the author as a colleague: say "we" and "this", not "you".
 
@@ -95,11 +97,11 @@ Where a comment goes:
 
 ## 5. Open the page
 
-Write a `summary` of one to three sentences: the overall state of the PR, and what blocks it if anything does.
+Write a `summary` of one to three sentences: the overall state of the PR, and what blocks it if anything does. Code-like text goes in backticks here too.
 
 Leave `event` out, so the page starts on Comment. Set `APPROVE` or `REQUEST_CHANGES` only when the user asked for that verdict. The user picks the verdict on the page.
 
-Call `mcp__draft-pr__render_pr_review_draft` once. If its schema is not loaded, load it with ToolSearch first. If the tool does not exist even then, stop and say in one line that the draft-pr plugin's tools are not loaded. Do not write the page yourself, and do not run the plugin's scripts.
+Call `mcp__draft-pr__render_pr_review_draft` once. If its schema is not loaded, load it with `ToolSearch` first. If the tool does not exist even then, stop and say in one line that the draft-pr plugin's tools are not loaded. Do not write the page yourself, and do not run the plugin's scripts.
 
 ```json
 {

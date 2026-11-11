@@ -39,7 +39,7 @@ Look in `.github/`, the project root and `docs/`, in that order, for:
 Then:
 
 - One template: use it.
-- Several: use the one that fits the change. If two fit, ask with AskUserQuestion. Pass its path as `templatePath`.
+- Several: use the one that fits the change. If two fit, ask with `AskUserQuestion`. Pass its path as `templatePath`.
 - None: use this layout.
 
 ```markdown
@@ -61,11 +61,13 @@ The body is the template, filled in:
 - Tick a checklist box only when the commits or the diff prove it. Leave the rest unticked for the user.
 - A section with nothing to say keeps its heading and says "None."
 - Say what changed, why, and how to test it. Short sentences and bullets.
+- Put every identifier, file name, path, command, flag and branch name in backticks, so it renders as inline code: `renderInline`, `hooks/page-script.ts`, `pnpm test`.
+- Put code of more than one line, and command output, in a fenced code block that names its language.
 - Take every statement from the commits and the diff. Invent nothing: no test run you did not see, no issue number that is not in a commit or the branch name.
 
 ## 4. Open the page
 
-Call `mcp__draft-pr__render_pr_draft` once. If its schema is not loaded, load it with ToolSearch first. If the tool does not exist even then, stop and say in one line that the draft-pr plugin's tools are not loaded. Do not write the page yourself, and do not run the plugin's scripts.
+Call `mcp__draft-pr__render_pr_draft` once. If its schema is not loaded, load it with `ToolSearch` first. If the tool does not exist even then, stop and say in one line that the draft-pr plugin's tools are not loaded. Do not write the page yourself, and do not run the plugin's scripts.
 
 ```json
 {
@@ -77,6 +79,6 @@ Call `mcp__draft-pr__render_pr_draft` once. If its schema is not loaded, load it
 }
 ```
 
-Set `isDraft` to true only when the user asked for a draft PR.
+Set `isDraft` to `true` only when the user asked for a draft PR.
 
 When the tool denies the call, fix what it names and call it again. When it succeeds, reply with its result line and stop.

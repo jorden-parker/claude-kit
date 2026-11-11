@@ -594,6 +594,28 @@ testWithEmptySession(
 );
 
 testWithEmptySession(
+  "a draft that itself says what the author cannot see keeps its first paragraph",
+  async ($, on) => {
+    const filledPromptTexts: string[] = [];
+    const rewrittenPrompt =
+      "I can't see the submit button on small screens.\n\nFix the layout in form.css.";
+    on("model.complete", () => ({
+      value: { isAnswered: true, text: rewrittenPrompt, usage: USAGE },
+    }));
+    on("prompt.fill", (_, e) => {
+      filledPromptTexts.push(e.text);
+      return { isFilled: true };
+    });
+
+    await $.command.run(
+      optimize("i can't see the submit button on small screens, fix form.css")
+    );
+
+    expect(filledPromptTexts).toEqual([rewrittenPrompt]);
+  }
+);
+
+testWithEmptySession(
   "the rules tell the rewriter it has no file or image access and to keep image references verbatim",
   async ($, on) => {
     const systemPrompts: (string | undefined)[] = [];

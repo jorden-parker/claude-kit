@@ -72,10 +72,14 @@ const dropLeadingAsides = (text: string) => {
   return paragraphs.slice(firstKeptIndex).join("\n\n").trim();
 };
 
-const extractRewrittenPrompt = (text: string) =>
-  dropLeadingAsides(
-    stripWrappingFenceAndQuotes(text.split(REWRITTEN_MARKER).at(-1)!)
+const extractRewrittenPrompt = (text: string, draft: string) => {
+  const rewrittenPrompt = stripWrappingFenceAndQuotes(
+    text.split(REWRITTEN_MARKER).at(-1)!
   );
+  return UNSEEN_CONTEXT_ASIDE.test(draft)
+    ? rewrittenPrompt
+    : dropLeadingAsides(rewrittenPrompt);
+};
 
 const truncateMessageText = (text: string) =>
   text.length > RECENT_MESSAGE_MAX_LENGTH
@@ -199,7 +203,7 @@ export const register: Register = (on, options) => {
       );
     }
 
-    const optimized = extractRewrittenPrompt(reply.text);
+    const optimized = extractRewrittenPrompt(reply.text, draft);
     if (!optimized) {
       return buildFailureResult("Could not optimize the prompt (empty reply).");
     }

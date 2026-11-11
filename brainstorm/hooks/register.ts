@@ -1,9 +1,19 @@
 import type { EngineInterface, Register } from "claude-code";
+import { checkPlan, type PlanFiles } from "./plan-check";
 
 const TOOL_NAME = "render_brainstorm";
 const QUALIFIED_TOOL_NAME = `mcp__brainstorm__${TOOL_NAME}`;
+const CHECK_TOOL_NAME = "check_brainstorm_plan";
+const QUALIFIED_CHECK_TOOL_NAME = `mcp__brainstorm__${CHECK_TOOL_NAME}`;
 const BRAINSTORM_FOLDER = ".claude/brainstorm";
 const START_HERE_COUNT = 3;
+
+declare module "claude-code" {
+  interface McpToolInputs {
+    [QUALIFIED_TOOL_NAME]: Record<string, unknown>;
+    [QUALIFIED_CHECK_TOOL_NAME]: { path: string };
+  }
+}
 
 const CATEGORIES = {
   security: { label: "Security", tone: "red", rank: 0 },
@@ -53,11 +63,10 @@ type SavedBrainstorm = {
 
 const PLAN_COMMAND = "brainstorm-plan";
 const BUILD_COMMAND = "brainstorm-build";
-const IMPLEMENTER_AGENT = "brainstorm:step-implementer";
-const REVIEWER_AGENT = "brainstorm:plan-reviewer";
 const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
 const SAVED_BRAINSTORM_PATTERN = /^brainstorm-\d{4}-\d{2}-\d{2}-\d{4}\.json$/;
-const PLAN_FILE_PATTERN = /^plan-\d{4}-\d{2}-\d{2}-\d{4}\.md$/;
+const PLAN_RUN_FOLDER_PATTERN = /^plan-\d{4}-\d{2}-\d{2}-\d{4}$/;
+const LEGACY_PLAN_FILE_PATTERN = /^plan-\d{4}-\d{2}-\d{2}-\d{4}\.md$/;
 
 const BRAINSTORM_INSTRUCTIONS = `Brainstorm improvements for the project in the current working directory.
 
@@ -123,6 +132,18 @@ const RENDER_TOOL_SCHEMA = {
     },
   },
   required: ["project", "summary", "ideas"],
+};
+
+const CHECK_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    path: {
+      type: "string",
+      description:
+        "The run folder, or one plan folder, to check. A relative path is under the project.",
+    },
+  },
+  required: ["path"],
 };
 
 const readText = (value: unknown) =>
@@ -701,11 +722,30 @@ const describeIdeaForPlanner = (idea: NumberedIdea) =>
     "</idea>",
   ].join("\n");
 
-const PLAN_TEMPLATE = `# Plan: <short title>
+const CODE_FENCE = "```";
+const OUTER_FENCE = "````";
+
+const INDEX_TEMPLATE = `# Plans: <short title>
 
 - Ideas: <#number title, for each idea>
 - Written against: <git rev-parse --short HEAD> on <branch>
-- Steps: <count>
+
+## Order
+
+1. [01-<slug>](01-<slug>/plan.md): <title>. Ideas: <#numbers>. Kind: <change or spike>. Depends on: <none, or NN-slug>
+2. [02-<slug>](02-<slug>/plan.md): <title>. Ideas: <#numbers>. Kind: <change or spike>. Depends on: <none, or NN-slug>
+
+<For each spike plan: a line saying it needs re-planning after its findings.md is written.>
+
+## Dropped
+
+<Each dropped idea and why, or "None".>`;
+
+const PLAN_TEMPLATE = `# Plan: <title>
+
+- Ideas: <#number title, for each idea in this plan>
+- Kind: <change or spike>
+- Depends on: <none, or NN-slug, NN-slug>
 
 ## Goal
 
@@ -713,26 +753,72 @@ const PLAN_TEMPLATE = `# Plan: <short title>
 
 ## Context
 
-<What every implementer needs and cannot see otherwise: language, test command, formatter, conventions, and any rule from CLAUDE.md that applies. Under 15 lines.>
+<Language, test command, formatter, conventions, every CLAUDE.md rule that applies, and every hook that can block an edit (for example: a TDD hook that blocks code edits until a failing test run is recorded, a hook that rejects code comments, a naming hook). Under 15 lines.>
 
 ## Steps
 
-### Step 1: <imperative title>
-
-- Files: \`<exact path>\`
-- Depends on: none
-- Do:
-  1. <one exact action>
-  2. <one exact action>
-- Check: \`<one command>\`, expect <exact result>
+- [ ] [step-01](step-01.md): <imperative title>
+- [ ] [step-02](step-02.md): <imperative title>
 
 ## Done criteria
 
-<Commands the reviewer numberRanges on the finished work, each with its expected result.>
+- \`<command>\`: expect <exact result>
 
 ## Out of scope
 
 <What the implementers must not touch.>`;
+
+const STEP_TEMPLATE = `# Step 01: <imperative title>
+
+- Plan: <NN-slug>
+- Kind: <test, code, docs or spike>
+- Depends on: <none, or step-01, step-02>
+
+## Context
+
+<The plan's Context lines this step needs, copied in full, plus any rule specific to this step.>
+
+## Edits
+
+### Edit 1
+
+- File: \`<exact path>\`
+- Action: replace
+- Near line: <number>
+
+Surrounding:
+
+${CODE_FENCE}<language>
+<2 to 3 unchanged lines before and after the Find text, for orientation only>
+${CODE_FENCE}
+
+Find:
+
+${CODE_FENCE}<language>
+<exact current text; appears exactly once in the file at the time this step runs>
+${CODE_FENCE}
+
+Replace:
+
+${CODE_FENCE}<language>
+<exact new text; an empty block deletes the Find text>
+${CODE_FENCE}
+
+### Edit 2
+
+- File: \`<exact path>\`
+- Action: create
+
+Contents:
+
+${CODE_FENCE}<language>
+<the whole new file>
+${CODE_FENCE}
+
+## Check
+
+- Run: \`<one narrow command: one test file or one test name, not the whole suite>\`
+- Expect: exit 0, output contains \`<exact text>\``;
 
 const listPickedNumbers = (pickedIdeas: NumberedIdea[]) => {
   const pickedNumbers = pickedIdeas.map((idea) => `#${idea.number}`);
@@ -740,46 +826,61 @@ const listPickedNumbers = (pickedIdeas: NumberedIdea[]) => {
   return `${pickedNumbers.slice(0, -1).join(", ")} and ${pickedNumbers.at(-1)}`;
 };
 
-const buildPlanPrompt = (pickedIdeas: NumberedIdea[], planPath: string) =>
+const buildPlanPrompt = (pickedIdeas: NumberedIdea[], runFolderPath: string) =>
   `Write an implementation plan for these ideas from the project's brainstorm. Do not implement anything.
 
-The user picked ideas ${listPickedNumbers(pickedIdeas)} on the brainstorm page and ran /${PLAN_COMMAND} with those numbers. Claude Code does not show a plugin command's arguments, so the numbers are listed here. Plan every picked idea. Do not ask the user to narrow the selection. If the ideas are too many for one plan, keep each step small and let the plan run long.
+The user picked ideas ${listPickedNumbers(pickedIdeas)} on the brainstorm page and ran /${PLAN_COMMAND} with those numbers. Claude Code does not show a plugin command's arguments, so the numbers are listed here. Plan every picked idea. Do not ask the user to narrow the selection.
 
 ${pickedIdeas.map(describeIdeaForPlanner).join("\n\n")}
 
-Who reads the plan: /${BUILD_COMMAND} hands each step, alone, to a fresh subagent on a small, cheap model. That subagent sees only the plan's Context section and its own step. It cannot ask questions and it makes poor judgement calls. A strong model reviews the finished work against the plan.
+Who reads the plan: each step file goes alone to a fresh small-model subagent that sees only that file; it cannot ask questions, and it makes poor judgement calls. After the steps run one after another, a strong model reviews the finished work against the plan.
 
-1. Study the code each idea touches first. Read the real files. Drop an idea the code contradicts, and say why under Out of scope.
-2. If a choice would change the plan materially, ask the user with AskUserQuestion before writing. Make every smaller decision yourself and write it down.
-3. Write the plan to ${planPath} in exactly this format:
+Write the plan as a run folder at ${runFolderPath}. Work in this order:
 
+1. Study the code. Read the real files each idea touches. Read ~/.claude/CLAUDE.md, the CLAUDE.md files of the project, and the hooks in .claude/settings*.json and ~/.claude/settings.json. Copy every rule and every edit-blocking hook you find into the Context of each plan that needs it: TDD red-first, no code comments, naming, and any other hook that can block an edit. Say in Context that a blocked edit means reply BLOCKED.
+2. Split into plans. Make one plan folder per idea by default. Merge ideas into one plan only when they change the same code. Name each folder NN-slug, numbered in build order. Order the plans so each depends only on earlier ones, and record Depends on in each plan.md and in index.md.
+3. Spikes. An idea whose effort is large, or whose category is moonshot, gets a plan with Kind: spike. A spike has spike steps with Questions, which write findings.md in the plan folder, and no product code. Note in index.md that the spike needs re-planning after its findings are in.
+4. Decide. Ask the user with AskUserQuestion only for a choice that changes the plan materially. Make every smaller decision yourself and write it down in the plan. Drop an idea that the code contradicts, and list it with its reason under Dropped in index.md.
+5. Write the files in exactly these formats. The run folder holds index.md. Each plan folder holds plan.md and its step files.
+
+index.md:
+
+${CODE_FENCE}
+${INDEX_TEMPLATE}
+${CODE_FENCE}
+
+plan.md:
+
+${CODE_FENCE}
 ${PLAN_TEMPLATE}
+${CODE_FENCE}
 
-Rules for steps:
-- One small change per step: one file, or one test with the code it tests. Aim for under 40 changed lines.
-- Name exact paths. To change existing code, quote the exact current text to find, then give the exact replacement. Give new code in full.
-- Leave no judgement to the implementer. Never write "as appropriate", "if needed", "consider", "similar to", or "etc.".
-- Repeat inside each step any convention or rule that step must follow. The implementer will not infer it.
-- Where the project has tests, put the test step before the code step and say which failure to expect.
-- End every step with one Check command and its exact expected result.
-- Order steps so each one depends only on earlier ones.
+step-NN.md:
 
-When the file is written, reply with its path, one line per step, and: Run /${BUILD_COMMAND} to implement it.`;
+${OUTER_FENCE}
+${STEP_TEMPLATE}
+${OUTER_FENCE}
 
-const describePlansToImplement = (planPaths: string[]) =>
-  planPaths.length === 1
-    ? `Implement the plan at ${planPaths[0]}`
-    : `Implement these plans one after another, in this order, finishing each one through its final review before starting the next:\n${planPaths.map((planPath, index) => `${index + 1}. ${planPath}`).join("\n")}\n\nWork through each plan`;
+Rules for every step file:
+- One small change per step: one file, or one test with the code it tests. Its Replace and Contents blocks hold at most 60 changed lines in total; aim under 40.
+- Action: replace gives Find and Replace blocks, plus Near line and Surrounding. Action: create gives a Contents block with the whole file.
+- Find text is copied exactly from the file as earlier steps leave it, and it appears exactly once in that file. Surrounding is two or three unchanged lines around it, for orientation only.
+- Copy into each step every Context line that the step needs. The implementer sees nothing else.
+- Where the project has tests, a test step comes before its code step. The test step's Expect is exit non-zero, output contains the failure text, which proves the test runs before the code exists. The code step's Expect is exit 0 and its passing text.
+- Each Check runs one narrow command: one test file or one test name, never the whole suite. State its exact exit code and exact output text.
+- Give new code in full. Leave no judgement to the implementer.
+- Never write these phrases outside code fences, in any case: as appropriate, if needed, as needed, where appropriate, consider, similar to, etc., and so on, you may, TODO.
+- A spike step has no Edits. It has a numbered Questions list, and its Check is test -s on its findings.md path.
+
+6. Check. Call the ${QUALIFIED_CHECK_TOOL_NAME} tool with the run folder path. Fix every problem it returns, and call it again until it returns OK.
+7. Clarity pass. For every step file, call the Agent tool with subagent_type "brainstorm:step-reader" and the step file's absolute path as its prompt. Send them all in one message so they run in parallel. Rewrite each step that replies QUESTIONS, then run the checker again. Do at most two rounds of this.
+8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run /${BUILD_COMMAND} to implement it.`;
 
 const buildImplementationPrompt = (planPaths: string[]) =>
-  `${describePlansToImplement(planPaths)} by coordinating subagents. You coordinate. You do not write code yourself, and you keep your own context small: pass text between agents instead of reading source files.
+  `Build these brainstorm plans, one after another, in this order:
+${planPaths.map((planPath, index) => `${index + 1}. ${planPath}`).join("\n")}
 
-1. Read the plan. If it is missing or has no steps, stop and say so. Run \`git rev-parse HEAD\` and \`git status --short\`. Record that commit as the base. If files the plan names already have uncommitted changes that this run did not make, stop and ask the user before going on.
-2. For each step, in order, call the Agent tool with subagent_type "${IMPLEMENTER_AGENT}". Its prompt is the plan path, the plan's Context section verbatim, and that one step verbatim. Wait for each step before starting the next, because steps build on each other.
-3. An implementer replies DONE or BLOCKED. On BLOCKED, call the Agent tool with subagent_type "${REVIEWER_AGENT}", passing the plan path, the step and the implementer's reply, and ask it to unblock the step. Give its replacement steps to new implementers. If a replacement is blocked too, stop and report.
-4. When every step is DONE, call the Agent tool with subagent_type "${REVIEWER_AGENT}" for the final review, passing the plan path and the base commit. It replies APPROVED, or FIXES NEEDED with fix steps written in the plan's step format.
-5. Give each fix step to a new "${IMPLEMENTER_AGENT}", in order, then ask the reviewer for a final review again. Stop after two rounds of fixes, even if fixes remain.
-6. Do not commit. Reply with: the steps done, the reviewer's verdict, any fixes still open, and the output of \`git diff --stat\` against the base.`;
+The paths are already resolved, so no plan selection is needed. Load the brainstorm:build-plans skill with the Skill tool and follow it exactly for these paths. Do not commit anything.`;
 
 const ALL_KEYWORD = "all";
 const NUMBER_RANGE_PATTERN = /^(\d+)-(\d+)$/;
@@ -834,15 +935,27 @@ const resolvePicks = (ideas: NumberedIdea[], requestedPicks: string[]) => {
   return { pickedIdeas, unknownPicks };
 };
 
+const isPlanEntry = (entry: { name: string; kind: string }) =>
+  (entry.kind === "dir" && PLAN_RUN_FOLDER_PATTERN.test(entry.name)) ||
+  (entry.kind === "file" && LEGACY_PLAN_FILE_PATTERN.test(entry.name));
+
+const listPlanPaths = async (engine: EngineInterface, plansFolder: string) => {
+  const entries = await engine.fs.list(plansFolder).catch(() => []);
+  return entries
+    .filter(isPlanEntry)
+    .map((entry) => entry.name)
+    .sort()
+    .map((entryName) => `${plansFolder}/${entryName}`);
+};
+
 const resolveRequestedPlanPath = (
   workingDirectory: string,
   requestedPath: string
 ) => {
-  if (requestedPath.startsWith("/")) return requestedPath;
-  const isBareFileName = !requestedPath.includes("/");
-  return isBareFileName
+  const isBareName = !requestedPath.includes("/");
+  return isBareName
     ? `${workingDirectory}/${PLANS_FOLDER}/${requestedPath}`
-    : `${workingDirectory}/${requestedPath}`;
+    : resolveProjectPath(workingDirectory, requestedPath);
 };
 
 const resolvePlanPaths = async (
@@ -850,28 +963,52 @@ const resolvePlanPaths = async (
   workingDirectory: string,
   requestedPaths: string[]
 ) => {
+  const plansFolder = `${workingDirectory}/${PLANS_FOLDER}`;
   if (requestedPaths.length === 1 && requestedPaths[0] === ALL_KEYWORD) {
-    return listMatchingFiles(
-      engine,
-      `${workingDirectory}/${PLANS_FOLDER}`,
-      PLAN_FILE_PATTERN
-    );
+    return listPlanPaths(engine, plansFolder);
   }
   if (requestedPaths.length) {
     return requestedPaths.map((requestedPath) =>
       resolveRequestedPlanPath(workingDirectory, requestedPath)
     );
   }
-  const newestPlanPath = await findNewestFile(
-    engine,
-    `${workingDirectory}/${PLANS_FOLDER}`,
-    PLAN_FILE_PATTERN
-  );
+  const newestPlanPath = (await listPlanPaths(engine, plansFolder)).at(-1);
   return newestPlanPath ? [newestPlanPath] : [];
 };
 
 const describeError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+const resolveProjectPath = (workingDirectory: string, requestedPath: string) =>
+  requestedPath.startsWith("/")
+    ? requestedPath
+    : `${workingDirectory}/${requestedPath}`;
+
+const readPlanFiles = (engine: EngineInterface): PlanFiles => ({
+  read: (filePath) =>
+    engine.fs.read(filePath).then(
+      (fileText) => String(fileText),
+      () => undefined
+    ),
+  list: (folder) =>
+    engine.fs.list(folder).then(
+      (entries) => entries.map((entry) => entry.name),
+      () => []
+    ),
+});
+
+const checkBrainstormPlanPath = async (
+  engine: EngineInterface,
+  requestedPath: string
+) => {
+  const projectRoot = await engine.session.cwd();
+  const problems = await checkPlan(
+    readPlanFiles(engine),
+    resolveProjectPath(projectRoot, requestedPath),
+    projectRoot
+  );
+  return problems.length ? problems.join("\n") : "OK";
+};
 
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
@@ -884,20 +1021,27 @@ export const register: Register = (on) => {
     await $.command.register({
       name: PLAN_COMMAND,
       description:
-        "Turn ideas from the newest brainstorm into a step-by-step plan simple enough for a small model",
+        "Turn ideas from the newest brainstorm into a plan folder of small, checked steps that a small model can build",
       argumentHint: "<idea numbers, ranges, a category, or all>",
     });
     await $.command.register({
       name: BUILD_COMMAND,
       description:
         "Implement a brainstorm plan: small-model subagents do each step, a strong model reviews the result",
-      argumentHint: "[plan file names or paths, or all]",
+      argumentHint: "[plan names, run folders or paths, or all]",
     });
     await $.tool.register({
       name: TOOL_NAME,
       description:
         "Renders brainstormed project ideas as a self-contained, ADHD-friendly HTML page, saves it under .claude/brainstorm/ and opens it in the browser. Call it once, with every idea, at the end of a /brainstorm.",
       inputSchema: RENDER_TOOL_SCHEMA,
+      isDeferred: false,
+    });
+    await $.tool.register({
+      name: CHECK_TOOL_NAME,
+      description:
+        "Checks a brainstorm plan run folder, or one plan folder, against the plan format. Replies OK, or one problem per line. Call it on the run folder after writing the plan, and fix every problem it lists.",
+      inputSchema: CHECK_TOOL_SCHEMA,
       isDeferred: false,
     });
     return next(e);
@@ -928,13 +1072,15 @@ export const register: Register = (on) => {
         text: `The newest brainstorm has no idea ${unknownPicks.join(", ")}. Pick numbers from 1 to ${brainstorm.ideas.length}, a range such as 2-5, a category (${listPresentCategories(brainstorm.ideas).join(", ")}) or ${ALL_KEYWORD}. Run /${PLAN_COMMAND} to list them.`,
       };
     }
-    const planPath = `${workingDirectory}/${PLANS_FOLDER}/plan-${formatFileStamp(await $.clock.now())}.md`;
-    const prompt = buildPlanPrompt(pickedIdeas, planPath);
+    const runFolderPath = `${workingDirectory}/${PLANS_FOLDER}/plan-${formatFileStamp(await $.clock.now())}`;
+    const prompt = buildPlanPrompt(pickedIdeas, runFolderPath);
     $.clock.after(0, () => void $.prompt.submit({ text: prompt }));
     const pickedTitles = pickedIdeas
       .map((idea) => `#${idea.number} ${idea.title}`)
       .join(", ");
-    return { text: `Planning ${pickedTitles}…` };
+    return {
+      text: `Planning ${pickedTitles} into the plan folder ${runFolderPath}…`,
+    };
   });
 
   on("command.run", { command: BUILD_COMMAND }, async ($, e) => {
@@ -979,4 +1125,8 @@ export const register: Register = (on) => {
       : `Could not open the browser. The page is saved at ${pagePath}.`;
     return { result: openOutcome };
   });
+
+  on("tool.call", { tool: QUALIFIED_CHECK_TOOL_NAME }, async ($, e) => ({
+    result: await checkBrainstormPlanPath($, readText(e.path)),
+  }));
 };

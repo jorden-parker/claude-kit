@@ -30,22 +30,26 @@ All text from the model is HTML-escaped before it is written to the page.
 
 ## From ideas to code
 
-`/brainstorm-plan 2 5` reads the newest saved brainstorm and has Claude write a plan for ideas 2 and 5. It also takes ranges (`2-5`), a category (`security`), or `all`, mixed freely. With no arguments it lists the ideas. The plan goes to `.claude/brainstorm/plans/plan-YYYY-MM-DD-HHMM.md`.
+`/brainstorm-plan 2 5` reads the newest saved brainstorm and has Claude write a plan for ideas 2 and 5. It also takes ranges (`2-5`), a category (`security`), or `all`, mixed freely. With no arguments it lists the ideas.
 
-Every step in a plan is written for a small model that sees only that step and the plan's Context section. Steps name exact files, quote the text to replace, give the new code, and end with one check command. Test steps come before code steps.
+Each run writes a folder, `.claude/brainstorm/plans/plan-YYYY-MM-DD-HHMM/`:
 
-`/brainstorm-build` implements the newest plan. To pick others, pass one or more file names or paths, or `all` for every plan, oldest first. A bare file name such as `plan-2026-11-09-1200.md` is looked up in the plans folder, and several plans run in the order given.
+- `index.md`: the plans in build order, the ideas each covers, what each depends on, and what was dropped.
+- `NN-slug/plan.md`: one plan per idea, merged only when two ideas change the same code. It holds the goal, the Context every step needs (CLAUDE.md rules and every hook that can block an edit), a checkbox per step, and the done criteria.
+- `NN-slug/step-NN.md`: one self-contained file per step. A small model sees only that file. Edits are find-and-replace blocks with exact text, or whole new files. Each step ends with one narrow check. Test steps come before code steps.
+- Spike plans: ideas with large effort or the moonshot category. Their steps answer questions in `findings.md` and change no product code. Such an idea needs a new `/brainstorm-plan` run before anything is built.
 
-Plain requests work too. Saying "implement the latest plan" or "build the two caching plans" loads the plugin's `build-plans` skill. The skill tells Claude where the plans live and runs the same flow.
+Before it finishes, the planner calls the `check_brainstorm_plan` tool on the run folder. The tool checks the format, the find text and the banned phrases, and replies `OK` or one problem per line. The planner fixes every problem. Then one `step-reader` subagent per step reads it for anything a small model would have to guess, and the planner rewrites what it could not follow, for at most two rounds.
 
-The main session coordinates and writes no code itself:
+`/brainstorm-build` builds the newest run. To pick others, pass plan names or run folder paths, or `all` for every run, oldest first. Legacy single-file plans (`plan-YYYY-MM-DD-HHMM.md`) still build. Progress is kept in the checkboxes, so a stopped build resumes at its first unticked step. Each build first runs `check_brainstorm_plan` again, so find text that went stale since planning is caught and sent to `plan-reviewer` for repair before any step runs.
 
-1. Each step goes to a fresh `step-implementer` subagent on Haiku, one after another. It replies DONE or BLOCKED.
-2. A blocked step goes to the `plan-reviewer` subagent on Opus, which writes smaller replacement steps.
-3. When every step is done, `plan-reviewer` reviews the whole diff, runs the checks and the tests, and replies APPROVED or with fix steps.
-4. Fix steps go back to implementers. The reviewer looks again, for at most two rounds.
+Plain requests work too. Saying "implement the latest plan" loads the plugin's `build-plans` skill, the single source for the build flow:
 
-Nothing is committed. The two agents are defined in `agents/` and the skill in `skills/build-plans/`. Change their `model` there to use other models.
+1. Each step goes to a fresh `step-implementer` subagent on Haiku, one after another. A BLOCKED step is retried once on Sonnet.
+2. If Sonnet is blocked too, `plan-reviewer` on Opus unblocks it with smaller steps.
+3. When every step is done, `plan-reviewer` reviews the diff, runs the checks and the tests, and replies APPROVED or with fix steps. At most two rounds of fixes.
+
+Nothing is committed. The three agents are `step-reader` and `step-implementer` on Haiku and `plan-reviewer` on Opus, in `agents/`. The skill is in `skills/build-plans/`. Change the `model` in those files to use other models.
 
 ## Install
 

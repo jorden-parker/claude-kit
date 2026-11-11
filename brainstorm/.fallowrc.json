@@ -1,0 +1,5 @@
+{
+  // Fallow cannot see that hooks.json loads register.ts, so the hooks files are declared as entry points.
+  // Mirrors the repo root config, which fallow does not read when it audits this folder on its own.
+  "entry": ["hooks/register.ts", "hooks/*.test.ts"]
+}

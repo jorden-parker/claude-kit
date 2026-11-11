@@ -2,7 +2,9 @@ import type { On } from "claude-code";
 import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const RENDER_TOOL = "mcp__brainstorm__render_brainstorm";
+const CHECK_TOOL = "mcp__brainstorm__check_brainstorm_plan";
 const BRAINSTORM_FOLDER = "/repo/.claude/brainstorm";
+const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
 const NOVEMBER_NINTH_NOON = Date.UTC(2026, 10, 9, 12, 0, 0);
 
 const buildBrainstormCommand = (args: string) => ({
@@ -94,7 +96,32 @@ test("session start registers the command and the render tool", async ($, on) =>
     "brainstorm-plan",
     "brainstorm-build",
   ]);
-  expect(tools).toEqual([{ name: "render_brainstorm", isDeferred: false }]);
+  expect(tools).toEqual([
+    { name: "render_brainstorm", isDeferred: false },
+    { name: "check_brainstorm_plan", isDeferred: false },
+  ]);
+});
+
+test("the build command's argument hint names run folders as well as plan files", async ($, on) => {
+  const argumentHintByCommand: Record<string, string | undefined> = {};
+  on("command.register", (_, e) => {
+    argumentHintByCommand[e.name] = e.argumentHint;
+    return { value: { command: e.name } };
+  });
+  on("tool.register", (_, e) => ({
+    value: { tool: `mcp__brainstorm__${e.name}` },
+  }));
+  on("session.start", (_, e) => ({ cwd: e.cwd }));
+
+  await $.session.start({
+    cwd: "/repo",
+    surface: "terminal",
+    isInteractive: true,
+  });
+
+  expect(argumentHintByCommand["brainstorm-build"]).toBe(
+    "[plan names, run folders or paths, or all]"
+  );
 });
 
 const recordSubmittedPrompts = (on: On) => {
@@ -310,54 +337,54 @@ const buildCommandRun = (command: string, args: string) => ({
   command,
 });
 
-type FolderListing = Record<string, string[]>;
+const joinLines = (...lines: string[]) => lines.join("\n");
 
-const mockFiles = (
-  on: On,
-  folderListing: FolderListing,
-  fileTexts: Record<string, string>
+const listImmediateEntries = (
+  fileTexts: Record<string, string>,
+  folder: string
 ) => {
+  const folderPrefix = `${folder}/`;
+  const kindByEntryName = new Map<string, "file" | "dir">();
+  for (const filePath of Object.keys(fileTexts)) {
+    if (!filePath.startsWith(folderPrefix)) continue;
+    const pathSegments = filePath.slice(folderPrefix.length).split("/");
+    const entryName = pathSegments[0] ?? "";
+    kindByEntryName.set(entryName, pathSegments.length > 1 ? "dir" : "file");
+  }
+  return [...kindByEntryName].map(([name, kind]) => ({
+    name,
+    kind,
+    size: 1,
+    mtimeMs: 1,
+    isLink: false,
+  }));
+};
+
+const mockFileTree = (on: On, fileTexts: Record<string, string>) => {
   on("session.cwd", () => ({ value: "/repo" }));
-  on("fs.list", (_, e) => {
-    const fileNames = folderListing[e.path];
-    if (!fileNames) return { deny: `ENOENT: ${e.path}` };
-    return {
-      value: fileNames.map((name) => ({
-        name,
-        kind: "file" as const,
-        size: 1,
-        mtimeMs: 1,
-        isLink: false,
-      })),
-    };
-  });
   on("fs.read", (_, e) => {
     const fileText = fileTexts[e.path];
     if (fileText === undefined) return { deny: `ENOENT: ${e.path}` };
     return { value: fileText };
   });
+  on("fs.list", (_, e) => {
+    const entries = listImmediateEntries(fileTexts, e.path);
+    if (!entries.length) return { deny: `ENOENT: ${e.path}` };
+    return { value: entries };
+  });
 };
 
 const mockSavedBrainstorm = (on: On) =>
-  mockFiles(
-    on,
-    {
-      [BRAINSTORM_FOLDER]: [
-        ".gitignore",
-        "brainstorm-2026-11-01-0900.json",
-        "brainstorm-2026-11-08-1500.html",
-        "brainstorm-2026-11-08-1500.json",
-      ],
-    },
-    {
-      [`${BRAINSTORM_FOLDER}/brainstorm-2026-11-08-1500.json`]:
-        JSON.stringify(SAVED_BRAINSTORM),
-      [`${BRAINSTORM_FOLDER}/brainstorm-2026-11-01-0900.json`]: JSON.stringify({
-        ...SAVED_BRAINSTORM,
-        ideas: [],
-      }),
-    }
-  );
+  mockFileTree(on, {
+    [`${BRAINSTORM_FOLDER}/.gitignore`]: "*\n",
+    [`${BRAINSTORM_FOLDER}/brainstorm-2026-11-08-1500.html`]: "",
+    [`${BRAINSTORM_FOLDER}/brainstorm-2026-11-08-1500.json`]:
+      JSON.stringify(SAVED_BRAINSTORM),
+    [`${BRAINSTORM_FOLDER}/brainstorm-2026-11-01-0900.json`]: JSON.stringify({
+      ...SAVED_BRAINSTORM,
+      ideas: [],
+    }),
+  });
 
 test("brainstorm-plan submits a planning turn for the picked ideas from the newest brainstorm", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
@@ -372,10 +399,19 @@ test("brainstorm-plan submits a planning turn for the picked ideas from the newe
   expect(instructions).toContain("Replay mode for bug reports");
   expect(instructions).toContain("Sketch the event log format");
   expect(instructions).not.toContain("Stop logging the API token");
-  expect(instructions).toContain(
-    `${BRAINSTORM_FOLDER}/plans/plan-2026-11-09-1200.md`
-  );
+  expect(instructions).toContain(`${PLANS_FOLDER}/plan-2026-11-09-1200`);
+  expect(instructions).not.toContain("plan-2026-11-09-1200.md");
   expect(instructions).toContain("/brainstorm-build");
+});
+
+test("the planning acknowledgement names the run folder it writes", async ($, on) => {
+  const { clock } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "2"));
+  await clock.settle();
+
+  expect(reply.text).toContain(`${PLANS_FOLDER}/plan-2026-11-09-1200`);
 });
 
 test("brainstorm-plan takes several numbers separated by commas or spaces", async ($, on) => {
@@ -461,6 +497,96 @@ test("brainstorm-plan tells the planner which ideas the user picked and not to c
   expect(instructions).toContain("Do not ask the user to narrow");
 });
 
+const planningInstructions = async ($: Engine, on: On) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  await $.command.run(buildCommandRun("brainstorm-plan", "1 2"));
+  await clock.settle();
+  return submittedPrompts[0] ?? "";
+};
+
+test("the planning prompt forbids implementing and asks for every picked idea to be planned", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain("Do not implement anything.");
+  expect(instructions).toContain("Plan every picked idea.");
+});
+
+test("the planning prompt says who reads each step and that no one can ask questions", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain(
+    "each step file goes alone to a fresh small-model subagent that sees only that file"
+  );
+  expect(instructions).toContain("it cannot ask questions");
+  expect(instructions).toContain("a strong model reviews");
+});
+
+test("the planning prompt sends the planner to the CLAUDE.md files and edit-blocking hooks", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain("~/.claude/CLAUDE.md");
+  expect(instructions).toContain(".claude/settings");
+  expect(instructions).toContain("~/.claude/settings.json");
+  expect(instructions).toContain("edit-blocking hook");
+  expect(instructions).toContain("TDD red-first");
+  expect(instructions).toContain("reply BLOCKED");
+});
+
+test("the planning prompt splits ideas into plan folders and makes spikes of large and moonshot ideas", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain("one plan folder per idea");
+  expect(instructions).toContain("same code");
+  expect(instructions).toContain("Depends on");
+  expect(instructions).toContain("Kind: spike");
+  expect(instructions).toContain("category is moonshot");
+  expect(instructions).toContain("findings.md");
+  expect(instructions).toContain("re-planning");
+});
+
+test("the planning prompt asks only about material choices and lists dropped ideas", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain("AskUserQuestion");
+  expect(instructions).toContain("changes the plan materially");
+  expect(instructions).toContain("Dropped");
+});
+
+test("the planning prompt sets the step rules: size, find and replace, checks and banned phrases", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain("at most 60 changed lines");
+  expect(instructions).toContain("aim under 40");
+  expect(instructions).toContain("Action: replace");
+  expect(instructions).toContain("Near line");
+  expect(instructions).toContain("Surrounding");
+  expect(instructions).toContain("exactly once");
+  expect(instructions).toContain("exit non-zero, output contains");
+  expect(instructions).toContain("as appropriate");
+});
+
+test("the planning prompt runs the checker and the step-reader clarity pass", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain("mcp__brainstorm__check_brainstorm_plan");
+  expect(instructions).toContain("brainstorm:step-reader");
+  expect(instructions).toContain("QUESTIONS");
+  expect(instructions).toContain("at most two rounds");
+  expect(instructions).toContain("Run /brainstorm-build to implement it.");
+  expect(instructions).not.toContain("numberRanges");
+});
+
+test("the planning prompt carries the index, plan and step templates", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain("# Plans: <short title>");
+  expect(instructions).toContain("# Plan: <title>");
+  expect(instructions).toContain("# Step 01: <imperative title>");
+  expect(instructions).toContain("## Done criteria");
+});
+
 test("brainstorm-plan with no numbers lists the ideas and submits nothing", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
@@ -487,7 +613,7 @@ test("brainstorm-plan refuses a number the brainstorm does not have", async ($, 
 
 test("brainstorm-plan without a saved brainstorm points at /brainstorm", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(on, {}, {});
+  mockFileTree(on, {});
 
   const reply = await $.command.run(buildCommandRun("brainstorm-plan", "1"));
   await clock.settle();
@@ -496,17 +622,12 @@ test("brainstorm-plan without a saved brainstorm points at /brainstorm", async (
   expect(reply.text).toContain("/brainstorm");
 });
 
-const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
-
-test("brainstorm-build runs the newest plan with cheap implementers and a strong reviewer", async ($, on) => {
+test("brainstorm-build runs the newest legacy plan file through the build-plans skill", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(
-    on,
-    {
-      [PLANS_FOLDER]: ["plan-2026-11-01-0900.md", "plan-2026-11-08-1500.md"],
-    },
-    {}
-  );
+  mockFileTree(on, {
+    [`${PLANS_FOLDER}/plan-2026-11-01-0900.md`]: "",
+    [`${PLANS_FOLDER}/plan-2026-11-08-1500.md`]: "",
+  });
 
   const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
   await clock.settle();
@@ -515,13 +636,48 @@ test("brainstorm-build runs the newest plan with cheap implementers and a strong
   expect(reply.text).toContain(planPath);
   const instructions = submittedPrompts[0] ?? "";
   expect(instructions).toContain(planPath);
-  expect(instructions).toContain("brainstorm:step-implementer");
-  expect(instructions).toContain("brainstorm:plan-reviewer");
+  expect(instructions).not.toContain("brainstorm:step-implementer");
+});
+
+test("brainstorm-build runs the newest run folder, skipping folders that are not plans", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, {
+    [`${PLANS_FOLDER}/plan-2026-11-01-0900.md`]: "",
+    [`${PLANS_FOLDER}/plan-2026-11-08-1500/index.md`]: "",
+    [`${PLANS_FOLDER}/notes/readme.md`]: "",
+  });
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
+  await clock.settle();
+
+  const runFolder = `${PLANS_FOLDER}/plan-2026-11-08-1500`;
+  expect(reply.text).toContain(runFolder);
+  expect(submittedPrompts[0]).toContain(runFolder);
+  expect(submittedPrompts[0]).not.toContain("notes");
+  expect(submittedPrompts[0]).not.toContain("plan-2026-11-01-0900");
+});
+
+test("brainstorm-build hands the build to the build-plans skill and does not repeat its flow", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, {});
+
+  await $.command.run(
+    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500")
+  );
+  await clock.settle();
+
+  const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain("Skill tool");
+  expect(instructions).toContain("brainstorm:build-plans");
+  expect(instructions).toContain("follow it exactly");
+  expect(instructions).toContain("already resolved");
+  expect(instructions).not.toContain("brainstorm:step-implementer");
+  expect(instructions).not.toContain("brainstorm:plan-reviewer");
 });
 
 test("brainstorm-build runs the plan it is given", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(on, {}, {});
+  mockFileTree(on, {});
 
   await $.command.run(
     buildCommandRun("brainstorm-build", "plans/002-cache.md")
@@ -533,7 +689,7 @@ test("brainstorm-build runs the plan it is given", async ($, on) => {
 
 test("brainstorm-build without a plan points at /brainstorm-plan", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(on, {}, {});
+  mockFileTree(on, {});
 
   const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
   await clock.settle();
@@ -544,7 +700,7 @@ test("brainstorm-build without a plan points at /brainstorm-plan", async ($, on)
 
 test("brainstorm-build finds a bare plan file name in the plans folder", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(on, {}, {});
+  mockFileTree(on, {});
 
   await $.command.run(
     buildCommandRun("brainstorm-build", "plan-2026-11-08-1500.md")
@@ -556,9 +712,21 @@ test("brainstorm-build finds a bare plan file name in the plans folder", async (
   );
 });
 
+test("brainstorm-build finds a bare run folder name in the plans folder", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, {});
+
+  await $.command.run(
+    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500")
+  );
+  await clock.settle();
+
+  expect(submittedPrompts[0]).toContain(`${PLANS_FOLDER}/plan-2026-11-08-1500`);
+});
+
 test("brainstorm-build runs several plans in the order given", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(on, {}, {});
+  mockFileTree(on, {});
 
   await $.command.run(
     buildCommandRun(
@@ -578,44 +746,151 @@ test("brainstorm-build runs several plans in the order given", async ($, on) => 
   );
 });
 
-test("brainstorm-build does not stop on changes an earlier plan in the run made", async ($, on) => {
+test("brainstorm-build all runs every run folder and legacy file, oldest first", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(on, {}, {});
-
-  await $.command.run(
-    buildCommandRun("brainstorm-build", "plan-one.md plan-two.md")
-  );
-  await clock.settle();
-
-  expect(submittedPrompts[0]).toContain(
-    "uncommitted changes that this run did not make"
-  );
-});
-
-test("brainstorm-build all runs every plan, oldest first", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFiles(
-    on,
-    {
-      [PLANS_FOLDER]: [
-        "plan-2026-11-08-1500.md",
-        "notes.txt",
-        "plan-2026-11-01-0900.md",
-      ],
-    },
-    {}
-  );
+  mockFileTree(on, {
+    [`${PLANS_FOLDER}/plan-2026-11-08-1500/index.md`]: "",
+    [`${PLANS_FOLDER}/notes.txt`]: "",
+    [`${PLANS_FOLDER}/plan-2026-11-01-0900.md`]: "",
+    [`${PLANS_FOLDER}/notes/readme.md`]: "",
+  });
 
   await $.command.run(buildCommandRun("brainstorm-build", "all"));
   await clock.settle();
 
   const instructions = submittedPrompts[0] ?? "";
   const olderPlan = `${PLANS_FOLDER}/plan-2026-11-01-0900.md`;
-  const newerPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500.md`;
+  const newerPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500`;
   expect(instructions).toContain(olderPlan);
   expect(instructions).toContain(newerPlan);
   expect(instructions).not.toContain("notes.txt");
+  expect(instructions).not.toContain("notes/readme.md");
   expect(instructions.indexOf(olderPlan)).toBeLessThan(
     instructions.indexOf(newerPlan)
   );
+});
+
+const CLEAN_RUN_FOLDER = `${PLANS_FOLDER}/plan-2026-11-09-1200`;
+
+const CLEAN_INDEX = joinLines(
+  "# Plans: Replay mode",
+  "",
+  "- Ideas: #2 Replay mode for bug reports",
+  "- Written against: abc1234 on main",
+  "",
+  "## Order",
+  "",
+  "1. [01-replay](01-replay/plan.md): Add the replay test. Ideas: #2. Kind: change. Depends on: none",
+  "",
+  "## Dropped",
+  "",
+  "None."
+);
+
+const CLEAN_PLAN = joinLines(
+  "# Plan: Add the replay test",
+  "",
+  "- Ideas: #2 Replay mode for bug reports",
+  "- Kind: change",
+  "- Depends on: none",
+  "",
+  "## Goal",
+  "",
+  "Bug reports can carry a replay.",
+  "",
+  "## Context",
+  "",
+  "- TypeScript. Test command: `pnpm test`.",
+  "",
+  "## Steps",
+  "",
+  "- [ ] [step-01](step-01.md): Add the replay test",
+  "",
+  "## Done criteria",
+  "",
+  "- `pnpm test`: expect exit 0",
+  "",
+  "## Out of scope",
+  "",
+  "Everything else."
+);
+
+const CLEAN_STEP = joinLines(
+  "# Step 01: Add the replay test",
+  "",
+  "- Plan: 01-replay",
+  "- Kind: test",
+  "- Depends on: none",
+  "",
+  "## Context",
+  "",
+  "- TypeScript. Test command: `pnpm test`.",
+  "",
+  "## Edits",
+  "",
+  "### Edit 1",
+  "",
+  "- File: `src/replay.test.ts`",
+  "- Action: create",
+  "",
+  "Contents:",
+  "",
+  "```ts",
+  "export {};",
+  "```",
+  "",
+  "## Check",
+  "",
+  "- Run: `pnpm test src/replay.test.ts`",
+  "- Expect: exit non-zero, output contains `replay`"
+);
+
+const CLEAN_RUN_FILES: Record<string, string> = {
+  [`${CLEAN_RUN_FOLDER}/index.md`]: CLEAN_INDEX,
+  [`${CLEAN_RUN_FOLDER}/01-replay/plan.md`]: CLEAN_PLAN,
+  [`${CLEAN_RUN_FOLDER}/01-replay/step-01.md`]: CLEAN_STEP,
+};
+
+const checkBrainstormPlan = ($: Engine, path: string) =>
+  $.tool.call({ tool: CHECK_TOOL, path } as never);
+
+test("the check tool answers OK for a clean run folder", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+
+  const reply = await checkBrainstormPlan($, CLEAN_RUN_FOLDER);
+
+  expect(reply.result).toBe("OK");
+});
+
+test("the check tool resolves a relative path against the session folder", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+
+  const reply = await checkBrainstormPlan(
+    $,
+    ".claude/brainstorm/plans/plan-2026-11-09-1200"
+  );
+
+  expect(reply.result).toBe("OK");
+});
+
+test("the check tool returns each problem on its own line as a result, not a denial", async ($, on) => {
+  mockFileTree(on, {
+    ...CLEAN_RUN_FILES,
+    [`${CLEAN_RUN_FOLDER}/02-extra/plan.md`]: "",
+  });
+
+  const reply = await checkBrainstormPlan($, CLEAN_RUN_FOLDER);
+
+  expect(reply.deny).toBeUndefined();
+  expect(String(reply.result)).toContain(
+    "02-extra: plan folder is not listed in index.md"
+  );
+});
+
+test("the check tool reports a folder with no index.md or plan.md as missing", async ($, on) => {
+  mockFileTree(on, {});
+
+  const reply = await checkBrainstormPlan($, CLEAN_RUN_FOLDER);
+
+  expect(reply.result).toBe("index.md: missing");
 });

@@ -82,7 +82,11 @@ const PR_TOOL_SCHEMA = {
 const REVIEW_TOOL_SCHEMA = {
   type: "object",
   properties: {
-    number: { type: "integer", description: "The PR's number." },
+    number: {
+      type: "integer",
+      description:
+        "The PR's number. Leave out for the PR of the current branch.",
+    },
     summary: {
       type: "string",
       description: "The review's overall comment, in Markdown. May be empty.",
@@ -138,7 +142,7 @@ const REVIEW_TOOL_SCHEMA = {
       },
     },
   },
-  required: ["number", "comments"],
+  required: ["comments"],
 };
 
 type CommandOutcome = { isSuccessful: boolean; output: string; error: string };
@@ -478,6 +482,7 @@ const EVENT_NAMES_AS_TEXT = `${REVIEW_EVENT_NAMES.slice(0, -1).join(", ")} or ${
 
 type ReviewedPullRequest =
   | {
+      number: number;
       pullRequest: Record<string, unknown>;
       fileDiffs: FileDiff[];
       problem?: undefined;
@@ -486,18 +491,27 @@ type ReviewedPullRequest =
 
 const readReviewedPullRequest = async (
   engine: EngineInterface,
-  number: number
+  requestedNumber: number | null
 ): Promise<ReviewedPullRequest> => {
+  const pullRequestName =
+    requestedNumber === null
+      ? "the PR of the current branch"
+      : `PR #${requestedNumber}`;
   const viewing = await runHostCommand(engine, [
     "gh",
     "pr",
     "view",
-    String(number),
+    ...(requestedNumber === null ? [] : [String(requestedNumber)]),
     "--json",
     "number,title,url,headRefOid,headRefName,baseRefName,author",
   ]);
   if (!viewing.isSuccessful) {
-    return { problem: `Could not read PR #${number}: ${viewing.error}` };
+    return { problem: `Could not read ${pullRequestName}: ${viewing.error}` };
+  }
+  const pullRequest = parseJsonFields(viewing.output);
+  const number = requestedNumber ?? readPositiveInteger(pullRequest.number);
+  if (number === null) {
+    return { problem: `Could not read ${pullRequestName}: gh gave no number.` };
   }
   const diffReading = await runHostCommand(engine, [
     "gh",
@@ -510,10 +524,7 @@ const readReviewedPullRequest = async (
       problem: `Could not read the diff of PR #${number}: ${diffReading.error}`,
     };
   }
-  return {
-    pullRequest: parseJsonFields(viewing.output),
-    fileDiffs: parseDiff(diffReading.output),
-  };
+  return { number, pullRequest, fileDiffs: parseDiff(diffReading.output) };
 };
 
 const readReviewText = (
@@ -564,12 +575,20 @@ const draftReview = async (
   engine: EngineInterface,
   input: Record<string, unknown>
 ) => {
-  const number = readPositiveInteger(input.number);
-  if (number === null) return { deny: "A review draft needs the PR's number." };
-  const reviewedPullRequest = await readReviewedPullRequest(engine, number);
+  const requestedNumber = readPositiveInteger(input.number);
+  if (input.number !== undefined && requestedNumber === null) {
+    return {
+      deny: "number must be the PR's number. Leave it out for the PR of the current branch.",
+    };
+  }
+  const reviewedPullRequest = await readReviewedPullRequest(
+    engine,
+    requestedNumber
+  );
   if (reviewedPullRequest.problem !== undefined) {
     return { deny: reviewedPullRequest.problem };
   }
+  const { number } = reviewedPullRequest;
   const { summary, event, comments, problems } = readReviewText(
     input,
     reviewedPullRequest.fileDiffs

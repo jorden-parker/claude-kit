@@ -466,6 +466,38 @@ test("a review with nothing in it is denied unless it approves", async ($, on) =
   expect(approvalReply.result).toBe("Opened the review draft in the browser.");
 });
 
+test("a review without a number is of the current branch's PR", async ($, on) => {
+  const { writes, ranCommands } = mockEngine(on, {
+    "gh pr view --json": { exitCode: 0, stdout: JSON.stringify(PR_VIEW) },
+  });
+
+  const reply = await callTool($, REVIEW_TOOL, {
+    summary: REVIEW_INPUT.summary,
+    comments: REVIEW_INPUT.comments,
+  });
+
+  expect(reply.result).toBe("Opened the review draft in the browser.");
+  expect(readSavedDraft(writes)).toMatchObject({
+    draftId: "review-42-2026-11-11-120000",
+    number: 42,
+    title: "Reject expired tokens",
+  });
+  expect(ranCommands).toContainEqual(["gh", "pr", "diff", "42"]);
+});
+
+test("a review without a number is denied when the current branch has no PR", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  const reply = await callTool($, REVIEW_TOOL, {
+    summary: REVIEW_INPUT.summary,
+    comments: REVIEW_INPUT.comments,
+  });
+
+  expect(reply.deny).toContain("Could not read the PR of the current branch");
+  expect(reply.deny).toContain("command failed");
+  expect(writes).toEqual([]);
+});
+
 test("a PR that gh cannot read is denied with gh's error", async ($, on) => {
   mockEngine(on, { "gh pr view 42": FAILED });
 

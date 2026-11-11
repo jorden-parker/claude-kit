@@ -22,7 +22,7 @@ The notes are the words after the command, or the request that led here. They ca
 ## 1. Find the PR
 
 - The notes name a number or a URL: use it.
-- Otherwise: `gh pr view --json number --jq .number` gives the PR of the current branch.
+- Otherwise, even when the notes give only a focus: `gh pr view --json number --jq .number` gives the PR of the current branch. Do not ask which PR.
 
 Stop, and say why in one line, when there is no PR.
 

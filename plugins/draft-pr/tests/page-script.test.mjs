@@ -42,3 +42,7 @@ test("a code span inside a link label is still rendered", () => {
     `<p>${renderLink("https://a.example", "<code>run</code>")}</p>`
   );
 });
+
+test("the whole page script parses", () => {
+  assert.doesNotThrow(() => new Function(PAGE_SCRIPT));
+});

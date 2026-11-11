@@ -6,6 +6,6 @@
   "duplicates": {
     // describeRecentMessages is copied between prompt-optimizer and handoff on purpose: plugins must be self-contained.
     // formatFileStamp, readPlanFiles/readTemplateFiles and escapeHtml are copied between brainstorm and draft-pr for the same reason.
-    "ignoredClones": ["dup:e67f2e0e:2", "dup:05fc0bb2:2", "dup:f469e6dc:2", "dup:8038f0a0:2"]
+    "ignoredClones": ["dup:e67f2e0e:2", "dup:1865dba4:2", "dup:f469e6dc:2", "dup:8038f0a0:2"]
   }
 }

@@ -14,13 +14,15 @@ The command hands Claude the brainstorm instructions as a prompt. Claude reads t
 
 Built to be scanned, not read:
 
+- A stats row: idea counts per priority and a progress meter with **Reset**.
 - **Start here**: the three most urgent ideas, each with its next step.
 - Ideas grouped into **Do now**, **Next up** and **Later**, most urgent first (security before must-haves before the rest).
 - One card per idea: a short title, a category tag, an effort badge, a **Next step** line, the reasoning folded under **Why**, and the files it touches.
-- Category filter chips that stay at the top while scrolling.
-- A **Done** checkbox per card and a progress bar, remembered in the browser.
-- A number on every card and a **Plan** checkbox. Ticking ideas shows the `/brainstorm-plan` command to paste, with a **Copy** button.
-- Light and dark mode. No external scripts, fonts or images.
+- Category filter tabs that stay at the top while scrolling.
+- A **Done** checkbox per card and a progress meter, remembered in the browser.
+- A number on every card and a **Plan** checkbox. **Select all** ticks every idea, and **Select all in <category>** ticks the ideas of the filtered category.
+- Ticking ideas raises a bar at the bottom with the `/brainstorm-plan` command to paste, plus **Copy**, **Mark done** and **Clear** (or Esc). The command is as short as it can be: `all`, a category name, or numbers with ranges such as `1-3 6`.
+- A minimal, high-contrast design in the Vercel style, in light and dark mode. No external scripts, fonts or images.
 
 Pages are named `brainstorm-YYYY-MM-DD-HHMM.html` (UTC). The ideas are also saved beside each page as `brainstorm-YYYY-MM-DD-HHMM.json`, numbered as on the page. The folder gets a `.gitignore` of `*`, so pages stay out of git.
 
@@ -28,11 +30,11 @@ All text from the model is HTML-escaped before it is written to the page.
 
 ## From ideas to code
 
-`/brainstorm-plan 2 5` reads the newest saved brainstorm and has Claude write a plan for ideas 2 and 5. With no numbers it lists the ideas. The plan goes to `.claude/brainstorm/plans/plan-YYYY-MM-DD-HHMM.md`.
+`/brainstorm-plan 2 5` reads the newest saved brainstorm and has Claude write a plan for ideas 2 and 5. It also takes ranges (`2-5`), a category (`security`), or `all`, mixed freely. With no arguments it lists the ideas. The plan goes to `.claude/brainstorm/plans/plan-YYYY-MM-DD-HHMM.md`.
 
 Every step in a plan is written for a small model that sees only that step and the plan's Context section. Steps name exact files, quote the text to replace, give the new code, and end with one check command. Test steps come before code steps.
 
-`/brainstorm-build` implements the newest plan. To pick others, pass one or more file names or paths. A bare file name such as `plan-2026-11-09-1200.md` is looked up in the plans folder, and several plans run in the order given.
+`/brainstorm-build` implements the newest plan. To pick others, pass one or more file names or paths, or `all` for every plan, oldest first. A bare file name such as `plan-2026-11-09-1200.md` is looked up in the plans folder, and several plans run in the order given.
 
 Plain requests work too. Saying "implement the latest plan" or "build the two caching plans" loads the plugin's `build-plans` skill. The skill tells Claude where the plans live and runs the same flow.
 

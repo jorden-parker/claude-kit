@@ -6,19 +6,19 @@ const BRAINSTORM_FOLDER = ".claude/brainstorm";
 const START_HERE_COUNT = 3;
 
 const CATEGORIES = {
-  security: { emoji: "🔒", label: "Security", rank: 0 },
-  "must-have": { emoji: "✅", label: "Must-have", rank: 1 },
-  "quick-win": { emoji: "⚡", label: "Quick win", rank: 2 },
-  performance: { emoji: "🚀", label: "Performance", rank: 3 },
-  "developer-experience": { emoji: "🛠️", label: "Dev experience", rank: 4 },
-  creative: { emoji: "💡", label: "Creative", rank: 5 },
-  moonshot: { emoji: "🌙", label: "Moonshot", rank: 6 },
+  security: { label: "Security", tone: "red", rank: 0 },
+  "must-have": { label: "Must-have", tone: "amber", rank: 1 },
+  "quick-win": { label: "Quick win", tone: "green", rank: 2 },
+  performance: { label: "Performance", tone: "blue", rank: 3 },
+  "developer-experience": { label: "Dev experience", tone: "teal", rank: 4 },
+  creative: { label: "Creative", tone: "purple", rank: 5 },
+  moonshot: { label: "Moonshot", tone: "pink", rank: 6 },
 } as const;
 
 const PRIORITIES = {
-  now: { emoji: "🔥", label: "Do now", rank: 0 },
-  next: { emoji: "⏭️", label: "Next up", rank: 1 },
-  later: { emoji: "🌱", label: "Later", rank: 2 },
+  now: { label: "Do now", rank: 0 },
+  next: { label: "Next up", rank: 1 },
+  later: { label: "Later", rank: 2 },
 } as const;
 
 const EFFORTS = {
@@ -199,105 +199,156 @@ const renderWhy = (why: string) =>
     ? `<details><summary>Why</summary><p>${escapeHtml(why)}</p></details>`
     : "";
 
-const renderIdeaCard = (idea: NumberedIdea, cardKey: string) => {
-  const category = CATEGORIES[idea.category];
-  return `<article class="card cat-${idea.category}" data-category="${idea.category}" data-card="${cardKey}">
+const renderCategoryBadge = (category: Category) =>
+  `<span class="badge"><span class="dot tone-${CATEGORIES[category].tone}"></span>${CATEGORIES[category].label}</span>`;
+
+const renderIdeaCard = (idea: NumberedIdea, cardKey: string) =>
+  `<article class="card" data-category="${idea.category}" data-card="${cardKey}">
   <div class="card-top">
-    <span class="tag"><span class="number">#${idea.number}</span> ${category.emoji} ${category.label}</span>
-    <span class="effort">${EFFORTS[idea.effort].label}</span>
+    <span class="number">#${idea.number}</span>
+    ${renderCategoryBadge(idea.category)}
+    <span class="badge effort">${EFFORTS[idea.effort].label}</span>
   </div>
   <h3>${escapeHtml(idea.title)}</h3>
-  <p class="next"><strong>👉 Next step:</strong> ${escapeHtml(idea.nextStep)}</p>
+  <p class="next"><span class="label">Next step</span>${escapeHtml(idea.nextStep)}</p>
   ${renderWhy(idea.why)}
   ${renderFiles(idea.files)}
   <div class="card-actions">
-    <label class="done"><input type="checkbox" data-done="${cardKey}"> Done</label>
-    <label class="plan"><input type="checkbox" data-plan="${idea.number}"> Plan</label>
+    <label class="toggle"><input type="checkbox" data-done="${cardKey}"> Done</label>
+    <label class="toggle"><input type="checkbox" data-plan="${idea.number}"> Plan</label>
   </div>
 </article>`;
-};
 
-const renderStartHere = (ideas: Idea[]) => {
+const renderStartHere = (ideas: NumberedIdea[]) => {
   const startHereSteps = ideas
     .slice(0, START_HERE_COUNT)
     .map(
       (idea, index) =>
-        `<li><span class="step">${index + 1}</span><div><strong>${escapeHtml(idea.title)}</strong><br>${escapeHtml(idea.nextStep)}</div></li>`
+        `<li><span class="step">${index + 1}</span><div><strong>${escapeHtml(idea.title)}</strong><p>${escapeHtml(idea.nextStep)}</p></div><span class="number">#${idea.number}</span></li>`
     )
     .join("");
-  return `<section id="start-here"><h2>🎯 Start here</h2><ol>${startHereSteps}</ol></section>`;
+  return `<section id="start-here"><div class="panel-head"><h2>Start here</h2><span class="muted">The ${Math.min(START_HERE_COUNT, ideas.length)} most urgent ideas</span></div><ol>${startHereSteps}</ol></section>`;
 };
 
 const renderPrioritySection = (priority: Priority, ideas: NumberedIdea[]) => {
   const matchingIdeas = ideas.filter((idea) => idea.priority === priority);
   if (!matchingIdeas.length) return "";
-  const { emoji, label } = PRIORITIES[priority];
   const cards = matchingIdeas
     .map((idea) => renderIdeaCard(idea, `${priority}-${ideas.indexOf(idea)}`))
     .join("\n");
-  return `<section class="priority"><h2>${emoji} ${label} <span class="count">${matchingIdeas.length}</span></h2><div class="grid">${cards}</div></section>`;
+  return `<section class="priority"><h2>${PRIORITIES[priority].label} <span class="count">${matchingIdeas.length}</span></h2><div class="grid">${cards}</div></section>`;
 };
 
-const renderFilterChips = (ideas: Idea[]) => {
+const renderStats = (ideas: NumberedIdea[]) => {
+  const countByPriority = (priority: Priority) =>
+    ideas.filter((idea) => idea.priority === priority).length;
+  const statCells = [
+    ["Ideas", String(ideas.length)],
+    [PRIORITIES.now.label, String(countByPriority("now"))],
+    [PRIORITIES.next.label, String(countByPriority("next"))],
+    [PRIORITIES.later.label, String(countByPriority("later"))],
+  ]
+    .map(
+      ([statLabel, statValue]) =>
+        `<div class="stat"><span class="muted">${statLabel}</span><strong>${statValue}</strong></div>`
+    )
+    .join("");
+  return `<section class="stats">${statCells}<div class="stat"><span class="muted">Progress <button type="button" id="reset-done" class="link">Reset</button></span><strong class="progress-label"></strong><div class="progress"><div></div></div></div></section>`;
+};
+
+const renderToolbar = (ideas: Idea[]) => {
   const presentCategories = (Object.keys(CATEGORIES) as Category[]).filter(
     (category) => ideas.some((idea) => idea.category === category)
   );
-  const chips = presentCategories
+  const categoryTabs = presentCategories
     .map((category) => {
-      const { emoji, label } = CATEGORIES[category];
+      const { label, tone } = CATEGORIES[category];
       const count = ideas.filter((idea) => idea.category === category).length;
-      return `<button type="button" class="chip" data-filter="${category}">${emoji} ${label} <span>${count}</span></button>`;
+      return `<button type="button" class="tab" data-filter="${category}" data-label="${label}"><span class="dot tone-${tone}"></span>${label} <span class="count">${count}</span></button>`;
     })
     .join("");
-  return `<nav class="chips"><button type="button" class="chip is-active" data-filter="all">All <span>${ideas.length}</span></button>${chips}</nav>`;
+  return `<div class="toolbar"><nav class="tabs"><button type="button" class="tab is-active" data-filter="all" data-label="All">All <span class="count">${ideas.length}</span></button>${categoryTabs}</nav><div class="select-actions"><button type="button" class="button secondary is-hidden" data-select="filtered">Select all in category</button><button type="button" class="button secondary" data-select="all">Select all <span class="count">${ideas.length}</span></button></div></div>`;
 };
 
 const PAGE_STYLE = `
-:root{--bg:#f7f5f0;--panel:#fff;--text:#1d1b18;--muted:#6b665d;--line:#e4dfd4;--accent:#3b5bdb;--now:#e03131;--next:#f08c00;--later:#2f9e44;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#16171a;--panel:#1f2125;--text:#ecebe8;--muted:#a3a19b;--line:#33363c;--accent:#7b93ff;--now:#ff6b6b;--next:#ffb340;--later:#5fd17a;color-scheme:dark}}
-*{checkbox-sizing:border-checkbox}
-body{margin:0;background:var(--bg);color:var(--text);font:17px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:1100px;margin:0 auto;padding:28px 16px 80px}
-header h1{margin:0;font-size:1.9rem}
-header p{margin:4px 0 0;color:var(--muted)}
-.progress{margin:18px 0 6px;height:10px;border-radius:99px;background:var(--line);overflow:hidden}
-.progress div{height:100%;width:0;background:var(--later);transition:width .3s}
-.progress-label{font-size:.9rem;color:var(--muted)}
-#start-here{margin:24px 0;padding:18px 20px;border-radius:16px;background:var(--panel);border:2px solid var(--accent)}
-#start-here h2{margin:0 0 10px}
-#start-here ol{list-style:none;margin:0;padding:0;display:grid;gap:12px}
-#start-here li{display:flex;gap:12px;align-items:flex-start}
-.step{flex:none;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px;position:sticky;top:0;padding:10px 0;background:var(--bg);z-index:1}
-.chip{font:inherit;font-size:.92rem;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
-.chip span{color:var(--muted)}
-.chip.is-active{background:var(--accent);border-color:var(--accent);color:#fff}
-.chip.is-active span{color:#fff}
-.priority h2{margin:28px 0 12px;font-size:1.35rem}
-.count{font-size:.9rem;color:var(--muted);font-weight:400}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-.card{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
-.card.cat-security,.card.cat-must-have{border-left-color:var(--now)}
-.card.cat-quick-win,.card.cat-performance,.card.cat-developer-experience{border-left-color:var(--next)}
-.card.cat-creative,.card.cat-moonshot{border-left-color:var(--later)}
-.card h3{margin:0;font-size:1.1rem;line-height:1.3}
-.card-top{display:flex;justify-content:space-between;gap:8px;font-size:.85rem}
-.tag{font-weight:600}
-.effort{color:var(--muted)}
-.next{margin:0}
-details summary{cursor:pointer;color:var(--muted);font-size:.92rem}
-details p{margin:6px 0 0}
+:root{--bg:#fff;--surface:#fafafa;--panel:#fff;--text:#171717;--muted:#666;--subtle:#8f8f8f;--line:#ebebeb;--line-strong:#d4d4d4;--invert-bg:#171717;--invert-text:#fff;--invert-muted:#a1a1a1;--invert-line:#333;--shadow:0 1px 2px rgba(0,0,0,.04),0 4px 12px rgba(0,0,0,.04);--red:#e5484d;--amber:#f5a524;--green:#45a557;--blue:#0070f3;--teal:#12a594;--purple:#8e4ec6;--pink:#d6409f;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--surface:#000;--panel:#0a0a0a;--text:#ededed;--muted:#a1a1a1;--subtle:#7c7c7c;--line:#262626;--line-strong:#3d3d3d;--invert-bg:#ededed;--invert-text:#0a0a0a;--invert-muted:#666;--invert-line:#d4d4d4;--shadow:0 0 0 1px rgba(255,255,255,.02);--red:#ff6369;--amber:#ffb224;--green:#62c073;--blue:#3291ff;--teal:#0ac5b3;--purple:#bf7af0;--pink:#f76ac0;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 "Geist","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+code,.number,.count,.step{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.topbar{position:sticky;top:0;z-index:3;height:56px;display:flex;align-items:center;gap:10px;padding:0 24px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:saturate(180%) blur(8px)}
+.mark{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--text),var(--subtle))}
+.crumb{color:var(--muted)}
+.slash{color:var(--line-strong);font-size:20px;font-weight:200}
+.topbar strong{font-weight:500}
+main{max-width:1200px;margin:0 auto;padding:48px 24px 140px}
+.hero h1{margin:0;font-size:40px;line-height:1.1;font-weight:600;letter-spacing:-.04em}
+.hero p{margin:12px 0 0;max-width:640px;color:var(--muted);font-size:16px}
+.muted{color:var(--muted)}
+.stats{margin:32px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.stat{padding:16px 20px;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--line);margin-right:-1px}
+.stat .muted{font-size:13px;display:flex;justify-content:space-between;gap:8px}
+.stat strong{font-size:24px;font-weight:600;letter-spacing:-.02em}
+.progress{height:4px;border-radius:99px;background:var(--line);overflow:hidden}
+.progress div{height:100%;width:0;background:var(--text);transition:width .3s}
+.link{font:inherit;font-size:13px;padding:0;border:0;background:none;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.link:hover{color:var(--text)}
+#start-here{margin:0 0 40px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow)}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.panel-head h2{margin:0;font-size:16px;font-weight:600}
+.panel-head .muted{font-size:13px}
+#start-here ol{list-style:none;margin:0;padding:0}
+#start-here li{display:flex;gap:14px;align-items:flex-start;padding:14px 20px;border-top:1px solid var(--line)}
+#start-here li:first-child{border-top:0}
+#start-here li div{flex:1}
+#start-here li p{margin:2px 0 0;color:var(--muted)}
+.step{flex:none;width:24px;height:24px;border-radius:50%;border:1px solid var(--line-strong);display:grid;place-items:center;font-size:12px}
+.toolbar{position:sticky;top:56px;z-index:2;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;background:var(--bg);border-bottom:1px solid var(--line)}
+.tabs{display:flex;flex-wrap:wrap;gap:4px}
+.tab{font:inherit;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:0;border-radius:6px;background:none;color:var(--muted);cursor:pointer;transition:background .15s,color .15s}
+.tab:hover{background:var(--surface);color:var(--text)}
+.tab.is-active{background:var(--surface);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+.count{font-size:12px;color:var(--subtle)}
+.select-actions{display:flex;gap:8px;flex-wrap:wrap}
+.button{font:inherit;font-weight:500;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:6px;cursor:pointer;transition:background .15s,border-color .15s,opacity .15s}
+.button.secondary{border:1px solid var(--line);background:var(--panel);color:var(--text)}
+.button.secondary:hover{border-color:var(--line-strong);background:var(--surface)}
+.button.primary{border:1px solid var(--invert-text);background:var(--invert-text);color:var(--invert-bg)}
+.button.primary:hover{opacity:.88}
+.button.ghost{border:1px solid var(--invert-line);background:none;color:var(--invert-text)}
+.button.ghost:hover{border-color:var(--invert-muted)}
+.priority h2{display:flex;align-items:center;gap:8px;margin:40px 0 16px;font-size:20px;font-weight:600;letter-spacing:-.02em}
+.priority h2 .count{font-size:12px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);font-weight:400}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow);transition:border-color .15s,box-shadow .15s}
+.card:hover{border-color:var(--line-strong)}
+.card.is-picked{border-color:var(--text);box-shadow:0 0 0 1px var(--text)}
+.card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.number{font-size:12px;color:var(--subtle)}
+.badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:99px;background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:500}
+.badge.effort{margin-left:auto;color:var(--muted);font-weight:400}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.tone-red{background:var(--red)}.tone-amber{background:var(--amber)}.tone-green{background:var(--green)}.tone-blue{background:var(--blue)}.tone-teal{background:var(--teal)}.tone-purple{background:var(--purple)}.tone-pink{background:var(--pink)}
+.card h3{margin:0;font-size:16px;line-height:1.35;font-weight:600;letter-spacing:-.01em}
+.next{margin:0;color:var(--muted)}
+.label{display:block;font-size:12px;font-weight:500;color:var(--text)}
+details summary{cursor:pointer;color:var(--muted);font-size:13px;width:fit-content}
+details summary:hover{color:var(--text)}
+details p{margin:6px 0 0;color:var(--muted)}
 .files{display:flex;flex-wrap:wrap;gap:6px}
-.files code{font-size:.8rem;padding:2px 6px;border-radius:6px;background:var(--bg);border:1px solid var(--line)}
-.number{color:var(--muted);font-weight:700}
-.card-actions{margin-top:auto;display:flex;justify-content:space-between;gap:8px}
-.done,.plan{font-size:.92rem;color:var(--muted);cursor:pointer}
-#plan-picker{position:sticky;bottom:12px;margin-top:24px;padding:12px 16px;border-radius:14px;background:var(--panel);border:2px solid var(--accent);display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-#plan-picker code{flex:1;font-size:1rem;user-select:all}
-#plan-picker button{font:inherit;padding:6px 14px;border-radius:99px;border:0;background:var(--accent);color:#fff;cursor:pointer}
-.card.is-done{opacity:.45}
+.files code{font-size:12px;padding:2px 6px;border-radius:4px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+.card-actions{margin:auto -16px -16px;padding:10px 16px;display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line);background:var(--surface);border-radius:0 0 12px 12px}
+.toggle{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.toggle:hover{color:var(--text)}
+input[type=checkbox]{width:15px;height:15px;margin:0;accent-color:var(--text);cursor:pointer}
+#plan-picker{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:4;width:min(860px,calc(100% - 32px));padding:10px 10px 10px 16px;border-radius:12px;background:var(--invert-bg);color:var(--invert-text);display:flex;flex-wrap:wrap;align-items:center;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.24)}
+#picked-count{font-weight:500;white-space:nowrap}
+#plan-command{flex:1;min-width:160px;font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--invert-line);color:var(--invert-text);user-select:all;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.picker-actions{display:flex;gap:6px;flex-wrap:wrap}
+.card.is-done{opacity:.5}
 .card.is-done h3{text-decoration:line-through}
-.is-hidden{display:none}
+.is-hidden{display:none!important}
+@media (max-width:640px){main{padding:32px 16px 200px}.topbar{padding:0 16px}.hero h1{font-size:30px}.grid{grid-template-columns:1fr}}
 `;
 
 const PAGE_SCRIPT = `
@@ -306,47 +357,132 @@ const PAGE_SCRIPT = `
   var doneCards = {};
   try { doneCards = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch (error) {}
   var doneCheckboxes = document.querySelectorAll("[data-done]");
+  var planCheckboxes = document.querySelectorAll("[data-plan]");
+  var activeFilter = "all";
+  function saveDoneCards(){
+    try { localStorage.setItem(storageKey, JSON.stringify(doneCards)); } catch (error) {}
+  }
   function refreshProgress(){
     var doneCount = 0;
     doneCheckboxes.forEach(function(checkbox){
-      var card = checkbox.closest(".card");
-      card.classList.toggle("is-done", checkbox.checked);
+      checkbox.closest(".card").classList.toggle("is-done", checkbox.checked);
       if (checkbox.checked) doneCount++;
     });
     document.querySelector(".progress div").style.width = (doneCheckboxes.length ? doneCount / doneCheckboxes.length * 100 : 0) + "%";
-    document.querySelector(".progress-label").textContent = doneCount + " of " + doneCheckboxes.length + " done";
+    document.querySelector(".progress-label").textContent = doneCount + " / " + doneCheckboxes.length;
+  }
+  function setDone(checkbox, isDone){
+    checkbox.checked = isDone;
+    doneCards[checkbox.dataset.done] = isDone;
   }
   doneCheckboxes.forEach(function(checkbox){
     checkbox.checked = Boolean(doneCards[checkbox.dataset.done]);
     checkbox.addEventListener("change", function(){
-      doneCards[checkbox.dataset.done] = checkbox.checked;
-      try { localStorage.setItem(storageKey, JSON.stringify(doneCards)); } catch (error) {}
+      setDone(checkbox, checkbox.checked);
+      saveDoneCards();
       refreshProgress();
     });
   });
-  document.querySelectorAll("[data-filter]").forEach(function(chip){
-    chip.addEventListener("click", function(){
-      var filter = chip.dataset.filter;
-      document.querySelectorAll("[data-filter]").forEach(function(otherChip){ otherChip.classList.toggle("is-active", otherChip === chip); });
+  document.getElementById("reset-done").addEventListener("click", function(){
+    doneCheckboxes.forEach(function(checkbox){ setDone(checkbox, false); });
+    saveDoneCards();
+    refreshProgress();
+  });
+  var filteredSelectButton = document.querySelector('[data-select="filtered"]');
+  document.querySelectorAll("[data-filter]").forEach(function(tab){
+    tab.addEventListener("click", function(){
+      activeFilter = tab.dataset.filter;
+      document.querySelectorAll("[data-filter]").forEach(function(otherTab){ otherTab.classList.toggle("is-active", otherTab === tab); });
       document.querySelectorAll(".card").forEach(function(card){
-        card.classList.toggle("is-hidden", filter !== "all" && card.dataset.category !== filter);
+        card.classList.toggle("is-hidden", activeFilter !== "all" && card.dataset.category !== activeFilter);
       });
       document.querySelectorAll("section.priority").forEach(function(section){
         section.classList.toggle("is-hidden", !section.querySelector(".card:not(.is-hidden)"));
       });
+      var visibleCount = document.querySelectorAll(".card:not(.is-hidden)").length;
+      filteredSelectButton.innerHTML = "";
+      filteredSelectButton.append("Select all in " + tab.dataset.label + " ");
+      var countLabel = document.createElement("span");
+      countLabel.className = "count";
+      countLabel.textContent = visibleCount;
+      filteredSelectButton.append(countLabel);
+      filteredSelectButton.classList.toggle("is-hidden", activeFilter === "all");
     });
   });
   var planPicker = document.getElementById("plan-picker");
   var planCommand = document.getElementById("plan-command");
-  var planCheckboxes = document.querySelectorAll("[data-plan]");
+  var pickedCountLabel = document.getElementById("picked-count");
+  var numbersByCategory = {};
+  planCheckboxes.forEach(function(checkbox){
+    var category = checkbox.closest(".card").dataset.category;
+    (numbersByCategory[category] = numbersByCategory[category] || []).push(Number(checkbox.dataset.plan));
+  });
+  function describeNumberRange(first, last){
+    if (first === last) return String(first);
+    if (last === first + 1) return first + " " + last;
+    return first + "-" + last;
+  }
+  function compressNumbers(pickedNumbers){
+    var numberRanges = [];
+    var rangeStart = null;
+    var previousNumber = null;
+    pickedNumbers.forEach(function(number){
+      if (previousNumber !== null && number === previousNumber + 1) { previousNumber = number; return; }
+      if (rangeStart !== null) numberRanges.push(describeNumberRange(rangeStart, previousNumber));
+      rangeStart = number;
+      previousNumber = number;
+    });
+    if (rangeStart !== null) numberRanges.push(describeNumberRange(rangeStart, previousNumber));
+    return numberRanges.join(" ");
+  }
+  function findMatchingCategory(pickedNumbers){
+    return Object.keys(numbersByCategory).find(function(category){
+      var categoryNumbers = numbersByCategory[category];
+      return categoryNumbers.length === pickedNumbers.length && categoryNumbers.every(function(number){ return pickedNumbers.indexOf(number) !== -1; });
+    });
+  }
+  function describePicks(pickedNumbers){
+    if (pickedNumbers.length === planCheckboxes.length) return "all";
+    return findMatchingCategory(pickedNumbers) || compressNumbers(pickedNumbers);
+  }
+  function listPickedCheckboxes(){
+    return Array.prototype.filter.call(planCheckboxes, function(checkbox){ return checkbox.checked; });
+  }
   function refreshPlanPicker(){
-    var pickedNumbers = [];
-    planCheckboxes.forEach(function(checkbox){ if (checkbox.checked) pickedNumbers.push(Number(checkbox.dataset.plan)); });
+    var pickedNumbers = listPickedCheckboxes().map(function(checkbox){ return Number(checkbox.dataset.plan); });
     pickedNumbers.sort(function(first, second){ return first - second; });
-    planCommand.textContent = "/brainstorm-plan " + pickedNumbers.join(" ");
+    planCheckboxes.forEach(function(checkbox){ checkbox.closest(".card").classList.toggle("is-picked", checkbox.checked); });
+    pickedCountLabel.textContent = pickedNumbers.length + " selected";
+    planCommand.textContent = "/brainstorm-plan " + describePicks(pickedNumbers);
     planPicker.classList.toggle("is-hidden", pickedNumbers.length === 0);
   }
+  function setPicked(shouldPickCard){
+    planCheckboxes.forEach(function(checkbox){
+      checkbox.checked = shouldPickCard(checkbox.closest(".card"), checkbox.checked);
+    });
+    refreshPlanPicker();
+  }
   planCheckboxes.forEach(function(checkbox){ checkbox.addEventListener("change", refreshPlanPicker); });
+  document.querySelector('[data-select="all"]').addEventListener("click", function(){
+    setPicked(function(){ return true; });
+  });
+  filteredSelectButton.addEventListener("click", function(){
+    setPicked(function(card, isPicked){ return isPicked || !card.classList.contains("is-hidden"); });
+  });
+  document.querySelector('[data-select="none"]').addEventListener("click", function(){
+    setPicked(function(){ return false; });
+  });
+  document.addEventListener("keydown", function(event){
+    if (event.key === "Escape") setPicked(function(){ return false; });
+  });
+  document.getElementById("mark-picked-done").addEventListener("click", function(){
+    listPickedCheckboxes().forEach(function(checkbox){
+      setDone(checkbox.closest(".card").querySelector("[data-done]"), true);
+    });
+    saveDoneCards();
+    refreshProgress();
+    setPicked(function(){ return false; });
+  });
   document.getElementById("copy-plan").addEventListener("click", function(event){
     var copyButton = event.currentTarget;
     function showCopied(){ copyButton.textContent = "Copied"; setTimeout(function(){ copyButton.textContent = "Copy"; }, 1500); }
@@ -365,7 +501,7 @@ const PAGE_SCRIPT = `
 })();
 `;
 
-const PLAN_PICKER = `<section id="plan-picker" class="is-hidden"><span>📝 Paste into Claude Code:</span><code id="plan-command"></code><button type="button" id="copy-plan">Copy</button></section>`;
+const PLAN_PICKER = `<section id="plan-picker" class="is-hidden"><span id="picked-count"></span><code id="plan-command"></code><div class="picker-actions"><button type="button" class="button primary" id="copy-plan">Copy</button><button type="button" class="button ghost" id="mark-picked-done">Mark done</button><button type="button" class="button ghost" data-select="none">Clear</button></div></section>`;
 
 const numberIdeasByUrgency = (ideas: Idea[]): NumberedIdea[] =>
   [...ideas]
@@ -389,18 +525,18 @@ const renderBrainstormPage = ({
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
+<header class="topbar"><span class="mark"></span><span class="crumb">Brainstorm</span><span class="slash">/</span><strong>${escapeHtml(project)}</strong></header>
 <main>
-<header>
-<h1>🧠 ${escapeHtml(project)}</h1>
+<section class="hero">
+<h1>${escapeHtml(project)}</h1>
 <p>${escapeHtml(summary)}</p>
-<div class="progress"><div></div></div>
-<span class="progress-label"></span>
-</header>
+</section>
+${renderStats(sortedIdeas)}
 ${renderStartHere(sortedIdeas)}
-${renderFilterChips(sortedIdeas)}
+${renderToolbar(sortedIdeas)}
 ${prioritySections}
-${PLAN_PICKER}
 </main>
+${PLAN_PICKER}
 <script>${PAGE_SCRIPT}</script>
 </body>
 </html>
@@ -463,21 +599,26 @@ const writeBrainstormPage = async (
   return pagePath;
 };
 
-const findNewestFile = async (
+const listMatchingFiles = async (
   engine: EngineInterface,
   folder: string,
   fileNamePattern: RegExp
 ) => {
   const entries = await engine.fs.list(folder).catch(() => []);
-  const newestName = entries
+  return entries
     .filter(
       (entry) => entry.kind === "file" && fileNamePattern.test(entry.name)
     )
     .map((entry) => entry.name)
     .sort()
-    .at(-1);
-  return newestName ? `${folder}/${newestName}` : undefined;
+    .map((fileName) => `${folder}/${fileName}`);
 };
+
+const findNewestFile = async (
+  engine: EngineInterface,
+  folder: string,
+  fileNamePattern: RegExp
+) => (await listMatchingFiles(engine, folder, fileNamePattern)).at(-1);
 
 const readNumberedIdea = (
   rawIdea: unknown,
@@ -533,11 +674,19 @@ const loadNewestBrainstorm = async (
 const describeIdeaLine = (idea: NumberedIdea) =>
   `${idea.number}. ${idea.title} · ${CATEGORIES[idea.category].label} · ${EFFORTS[idea.effort].label}`;
 
-const listIdeasToPick = (brainstorm: SavedBrainstorm) =>
-  [
-    `Pick ideas by number, for example /${PLAN_COMMAND} 1 3. Ideas from the newest brainstorm of ${brainstorm.project}:`,
+const listPresentCategories = (ideas: Idea[]) =>
+  (Object.keys(CATEGORIES) as Category[]).filter((category) =>
+    ideas.some((idea) => idea.category === category)
+  );
+
+const listIdeasToPick = (brainstorm: SavedBrainstorm) => {
+  const presentCategories = listPresentCategories(brainstorm.ideas);
+  return [
+    `Pick ideas by number or range, for example /${PLAN_COMMAND} 1 3 or /${PLAN_COMMAND} 2-5. /${PLAN_COMMAND} all picks every idea, and a category such as /${PLAN_COMMAND} ${presentCategories[0]} picks its ideas. Categories: ${presentCategories.join(", ")}.`,
+    `Ideas from the newest brainstorm of ${brainstorm.project}:`,
     ...brainstorm.ideas.map(describeIdeaLine),
   ].join("\n");
+};
 
 const describeIdeaForPlanner = (idea: NumberedIdea) =>
   [
@@ -579,14 +728,22 @@ const PLAN_TEMPLATE = `# Plan: <short title>
 
 ## Done criteria
 
-<Commands the reviewer runs on the finished work, each with its expected result.>
+<Commands the reviewer numberRanges on the finished work, each with its expected result.>
 
 ## Out of scope
 
 <What the implementers must not touch.>`;
 
+const listPickedNumbers = (pickedIdeas: NumberedIdea[]) => {
+  const pickedNumbers = pickedIdeas.map((idea) => `#${idea.number}`);
+  if (pickedNumbers.length < 2) return pickedNumbers.join("");
+  return `${pickedNumbers.slice(0, -1).join(", ")} and ${pickedNumbers.at(-1)}`;
+};
+
 const buildPlanPrompt = (pickedIdeas: NumberedIdea[], planPath: string) =>
   `Write an implementation plan for these ideas from the project's brainstorm. Do not implement anything.
+
+The user picked ideas ${listPickedNumbers(pickedIdeas)} on the brainstorm page and ran /${PLAN_COMMAND} with those numbers. Claude Code does not show a plugin command's arguments, so the numbers are listed here. Plan every picked idea. Do not ask the user to narrow the selection. If the ideas are too many for one plan, keep each step small and let the plan run long.
 
 ${pickedIdeas.map(describeIdeaForPlanner).join("\n\n")}
 
@@ -624,8 +781,58 @@ const buildImplementationPrompt = (planPaths: string[]) =>
 5. Give each fix step to a new "${IMPLEMENTER_AGENT}", in order, then ask the reviewer for a final review again. Stop after two rounds of fixes, even if fixes remain.
 6. Do not commit. Reply with: the steps done, the reviewer's verdict, any fixes still open, and the output of \`git diff --stat\` against the base.`;
 
-const parseRequestedNumbers = (args: string) =>
+const ALL_KEYWORD = "all";
+const NUMBER_RANGE_PATTERN = /^(\d+)-(\d+)$/;
+
+const parseRequestedPicks = (args: string) =>
   args.split(/[\s,]+/).filter(Boolean);
+
+const listIdeaNumbers = (ideas: NumberedIdea[]) =>
+  ideas.map((idea) => idea.number);
+
+const expandNumberRange = (
+  ideas: NumberedIdea[],
+  rangeMatch: RegExpExecArray
+) => {
+  const rangeEnds = [Number(rangeMatch[1]), Number(rangeMatch[2])];
+  const lowest = Math.min(...rangeEnds);
+  const highest = Math.max(...rangeEnds);
+  const hasBothEnds = rangeEnds.every((end) =>
+    ideas.some((idea) => idea.number === end)
+  );
+  if (!hasBothEnds) return [];
+  return listIdeaNumbers(
+    ideas.filter((idea) => idea.number >= lowest && idea.number <= highest)
+  );
+};
+
+const expandPick = (ideas: NumberedIdea[], pick: string) => {
+  const normalizedPick = pick.toLowerCase();
+  if (normalizedPick === ALL_KEYWORD) return listIdeaNumbers(ideas);
+  if (normalizedPick in CATEGORIES) {
+    return listIdeaNumbers(
+      ideas.filter((idea) => idea.category === normalizedPick)
+    );
+  }
+  const rangeMatch = NUMBER_RANGE_PATTERN.exec(pick);
+  if (rangeMatch) return expandNumberRange(ideas, rangeMatch);
+  return listIdeaNumbers(ideas.filter((idea) => String(idea.number) === pick));
+};
+
+const resolvePicks = (ideas: NumberedIdea[], requestedPicks: string[]) => {
+  const expandedPicks = requestedPicks.map((pick) => ({
+    pick,
+    numbers: expandPick(ideas, pick),
+  }));
+  const unknownPicks = expandedPicks
+    .filter((expanded) => !expanded.numbers.length)
+    .map((expanded) => expanded.pick);
+  const pickedNumbers = new Set(
+    expandedPicks.flatMap((expanded) => expanded.numbers)
+  );
+  const pickedIdeas = ideas.filter((idea) => pickedNumbers.has(idea.number));
+  return { pickedIdeas, unknownPicks };
+};
 
 const resolveRequestedPlanPath = (
   workingDirectory: string,
@@ -643,6 +850,13 @@ const resolvePlanPaths = async (
   workingDirectory: string,
   requestedPaths: string[]
 ) => {
+  if (requestedPaths.length === 1 && requestedPaths[0] === ALL_KEYWORD) {
+    return listMatchingFiles(
+      engine,
+      `${workingDirectory}/${PLANS_FOLDER}`,
+      PLAN_FILE_PATTERN
+    );
+  }
   if (requestedPaths.length) {
     return requestedPaths.map((requestedPath) =>
       resolveRequestedPlanPath(workingDirectory, requestedPath)
@@ -671,13 +885,13 @@ export const register: Register = (on) => {
       name: PLAN_COMMAND,
       description:
         "Turn ideas from the newest brainstorm into a step-by-step plan simple enough for a small model",
-      argumentHint: "<idea numbers>",
+      argumentHint: "<idea numbers, ranges, a category, or all>",
     });
     await $.command.register({
       name: BUILD_COMMAND,
       description:
         "Implement a brainstorm plan: small-model subagents do each step, a strong model reviews the result",
-      argumentHint: "[plan file names or paths]",
+      argumentHint: "[plan file names or paths, or all]",
     });
     await $.tool.register({
       name: TOOL_NAME,
@@ -703,20 +917,17 @@ export const register: Register = (on) => {
         text: "No saved brainstorm in this project yet. Run /brainstorm first.",
       };
     }
-    const requestedNumbers = parseRequestedNumbers(e.args);
-    if (!requestedNumbers.length) return { text: listIdeasToPick(brainstorm) };
-    const unknownNumbers = requestedNumbers.filter(
-      (requested) =>
-        !brainstorm.ideas.some((idea) => String(idea.number) === requested)
+    const requestedPicks = parseRequestedPicks(e.args);
+    if (!requestedPicks.length) return { text: listIdeasToPick(brainstorm) };
+    const { pickedIdeas, unknownPicks } = resolvePicks(
+      brainstorm.ideas,
+      requestedPicks
     );
-    if (unknownNumbers.length) {
+    if (unknownPicks.length) {
       return {
-        text: `The newest brainstorm has no idea ${unknownNumbers.join(", ")}. Pick numbers from 1 to ${brainstorm.ideas.length}, or run /${PLAN_COMMAND} to list them.`,
+        text: `The newest brainstorm has no idea ${unknownPicks.join(", ")}. Pick numbers from 1 to ${brainstorm.ideas.length}, a range such as 2-5, a category (${listPresentCategories(brainstorm.ideas).join(", ")}) or ${ALL_KEYWORD}. Run /${PLAN_COMMAND} to list them.`,
       };
     }
-    const pickedIdeas = brainstorm.ideas.filter((idea) =>
-      requestedNumbers.includes(String(idea.number))
-    );
     const planPath = `${workingDirectory}/${PLANS_FOLDER}/plan-${formatFileStamp(await $.clock.now())}.md`;
     const prompt = buildPlanPrompt(pickedIdeas, planPath);
     $.clock.after(0, () => void $.prompt.submit({ text: prompt }));

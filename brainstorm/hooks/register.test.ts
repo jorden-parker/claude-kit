@@ -275,6 +275,27 @@ test("the page numbers each idea and offers a plan picker", async ($, on) => {
   expect(html).toContain("/brainstorm-plan");
 });
 
+test("the page offers select-all, select-the-filtered-category and clear for planning", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  const html = findPage(writes)?.text ?? "";
+  expect(html).toContain('data-select="all"');
+  expect(html).toContain('data-select="filtered"');
+  expect(html).toContain('data-select="none"');
+});
+
+test("the page offers to mark the selected ideas done and to reset progress", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  const html = findPage(writes)?.text ?? "";
+  expect(html).toContain('id="mark-picked-done"');
+  expect(html).toContain('id="reset-done"');
+});
+
 const SAVED_BRAINSTORM = {
   project: "acme-cli",
   summary: "A CLI that syncs notes to the cloud.",
@@ -367,6 +388,77 @@ test("brainstorm-plan takes several numbers separated by commas or spaces", asyn
   const instructions = submittedPrompts[0] ?? "";
   expect(instructions).toContain("Stop logging the API token");
   expect(instructions).toContain("Replay mode for bug reports");
+});
+
+test("brainstorm-plan all plans every idea in the newest brainstorm", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  await $.command.run(buildCommandRun("brainstorm-plan", "all"));
+  await clock.settle();
+
+  const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain("Stop logging the API token");
+  expect(instructions).toContain("Replay mode for bug reports");
+  expect(instructions).toContain("The user picked ideas #1 and #2");
+});
+
+test("brainstorm-plan with a category name plans that category's ideas", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  await $.command.run(buildCommandRun("brainstorm-plan", "creative"));
+  await clock.settle();
+
+  const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain("Replay mode for bug reports");
+  expect(instructions).not.toContain("Stop logging the API token");
+});
+
+test("brainstorm-plan takes a range of numbers", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  await $.command.run(buildCommandRun("brainstorm-plan", "1-2"));
+  await clock.settle();
+
+  expect(submittedPrompts[0]).toContain("The user picked ideas #1 and #2");
+});
+
+test("brainstorm-plan refuses a word that is not a number, range, category or all", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  const reply = await $.command.run(
+    buildCommandRun("brainstorm-plan", "1 bogus")
+  );
+  await clock.settle();
+
+  expect(submittedPrompts).toEqual([]);
+  expect(reply.text).toContain("bogus");
+});
+
+test("brainstorm-plan with no numbers explains all and category picks", async ($, on) => {
+  const { clock } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  const reply = await $.command.run(buildCommandRun("brainstorm-plan", ""));
+  await clock.settle();
+
+  expect(reply.text).toContain("/brainstorm-plan all");
+  expect(reply.text).toContain("/brainstorm-plan security");
+});
+
+test("brainstorm-plan tells the planner which ideas the user picked and not to cut them", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  await $.command.run(buildCommandRun("brainstorm-plan", "1 2"));
+  await clock.settle();
+
+  const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain("The user picked ideas #1 and #2");
+  expect(instructions).toContain("Do not ask the user to narrow");
 });
 
 test("brainstorm-plan with no numbers lists the ideas and submits nothing", async ($, on) => {
@@ -497,5 +589,33 @@ test("brainstorm-build does not stop on changes an earlier plan in the run made"
 
   expect(submittedPrompts[0]).toContain(
     "uncommitted changes that this run did not make"
+  );
+});
+
+test("brainstorm-build all runs every plan, oldest first", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFiles(
+    on,
+    {
+      [PLANS_FOLDER]: [
+        "plan-2026-11-08-1500.md",
+        "notes.txt",
+        "plan-2026-11-01-0900.md",
+      ],
+    },
+    {}
+  );
+
+  await $.command.run(buildCommandRun("brainstorm-build", "all"));
+  await clock.settle();
+
+  const instructions = submittedPrompts[0] ?? "";
+  const olderPlan = `${PLANS_FOLDER}/plan-2026-11-01-0900.md`;
+  const newerPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500.md`;
+  expect(instructions).toContain(olderPlan);
+  expect(instructions).toContain(newerPlan);
+  expect(instructions).not.toContain("notes.txt");
+  expect(instructions.indexOf(olderPlan)).toBeLessThan(
+    instructions.indexOf(newerPlan)
   );
 });

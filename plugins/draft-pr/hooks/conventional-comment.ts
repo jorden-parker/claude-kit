@@ -41,8 +41,13 @@ type CommentReading = {
 
 const DECORATION_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-const readText = (value: unknown) =>
+export const readText = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
+
+export const readFields = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
 
 const findDecorationProblems = (decorations: string[]) => {
   const hasClashingDecorations =
@@ -64,10 +69,7 @@ const findDecorationProblems = (decorations: string[]) => {
 export const readConventionalComment = (
   rawComment: unknown
 ): CommentReading => {
-  const fields =
-    typeof rawComment === "object" && rawComment !== null
-      ? (rawComment as Record<string, unknown>)
-      : {};
+  const fields = readFields(rawComment);
   const requestedLabel = readText(fields.label);
   const label = COMMENT_LABEL_NAMES.find(
     (labelName) => labelName === requestedLabel.toLowerCase()

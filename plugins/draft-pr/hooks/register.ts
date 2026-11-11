@@ -2,6 +2,8 @@ import type { EngineInterface, Register } from "claude-code";
 import {
   COMMENT_LABEL_NAMES,
   readConventionalComment,
+  readFields,
+  readText,
   STANDARD_DECORATION_NAMES,
 } from "./conventional-comment";
 import {
@@ -140,14 +142,6 @@ const REVIEW_TOOL_SCHEMA = {
 };
 
 type CommandOutcome = { isSuccessful: boolean; output: string; error: string };
-
-const readText = (value: unknown) =>
-  typeof value === "string" ? value.trim() : "";
-
-const readFields = (value: unknown): Record<string, unknown> =>
-  typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : {};
 
 const readPositiveInteger = (value: unknown) =>
   typeof value === "number" && Number.isInteger(value) && value > 0

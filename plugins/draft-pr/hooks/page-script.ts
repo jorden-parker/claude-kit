@@ -22,12 +22,12 @@ export const PAGE_SCRIPT = String.raw`
     return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + labelHtml + "</a>";
   }
   function renderInline(text){
-    var finishedHtml = [];
+    var finishedPieces = [];
     var codeSpanPattern = new RegExp(TICK + "([^" + TICK + "]+)" + TICK, "g");
     var placeholderPattern = new RegExp(PLACEHOLDER_MARK + "(\\d+)" + PLACEHOLDER_MARK, "g");
     function setAside(pieceHtml){
-      finishedHtml.push(pieceHtml);
-      return PLACEHOLDER_MARK + (finishedHtml.length - 1) + PLACEHOLDER_MARK;
+      finishedPieces.push(pieceHtml);
+      return PLACEHOLDER_MARK + (finishedPieces.length - 1) + PLACEHOLDER_MARK;
     }
     var html = escapeHtml(text).replace(codeSpanPattern, function(match, code){
       return setAside("<code>" + code + "</code>");
@@ -45,7 +45,7 @@ export const PAGE_SCRIPT = String.raw`
     html = html.replace(/~~([^~]+)~~/g, "<del>$1</del>");
     while (html.search(placeholderPattern) !== -1) {
       html = html.replace(placeholderPattern, function(match, pieceIndex){
-        return finishedHtml[Number(pieceIndex)];
+        return finishedPieces[Number(pieceIndex)];
       });
     }
     return html;

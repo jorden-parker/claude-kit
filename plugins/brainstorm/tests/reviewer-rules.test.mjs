@@ -9,9 +9,9 @@ const checkerSource = readPluginFile("hooks/plan-check.ts");
 const reviewerInstructions = readPluginFile("agents/plan-reviewer.md");
 
 test("the reviewer agent's rules name every banned phrase of the checker", () => {
-  const phraseList =
+  const bannedPhrasesSource =
     /BANNED_PHRASES = \[([^\]]*)\]/.exec(checkerSource)?.[1] ?? "";
-  const bannedPhrases = [...phraseList.matchAll(/"([^"]+)"/g)].map(
+  const bannedPhrases = [...bannedPhrasesSource.matchAll(/"([^"]+)"/g)].map(
     (phraseMatch) => phraseMatch[1]
   );
   const missingPhrases = bannedPhrases.filter(

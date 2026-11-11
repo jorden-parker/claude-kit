@@ -78,7 +78,7 @@ Posting needs `node`, `gh` (signed in) and `git` on the PATH. Without `node` the
 
 ## Where things are saved
 
-Drafts go to `.claude/draft-pr/` in the project, as `pr-YYYY-MM-DD-HHMM.html` or `review-<number>-YYYY-MM-DD-HHMM.html` (UTC), each with a `.json` beside it. The folder gets a `.gitignore` of `*`, so drafts stay out of git.
+Drafts go to `.claude/draft-pr/` in the project, as `pr-YYYY-MM-DD-HHMMSS.html` or `review-<number>-YYYY-MM-DD-HHMMSS.html` (UTC), each with a `.json` beside it. The folder gets a `.gitignore` of `*`, so drafts stay out of git.
 
 ## Where things live
 

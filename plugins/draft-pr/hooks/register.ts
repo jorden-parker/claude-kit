@@ -194,7 +194,14 @@ const formatFileStamp = (milliseconds: number) => {
     padTwoDigits(stampDate.getUTCMonth() + 1),
     padTwoDigits(stampDate.getUTCDate()),
   ].join("-");
-  return `${datePart}-${padTwoDigits(stampDate.getUTCHours())}${padTwoDigits(stampDate.getUTCMinutes())}`;
+  const timePart = [
+    stampDate.getUTCHours(),
+    stampDate.getUTCMinutes(),
+    stampDate.getUTCSeconds(),
+  ]
+    .map(padTwoDigits)
+    .join("");
+  return `${datePart}-${timePart}`;
 };
 
 const BROWSER_OPENERS = [

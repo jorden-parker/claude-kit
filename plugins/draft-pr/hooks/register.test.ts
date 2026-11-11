@@ -174,15 +174,15 @@ test("the PR tool saves the draft, starts the post bridge and opens its page", a
 
   const reply = await callTool($, PR_TOOL, PR_INPUT);
 
-  const draftPath = `${DRAFT_FOLDER}/pr-2026-11-11-1200.json`;
+  const draftPath = `${DRAFT_FOLDER}/pr-2026-11-11-120000.json`;
   expect(writes.map((write) => write.path)).toEqual([
     `${DRAFT_FOLDER}/.gitignore`,
     draftPath,
-    `${DRAFT_FOLDER}/pr-2026-11-11-1200.html`,
+    `${DRAFT_FOLDER}/pr-2026-11-11-120000.html`,
   ]);
   expect(readSavedDraft(writes)).toEqual({
     kind: "pr",
-    draftId: "pr-2026-11-11-1200",
+    draftId: "pr-2026-11-11-120000",
     cwd: "/repo",
     repository: "acme/notes",
     base: "main",
@@ -223,7 +223,7 @@ test("without node the PR page opens as a file", async ($, on) => {
 
   expect(ranCommands.at(-1)).toEqual([
     "open",
-    `${DRAFT_FOLDER}/pr-2026-11-11-1200.html`,
+    `${DRAFT_FOLDER}/pr-2026-11-11-120000.html`,
   ]);
   expect(reply.result).toBe("Opened the PR draft in the browser.");
 });
@@ -329,11 +329,11 @@ test("the review tool saves the draft with each comment's place and opens its pa
   const reply = await callTool($, REVIEW_TOOL, REVIEW_INPUT);
 
   const savedDraft = readSavedDraft(writes);
-  const draftPath = `${DRAFT_FOLDER}/review-42-2026-11-11-1200.json`;
+  const draftPath = `${DRAFT_FOLDER}/review-42-2026-11-11-120000.json`;
   expect(findWrite(writes, ".json")?.path).toBe(draftPath);
   expect(savedDraft).toMatchObject({
     kind: "review",
-    draftId: "review-42-2026-11-11-1200",
+    draftId: "review-42-2026-11-11-120000",
     cwd: "/repo",
     repository: "acme/notes",
     host: "github.com",

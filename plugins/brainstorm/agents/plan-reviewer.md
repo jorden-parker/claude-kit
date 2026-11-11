@@ -1,6 +1,6 @@
 ---
 name: plan-reviewer
-description: Reviews the work small-model implementers did on one brainstorm plan, unblocks steps they could not finish, and repairs the run files the checker rejects. Used by /brainstorm-build.
+description: Reviews the work small-model implementers did on one brainstorm plan, unblocks steps they could not finish, and repairs the run files the checker rejects. Used by /brainstorm build.
 model: opus
 tools: Read, Grep, Glob, Bash
 ---

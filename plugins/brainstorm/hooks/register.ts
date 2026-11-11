@@ -14,9 +14,12 @@ import {
 } from "./plan-status";
 
 const BRAINSTORM_COMMAND = "brainstorm";
-const PLAN_COMMAND = "brainstorm-plan";
-const BUILD_COMMAND = "brainstorm-build";
+const PLAN_MODE = "plan";
+const BUILD_MODE = "build";
+const PLAN_INVOCATION = `/${BRAINSTORM_COMMAND} ${PLAN_MODE}`;
+const BUILD_INVOCATION = `/${BRAINSTORM_COMMAND} ${BUILD_MODE}`;
 const ALL_KEYWORD = "all";
+const NEWEST_RUN = "the newest run";
 
 const TOOL_NAME = "render_brainstorm";
 const QUALIFIED_TOOL_NAME = `mcp__brainstorm__${TOOL_NAME}`;
@@ -31,7 +34,6 @@ const FILE_STAMP_PATTERN = String.raw`\d{4}-\d{2}-\d{2}-\d{4}`;
 const SAVED_BRAINSTORM_PATTERN = new RegExp(
   `^brainstorm-${FILE_STAMP_PATTERN}\\.json$`
 );
-const PLAN_RUN_FOLDER_PATTERN = new RegExp(`^plan-${FILE_STAMP_PATTERN}$`);
 const START_HERE_COUNT = 3;
 
 declare module "claude-code" {
@@ -530,7 +532,7 @@ const PAGE_SCRIPT = `
     pickedNumbers.sort(function(first, second){ return first - second; });
     planCheckboxes.forEach(function(checkbox){ checkbox.closest(".card").classList.toggle("is-picked", checkbox.checked); });
     pickedCountLabel.textContent = pickedNumbers.length + " selected";
-    planCommand.textContent = "/${PLAN_COMMAND} " + describePicks(pickedNumbers);
+    planCommand.textContent = "${PLAN_INVOCATION} " + describePicks(pickedNumbers);
     planPicker.classList.toggle("is-hidden", pickedNumbers.length === 0);
   }
   function setPicked(shouldPickCard){
@@ -721,7 +723,7 @@ const describeIdeaLine = (idea: NumberedIdea) =>
 const listIdeasToPick = (brainstorm: SavedBrainstorm) => {
   const presentCategories = listPresentCategories(brainstorm.ideas);
   return [
-    `Pick ideas by number or range, for example /${PLAN_COMMAND} 1 3 or /${PLAN_COMMAND} 2-5. /${PLAN_COMMAND} all picks every idea, and a category such as /${PLAN_COMMAND} ${presentCategories[0]} picks its ideas. Categories: ${presentCategories.join(", ")}.`,
+    `Pick ideas by number or range, for example ${PLAN_INVOCATION} 1 3 or ${PLAN_INVOCATION} 2-5. ${PLAN_INVOCATION} all picks every idea, and a category such as ${PLAN_INVOCATION} ${presentCategories[0]} picks its ideas. Categories: ${presentCategories.join(", ")}.`,
     `Ideas from the newest brainstorm of ${brainstorm.project}:`,
     ...brainstorm.ideas.map(describeIdeaLine),
   ].join("\n");
@@ -848,7 +850,7 @@ const listPickedNumbers = (pickedIdeas: NumberedIdea[]) => {
 const buildPlanPrompt = (pickedIdeas: NumberedIdea[], runFolderPath: string) =>
   `Write an implementation plan for these ideas from the project's brainstorm. Do not implement anything.
 
-The user picked ideas ${listPickedNumbers(pickedIdeas)} on the brainstorm page and ran /${PLAN_COMMAND} with those numbers. Claude Code does not show a plugin command's arguments, so the numbers are listed here. Plan every picked idea. Do not ask the user to narrow the selection.
+The user picked ideas ${listPickedNumbers(pickedIdeas)} on the brainstorm page and ran ${PLAN_INVOCATION} with those numbers. Claude Code does not show a plugin command's arguments, so the numbers are listed here. Plan every picked idea. Do not ask the user to narrow the selection.
 
 ${pickedIdeas.map(describeIdeaForPlanner).join("\n\n")}
 
@@ -858,7 +860,7 @@ Write the plan as a run folder at ${runFolderPath}. Work in this order:
 
 1. Study the code. Read the real files each idea touches. Read ~/.claude/CLAUDE.md, the CLAUDE.md files of the project, and the hooks in .claude/settings*.json and ~/.claude/settings.json. Copy every rule and every edit-blocking hook you find into the Context of each plan that needs it: TDD red-first, no code comments, naming, and any other hook that can block an edit. Say in Context that a blocked edit means reply BLOCKED.
 2. Split into plans. Make one plan folder per idea by default. Merge ideas into one plan only when they change the same code. Name each folder NN-slug, numbered in build order. Order the plans so each depends only on earlier ones, and record Depends on in each plan.md and in index.md.
-3. Spikes. An idea whose effort is large, or whose category is moonshot, gets a plan with Kind: spike. A spike has spike steps with Questions, which write findings.md in the plan folder, and no product code. Its idea needs re-planning, with a new /${PLAN_COMMAND} run, once findings.md is written.
+3. Spikes. An idea whose effort is large, or whose category is moonshot, gets a plan with Kind: spike. A spike has spike steps with Questions, which write findings.md in the plan folder, and no product code. Its idea needs re-planning, with a new ${PLAN_INVOCATION} run, once findings.md is written.
 4. Decide. Ask the user with AskUserQuestion only for a choice that changes the plan materially. Make every smaller decision yourself and write it down in the plan. Drop an idea that the code contradicts, and list it with its reason under Dropped in index.md.
 5. Write the files in exactly these formats. The run folder holds index.md, the index of the run: one table row per plan, in build order. Each plan folder holds plan.md and its step files. A status is one of ${PLAN_STATUSES_AS_TEXT}. Every plan starts as pending, and a plan.md and its index.md row always show the same status. Keep the | character out of plan titles.
 
@@ -893,13 +895,20 @@ Rules for every step file:
 
 6. Check. Call the ${QUALIFIED_CHECK_TOOL_NAME} tool with the run folder path. Fix every problem it returns, and call it again until it returns OK.
 7. Clarity pass. For every step file, call the Agent tool with subagent_type "brainstorm:step-reader" and the step file's absolute path as its prompt. Send them all in one message so they run in parallel. Rewrite each step that replies QUESTIONS, then run the checker again. Do at most two rounds of this.
-8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run /${BUILD_COMMAND} to implement it.`;
+8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run ${BUILD_INVOCATION} to implement it.`;
 
-const buildImplementationPrompt = (planPaths: string[]) =>
-  `Build these brainstorm plan runs, one after another, in this order:
-${planPaths.map((planPath, index) => `${index + 1}. ${planPath}`).join("\n")}
+const describeRunsToBuild = (requestedRuns: string) =>
+  requestedRuns
+    ? `The user named the runs or plans to build. Find them as the skill's "Find the runs" section says:
+<runs>
+${requestedRuns}
+</runs>`
+    : `The user named no run, so build ${NEWEST_RUN}.`;
 
-The paths are already resolved, so no plan selection is needed. Load the brainstorm:build-plans skill with the Skill tool and follow it exactly for these paths. Do not commit anything.`;
+const buildImplementationPrompt = (requestedRuns: string) =>
+  `Build brainstorm plans. Load the brainstorm:build-plans skill with the Skill tool and follow it exactly. Do not commit anything.
+
+${describeRunsToBuild(requestedRuns)}`;
 
 const NUMBER_RANGE_PATTERN = /^(\d+)-(\d+)$/;
 
@@ -952,39 +961,6 @@ const resolvePicks = (ideas: NumberedIdea[], requestedPicks: string[]) => {
   return { pickedIdeas, unknownPicks };
 };
 
-const isPlanRunFolder = (entry: FolderEntry) =>
-  entry.kind === "dir" && PLAN_RUN_FOLDER_PATTERN.test(entry.name);
-
-const resolveRequestedPlanPath = (
-  workingDirectory: string,
-  requestedPath: string
-) => {
-  const isBareName = !requestedPath.includes("/");
-  return isBareName
-    ? `${workingDirectory}/${PLANS_FOLDER}/${requestedPath}`
-    : resolveProjectPath(workingDirectory, requestedPath);
-};
-
-const resolvePlanPaths = async (
-  engine: EngineInterface,
-  workingDirectory: string,
-  requestedPaths: string[]
-) => {
-  const isEveryPlanRequested =
-    requestedPaths.length === 1 && requestedPaths[0] === ALL_KEYWORD;
-  if (requestedPaths.length && !isEveryPlanRequested) {
-    return requestedPaths.map((requestedPath) =>
-      resolveRequestedPlanPath(workingDirectory, requestedPath)
-    );
-  }
-  const planPaths = await listEntryPathsOldestFirst(
-    engine,
-    `${workingDirectory}/${PLANS_FOLDER}`,
-    isPlanRunFolder
-  );
-  return isEveryPlanRequested ? planPaths : planPaths.slice(-1);
-};
-
 const describeError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
@@ -1026,25 +1002,72 @@ const readStatusFiles = (engine: EngineInterface): StatusFiles => ({
   },
 });
 
+const submitPromptAfterReply = (engine: EngineInterface, prompt: string) => {
+  engine.clock.after(0, () => void engine.prompt.submit({ text: prompt }));
+};
+
+const startBrainstorm = (engine: EngineInterface, focus: string) => {
+  submitPromptAfterReply(engine, buildBrainstormPrompt(focus));
+  return { text: "Brainstorming improvements for this project…" };
+};
+
+const describeUnknownPicks = (
+  brainstorm: SavedBrainstorm,
+  unknownPicks: string[],
+  requestedPicksText: string
+) =>
+  [
+    `The newest brainstorm has no idea ${unknownPicks.join(", ")}.`,
+    `Pick numbers from 1 to ${brainstorm.ideas.length}, a range such as 2-5, a category (${listPresentCategories(brainstorm.ideas).join(", ")}) or ${ALL_KEYWORD}.`,
+    `Run ${PLAN_INVOCATION} to list them.`,
+    `To brainstorm with "${PLAN_MODE} ${requestedPicksText}" as a focus, put another word first.`,
+  ].join(" ");
+
+const startPlanning = async (
+  engine: EngineInterface,
+  requestedPicksText: string
+) => {
+  const workingDirectory = await engine.session.cwd();
+  const brainstorm = await loadNewestBrainstorm(engine, workingDirectory);
+  if (!brainstorm) {
+    return {
+      text: `No saved brainstorm in this project yet. Run /${BRAINSTORM_COMMAND} first.`,
+    };
+  }
+  const requestedPicks = parseRequestedPicks(requestedPicksText);
+  if (!requestedPicks.length) return { text: listIdeasToPick(brainstorm) };
+  const { pickedIdeas, unknownPicks } = resolvePicks(
+    brainstorm.ideas,
+    requestedPicks
+  );
+  if (unknownPicks.length) {
+    return {
+      text: describeUnknownPicks(brainstorm, unknownPicks, requestedPicksText),
+    };
+  }
+  const runFolderPath = `${workingDirectory}/${PLANS_FOLDER}/plan-${formatFileStamp(await engine.clock.now())}`;
+  submitPromptAfterReply(engine, buildPlanPrompt(pickedIdeas, runFolderPath));
+  const pickedTitles = pickedIdeas
+    .map((idea) => `#${idea.number} ${idea.title}`)
+    .join(", ");
+  return {
+    text: `Planning ${pickedTitles} into the run folder ${runFolderPath}…`,
+  };
+};
+
+const startBuild = (engine: EngineInterface, requestedRuns: string) => {
+  submitPromptAfterReply(engine, buildImplementationPrompt(requestedRuns));
+  return {
+    text: `Building ${requestedRuns || NEWEST_RUN} with small-model implementers and a strong reviewer…`,
+  };
+};
+
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     await $.command.register({
       name: BRAINSTORM_COMMAND,
-      description:
-        "Brainstorm creative ideas, must-haves and security fixes for this project, shown in the browser",
-      argumentHint: "[focus]",
-    });
-    await $.command.register({
-      name: PLAN_COMMAND,
-      description:
-        "Turn ideas from the newest brainstorm into plans, one folder each, with an index and small, checked steps that a small model can build",
-      argumentHint: "<idea numbers, ranges, a category, or all>",
-    });
-    await $.command.register({
-      name: BUILD_COMMAND,
-      description:
-        "Build brainstorm plans: small-model subagents do each step, a strong model reviews the result, and each plan's status is recorded",
-      argumentHint: "[run folder names or paths, or all]",
+      description: `Brainstorm ideas for this project, shown in the browser. "${PLAN_MODE} <picks>" turns picked ideas into small-step plans, and "${BUILD_MODE}" has small models build them and a strong model review the result`,
+      argumentHint: `[focus] | ${PLAN_MODE} <picks> | ${BUILD_MODE} [runs]`,
     });
     await $.tool.register({
       name: TOOL_NAME,
@@ -1070,60 +1093,13 @@ export const register: Register = (on) => {
     return next(e);
   });
 
-  on("command.run", { command: BRAINSTORM_COMMAND }, ($, e) => {
-    const prompt = buildBrainstormPrompt(e.args.trim());
-    $.clock.after(0, () => void $.prompt.submit({ text: prompt }));
-    return { text: "Brainstorming improvements for this project…" };
-  });
-
-  on("command.run", { command: PLAN_COMMAND }, async ($, e) => {
-    const workingDirectory = await $.session.cwd();
-    const brainstorm = await loadNewestBrainstorm($, workingDirectory);
-    if (!brainstorm) {
-      return {
-        text: "No saved brainstorm in this project yet. Run /brainstorm first.",
-      };
-    }
-    const requestedPicks = parseRequestedPicks(e.args);
-    if (!requestedPicks.length) return { text: listIdeasToPick(brainstorm) };
-    const { pickedIdeas, unknownPicks } = resolvePicks(
-      brainstorm.ideas,
-      requestedPicks
-    );
-    if (unknownPicks.length) {
-      return {
-        text: `The newest brainstorm has no idea ${unknownPicks.join(", ")}. Pick numbers from 1 to ${brainstorm.ideas.length}, a range such as 2-5, a category (${listPresentCategories(brainstorm.ideas).join(", ")}) or ${ALL_KEYWORD}. Run /${PLAN_COMMAND} to list them.`,
-      };
-    }
-    const runFolderPath = `${workingDirectory}/${PLANS_FOLDER}/plan-${formatFileStamp(await $.clock.now())}`;
-    const prompt = buildPlanPrompt(pickedIdeas, runFolderPath);
-    $.clock.after(0, () => void $.prompt.submit({ text: prompt }));
-    const pickedTitles = pickedIdeas
-      .map((idea) => `#${idea.number} ${idea.title}`)
-      .join(", ");
-    return {
-      text: `Planning ${pickedTitles} into the run folder ${runFolderPath}…`,
-    };
-  });
-
-  on("command.run", { command: BUILD_COMMAND }, async ($, e) => {
-    const workingDirectory = await $.session.cwd();
-    const requestedPaths = e.args.split(/\s+/).filter(Boolean);
-    const planPaths = await resolvePlanPaths(
-      $,
-      workingDirectory,
-      requestedPaths
-    );
-    if (!planPaths.length) {
-      return {
-        text: `No plan found in ${PLANS_FOLDER}. Run /${PLAN_COMMAND} first, or pass a run folder's path.`,
-      };
-    }
-    const prompt = buildImplementationPrompt(planPaths);
-    $.clock.after(0, () => void $.prompt.submit({ text: prompt }));
-    return {
-      text: `Building ${planPaths.join(", ")} with small-model implementers and a strong reviewer…`,
-    };
+  on("command.run", { command: BRAINSTORM_COMMAND }, async ($, e) => {
+    const commandArguments = e.args.trim();
+    const [firstWord = ""] = commandArguments.split(/\s+/, 1);
+    const wordsAfterFirst = commandArguments.slice(firstWord.length).trim();
+    if (firstWord === PLAN_MODE) return startPlanning($, wordsAfterFirst);
+    if (firstWord === BUILD_MODE) return startBuild($, wordsAfterFirst);
+    return startBrainstorm($, commandArguments);
   });
 
   on("tool.call", { tool: QUALIFIED_TOOL_NAME }, async ($, e) => {

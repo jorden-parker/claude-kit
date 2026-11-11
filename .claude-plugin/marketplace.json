@@ -7,7 +7,7 @@
     { "name": "handoff", "source": "./plugins/handoff",
       "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session" },
     { "name": "brainstorm", "source": "./plugins/brainstorm",
-      "description": "/brainstorm studies the project and brainstorms ideas in the browser; /brainstorm-plan turns picked ideas into a small-step plan; /brainstorm-build has small-model subagents implement it and a strong model review it" },
+      "description": "/brainstorm studies the project and brainstorms ideas in the browser; /brainstorm plan turns picked ideas into a small-step plan; /brainstorm build has small-model subagents implement it and a strong model review it" },
     { "name": "adhd-style", "source": "./plugins/adhd-style",
       "description": "ADHD output style: answer first, short chunks, one next step" }
   ]

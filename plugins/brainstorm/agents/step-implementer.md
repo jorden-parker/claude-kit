@@ -1,6 +1,6 @@
 ---
 name: step-implementer
-description: Implements exactly one step of a brainstorm plan, as written, and runs the step's check. Used by /brainstorm-build. Not for open-ended work.
+description: Implements exactly one step of a brainstorm plan, as written, and runs the step's check. Used by /brainstorm build. Not for open-ended work.
 model: haiku
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---

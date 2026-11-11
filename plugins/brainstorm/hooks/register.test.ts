@@ -92,11 +92,7 @@ test("session start registers the command and the render tool", async ($, on) =>
     isInteractive: true,
   });
 
-  expect(ranCommands).toEqual([
-    "brainstorm",
-    "brainstorm-plan",
-    "brainstorm-build",
-  ]);
+  expect(ranCommands).toEqual(["brainstorm"]);
   expect(tools).toEqual([
     { name: "render_brainstorm", isDeferred: false },
     { name: "check_brainstorm_plan", isDeferred: false },
@@ -104,7 +100,7 @@ test("session start registers the command and the render tool", async ($, on) =>
   ]);
 });
 
-test("the build command's argument hint names run folders", async ($, on) => {
+test("the command's argument hint names the focus and the plan and build modes", async ($, on) => {
   const argumentHintByCommand: Record<string, string | undefined> = {};
   on("command.register", (_, e) => {
     argumentHintByCommand[e.name] = e.argumentHint;
@@ -121,8 +117,8 @@ test("the build command's argument hint names run folders", async ($, on) => {
     isInteractive: true,
   });
 
-  expect(argumentHintByCommand["brainstorm-build"]).toBe(
-    "[run folder names or paths, or all]"
+  expect(argumentHintByCommand["brainstorm"]).toBe(
+    "[focus] | plan <picks> | build [runs]"
   );
 });
 
@@ -301,7 +297,8 @@ test("the page numbers each idea and offers a plan picker", async ($, on) => {
   expect(html).toContain('data-plan="1"');
   expect(html).toContain('data-plan="2"');
   expect(html).toContain("#1");
-  expect(html).toContain("/brainstorm-plan");
+  expect(html).toContain("/brainstorm plan ");
+  expect(html).not.toContain("/brainstorm-plan");
 });
 
 test("the page offers select-all, select-the-filtered-category and clear for planning", async ($, on) => {
@@ -333,11 +330,6 @@ const SAVED_BRAINSTORM = {
     { ...CREATIVE_IDEA, files: [], number: 2 },
   ],
 };
-
-const buildCommandRun = (command: string, args: string) => ({
-  ...buildBrainstormCommand(args),
-  command,
-});
 
 const joinLines = (...lines: string[]) => lines.join("\n");
 
@@ -388,11 +380,11 @@ const mockSavedBrainstorm = (on: On) =>
     }),
   });
 
-test("brainstorm-plan submits a planning turn for the picked ideas from the newest brainstorm", async ($, on) => {
+test("brainstorm plan submits a planning turn for the picked ideas from the newest brainstorm", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "2"));
+  const reply = await $.command.run(buildBrainstormCommand("plan 2"));
   await clock.settle();
 
   expect(reply.text).toContain("Replay mode for bug reports");
@@ -403,24 +395,24 @@ test("brainstorm-plan submits a planning turn for the picked ideas from the newe
   expect(instructions).not.toContain("Stop logging the API token");
   expect(instructions).toContain(`${PLANS_FOLDER}/plan-2026-11-09-1200`);
   expect(instructions).not.toContain("plan-2026-11-09-1200.md");
-  expect(instructions).toContain("/brainstorm-build");
+  expect(instructions).toContain("/brainstorm build");
 });
 
 test("the planning acknowledgement names the run folder it writes", async ($, on) => {
   const { clock } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "2"));
+  const reply = await $.command.run(buildBrainstormCommand("plan 2"));
   await clock.settle();
 
   expect(reply.text).toContain(`${PLANS_FOLDER}/plan-2026-11-09-1200`);
 });
 
-test("brainstorm-plan takes several numbers separated by commas or spaces", async ($, on) => {
+test("brainstorm plan takes several numbers separated by commas or spaces", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  await $.command.run(buildCommandRun("brainstorm-plan", "1, 2"));
+  await $.command.run(buildBrainstormCommand("plan 1, 2"));
   await clock.settle();
 
   const instructions = submittedPrompts[0] ?? "";
@@ -428,11 +420,11 @@ test("brainstorm-plan takes several numbers separated by commas or spaces", asyn
   expect(instructions).toContain("Replay mode for bug reports");
 });
 
-test("brainstorm-plan all plans every idea in the newest brainstorm", async ($, on) => {
+test("brainstorm plan all plans every idea in the newest brainstorm", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  await $.command.run(buildCommandRun("brainstorm-plan", "all"));
+  await $.command.run(buildBrainstormCommand("plan all"));
   await clock.settle();
 
   const instructions = submittedPrompts[0] ?? "";
@@ -441,11 +433,11 @@ test("brainstorm-plan all plans every idea in the newest brainstorm", async ($, 
   expect(instructions).toContain("The user picked ideas #1 and #2");
 });
 
-test("brainstorm-plan with a category name plans that category's ideas", async ($, on) => {
+test("brainstorm plan with a category name plans that category's ideas", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  await $.command.run(buildCommandRun("brainstorm-plan", "creative"));
+  await $.command.run(buildBrainstormCommand("plan creative"));
   await clock.settle();
 
   const instructions = submittedPrompts[0] ?? "";
@@ -453,45 +445,43 @@ test("brainstorm-plan with a category name plans that category's ideas", async (
   expect(instructions).not.toContain("Stop logging the API token");
 });
 
-test("brainstorm-plan takes a range of numbers", async ($, on) => {
+test("brainstorm plan takes a range of numbers", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  await $.command.run(buildCommandRun("brainstorm-plan", "1-2"));
+  await $.command.run(buildBrainstormCommand("plan 1-2"));
   await clock.settle();
 
   expect(submittedPrompts[0]).toContain("The user picked ideas #1 and #2");
 });
 
-test("brainstorm-plan refuses a word that is not a number, range, category or all", async ($, on) => {
+test("brainstorm plan refuses a word that is not a number, range, category or all", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  const reply = await $.command.run(
-    buildCommandRun("brainstorm-plan", "1 bogus")
-  );
+  const reply = await $.command.run(buildBrainstormCommand("plan 1 bogus"));
   await clock.settle();
 
   expect(submittedPrompts).toEqual([]);
   expect(reply.text).toContain("bogus");
 });
 
-test("brainstorm-plan with no numbers explains all and category picks", async ($, on) => {
+test("brainstorm plan with no numbers explains all and category picks", async ($, on) => {
   const { clock } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-plan", ""));
+  const reply = await $.command.run(buildBrainstormCommand("plan"));
   await clock.settle();
 
-  expect(reply.text).toContain("/brainstorm-plan all");
-  expect(reply.text).toContain("/brainstorm-plan security");
+  expect(reply.text).toContain("/brainstorm plan all");
+  expect(reply.text).toContain("/brainstorm plan security");
 });
 
-test("brainstorm-plan tells the planner which ideas the user picked and not to cut them", async ($, on) => {
+test("brainstorm plan tells the planner which ideas the user picked and not to cut them", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  await $.command.run(buildCommandRun("brainstorm-plan", "1 2"));
+  await $.command.run(buildBrainstormCommand("plan 1 2"));
   await clock.settle();
 
   const instructions = submittedPrompts[0] ?? "";
@@ -503,7 +493,7 @@ const planningInstructions = async ($: Engine, on: On) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  await $.command.run(buildCommandRun("brainstorm-plan", "1 2"));
+  await $.command.run(buildBrainstormCommand("plan 1 2"));
   await clock.settle();
   return submittedPrompts[0] ?? "";
 };
@@ -576,7 +566,7 @@ test("the planning prompt runs the checker and the step-reader clarity pass", as
   expect(instructions).toContain("brainstorm:step-reader");
   expect(instructions).toContain("QUESTIONS");
   expect(instructions).toContain("at most two rounds");
-  expect(instructions).toContain("Run /brainstorm-build to implement it.");
+  expect(instructions).toContain("Run /brainstorm build to implement it.");
   expect(instructions).not.toContain("numberRanges");
 });
 
@@ -603,11 +593,11 @@ test("the planning prompt gives every plan a pending status in its own file and 
   expect(instructions).toContain("the same status");
 });
 
-test("brainstorm-plan with no numbers lists the ideas and submits nothing", async ($, on) => {
+test("brainstorm plan with no numbers lists the ideas and submits nothing", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-plan", ""));
+  const reply = await $.command.run(buildBrainstormCommand("plan"));
   await clock.settle();
 
   expect(submittedPrompts).toEqual([]);
@@ -615,11 +605,11 @@ test("brainstorm-plan with no numbers lists the ideas and submits nothing", asyn
   expect(reply.text).toContain("2. Replay mode for bug reports");
 });
 
-test("brainstorm-plan refuses a number the brainstorm does not have", async ($, on) => {
+test("brainstorm plan refuses a number the brainstorm does not have", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockSavedBrainstorm(on);
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "2 9"));
+  const reply = await $.command.run(buildBrainstormCommand("plan 2 9"));
   await clock.settle();
 
   expect(submittedPrompts).toEqual([]);
@@ -627,142 +617,109 @@ test("brainstorm-plan refuses a number the brainstorm does not have", async ($, 
   expect(reply.text).toContain("1 to 2");
 });
 
-test("brainstorm-plan without a saved brainstorm points at /brainstorm", async ($, on) => {
+test("brainstorm plan without a saved brainstorm points at /brainstorm", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockFileTree(on, {});
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-plan", "1"));
+  const reply = await $.command.run(buildBrainstormCommand("plan 1"));
   await clock.settle();
 
   expect(submittedPrompts).toEqual([]);
   expect(reply.text).toContain("/brainstorm");
 });
 
-test("brainstorm-build runs the newest run folder, skipping folders that are not plans", async ($, on) => {
+test("brainstorm build hands the build to the build-plans skill and does not repeat its flow", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {
-    [`${PLANS_FOLDER}/plan-2026-11-01-0900.md`]: "",
-    [`${PLANS_FOLDER}/plan-2026-11-08-1500/index.md`]: "",
-    [`${PLANS_FOLDER}/notes/readme.md`]: "",
-  });
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
+  const reply = await $.command.run(buildBrainstormCommand("build"));
   await clock.settle();
 
-  const runFolder = `${PLANS_FOLDER}/plan-2026-11-08-1500`;
-  expect(reply.text).toContain(runFolder);
-  expect(submittedPrompts[0]).toContain(runFolder);
-  expect(submittedPrompts[0]).not.toContain("notes");
-  expect(submittedPrompts[0]).not.toContain("plan-2026-11-01-0900");
-});
-
-test("brainstorm-build hands the build to the build-plans skill and does not repeat its flow", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {});
-
-  await $.command.run(
-    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500")
-  );
-  await clock.settle();
-
+  expect(reply.text).toContain("Building");
+  expect(submittedPrompts).toHaveLength(1);
   const instructions = submittedPrompts[0] ?? "";
   expect(instructions).toContain("Skill tool");
   expect(instructions).toContain("brainstorm:build-plans");
   expect(instructions).toContain("follow it exactly");
-  expect(instructions).toContain("already resolved");
+  expect(instructions).toContain("Do not commit anything.");
   expect(instructions).not.toContain("brainstorm:step-implementer");
   expect(instructions).not.toContain("brainstorm:plan-reviewer");
+  expect(instructions).not.toContain("<focus>");
 });
 
-test("brainstorm-build runs the run folder path it is given", async ($, on) => {
+test("brainstorm build with no run named asks for the newest run", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {});
 
-  await $.command.run(buildCommandRun("brainstorm-build", "plans/002-cache"));
+  const reply = await $.command.run(buildBrainstormCommand("build"));
   await clock.settle();
 
-  expect(submittedPrompts[0]).toContain("/repo/plans/002-cache");
+  expect(reply.text).toContain("the newest run");
+  expect(submittedPrompts[0]).toContain("the newest run");
+  expect(submittedPrompts[0]).not.toContain("<runs>");
 });
 
-test("brainstorm-build does not treat a single plan file as a run", async ($, on) => {
+test("brainstorm build passes the named runs to the skill as the user wrote them", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {
-    [`${PLANS_FOLDER}/plan-2026-11-08-1500.md`]: "",
+
+  const reply = await $.command.run(
+    buildBrainstormCommand("build plan-2026-11-08-1500 plans/002-cache")
+  );
+  await clock.settle();
+
+  expect(reply.text).toContain("plan-2026-11-08-1500 plans/002-cache");
+  expect(submittedPrompts[0]).toContain(
+    "<runs>\nplan-2026-11-08-1500 plans/002-cache\n</runs>"
+  );
+});
+
+test("brainstorm build leaves finding the runs to the skill and lists no folder", async ($, on) => {
+  const { clock } = recordSubmittedPrompts(on);
+  const listedFolders: string[] = [];
+  on("session.cwd", () => ({ value: "/repo" }));
+  on("fs.list", (_, e) => {
+    listedFolders.push(e.path);
+    return { deny: `ENOENT: ${e.path}` };
   });
 
-  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
+  await $.command.run(buildBrainstormCommand("build all"));
+  await clock.settle();
+
+  expect(listedFolders).toEqual([]);
+});
+
+test("a focus that names plan or build after its first word is still a brainstorm", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+
+  await $.command.run(buildBrainstormCommand("the build plan"));
+  await clock.settle();
+
+  expect(submittedPrompts[0]).toContain("<focus>\nthe build plan\n</focus>");
+});
+
+test("a focus whose first word only starts with plan or build is still a brainstorm", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+
+  await $.command.run(buildBrainstormCommand("planning docs"));
+  await $.command.run(buildBrainstormCommand("builds that time out"));
+  await clock.settle();
+
+  expect(submittedPrompts[0]).toContain("<focus>\nplanning docs\n</focus>");
+  expect(submittedPrompts[1]).toContain(
+    "<focus>\nbuilds that time out\n</focus>"
+  );
+});
+
+test("brainstorm plan with words that are not picks says how to brainstorm on them instead", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockSavedBrainstorm(on);
+
+  const reply = await $.command.run(
+    buildBrainstormCommand("plan pricing page")
+  );
   await clock.settle();
 
   expect(submittedPrompts).toEqual([]);
-  expect(reply.text).toContain("/brainstorm-plan");
-});
-
-test("brainstorm-build without a plan points at /brainstorm-plan", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {});
-
-  const reply = await $.command.run(buildCommandRun("brainstorm-build", ""));
-  await clock.settle();
-
-  expect(submittedPrompts).toEqual([]);
-  expect(reply.text).toContain("/brainstorm-plan");
-});
-
-test("brainstorm-build finds a bare run folder name in the plans folder", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {});
-
-  await $.command.run(
-    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500")
-  );
-  await clock.settle();
-
-  expect(submittedPrompts[0]).toContain(`${PLANS_FOLDER}/plan-2026-11-08-1500`);
-});
-
-test("brainstorm-build runs several runs in the order given", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {});
-
-  await $.command.run(
-    buildCommandRun("brainstorm-build", "plan-2026-11-08-1500 plans/002-cache")
-  );
-  await clock.settle();
-
-  const instructions = submittedPrompts[0] ?? "";
-  const firstPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500`;
-  const secondPlan = "/repo/plans/002-cache";
-  expect(instructions).toContain(firstPlan);
-  expect(instructions).toContain(secondPlan);
-  expect(instructions.indexOf(firstPlan)).toBeLessThan(
-    instructions.indexOf(secondPlan)
-  );
-});
-
-test("brainstorm-build all runs every run folder, oldest first", async ($, on) => {
-  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
-  mockFileTree(on, {
-    [`${PLANS_FOLDER}/plan-2026-11-08-1500/index.md`]: "",
-    [`${PLANS_FOLDER}/notes.txt`]: "",
-    [`${PLANS_FOLDER}/plan-2026-11-01-0900/index.md`]: "",
-    [`${PLANS_FOLDER}/plan-2026-11-05-1000.md`]: "",
-    [`${PLANS_FOLDER}/notes/readme.md`]: "",
-  });
-
-  await $.command.run(buildCommandRun("brainstorm-build", "all"));
-  await clock.settle();
-
-  const instructions = submittedPrompts[0] ?? "";
-  const olderPlan = `${PLANS_FOLDER}/plan-2026-11-01-0900`;
-  const newerPlan = `${PLANS_FOLDER}/plan-2026-11-08-1500`;
-  expect(instructions).toContain(olderPlan);
-  expect(instructions).toContain(newerPlan);
-  expect(instructions).not.toContain("notes.txt");
-  expect(instructions).not.toContain("notes/readme.md");
-  expect(instructions).not.toContain("plan-2026-11-05-1000");
-  expect(instructions.indexOf(olderPlan)).toBeLessThan(
-    instructions.indexOf(newerPlan)
-  );
+  expect(reply.text).toContain("pricing, page");
+  expect(reply.text).toContain("as a focus");
 });
 
 const CLEAN_RUN_FOLDER = `${PLANS_FOLDER}/plan-2026-11-09-1200`;

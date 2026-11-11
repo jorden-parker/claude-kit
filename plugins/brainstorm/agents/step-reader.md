@@ -1,6 +1,6 @@
 ---
 name: step-reader
-description: Checks one brainstorm step for ambiguity before it is built, so a small model can carry it out without guessing. Used by /brainstorm-plan. Implements nothing.
+description: Checks one brainstorm step for ambiguity before it is built, so a small model can carry it out without guessing. Used by /brainstorm plan. Implements nothing.
 model: haiku
 tools: Read, Grep, Glob
 ---

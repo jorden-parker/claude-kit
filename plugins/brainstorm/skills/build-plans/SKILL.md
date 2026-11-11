@@ -11,7 +11,7 @@ You write only inside a run folder, and only two things: ticks on the checkbox l
 
 ## The files
 
-- Run folder: `plan-YYYY-MM-DD-HHMM/`, written by one `/brainstorm-plan`. It holds index.md and one plan folder per plan.
+- Run folder: `plan-YYYY-MM-DD-HHMM/`, written by one `/brainstorm plan`. It holds index.md and one plan folder per plan.
 - index.md: the index of the run. Its table has one row per plan, in build order: the link to the plan.md, the status, the kind, and the plans it depends on.
 - Plan folder: `NN-slug/`. Its plan.md has the plan's own `- Status:` line and one checkbox line per step. Each line links one step file.
 - Status: `pending`, `in-progress`, `done` or `blocked`. A plan.md and its index.md row always show the same status.
@@ -23,7 +23,9 @@ Two tools work on these files. If a tool's schema is not loaded, load it with To
 
 ## Find the runs
 
-If the user or the command already gave paths, use them as they are, resolved against the working directory, and skip the rest of this section. A path to a plan folder means: build only that plan of its run.
+The request names the runs: in the user's own words, or in the `<runs>` block that `/brainstorm build` passes on unchanged.
+
+If it gives paths, use them as they are, resolved against the working directory, and skip the rest of this section. A path to a plan folder means: build only that plan of its run.
 
 Otherwise list `.claude/brainstorm/plans/` under the project's working directory. Never ask the user where the plans are. The run folders are the entries named `plan-YYYY-MM-DD-HHMM`. The names are UTC timestamps, so they sort oldest to newest.
 
@@ -32,7 +34,7 @@ Otherwise list `.claude/brainstorm/plans/` under the project's working directory
 - "all of them" or several runs: every matching run, oldest first.
 - One plan of a run: that run, building only that plan.
 
-If there is no run folder, say so and suggest `/brainstorm-plan`. If the request could mean different runs, ask with AskUserQuestion, showing each candidate's name and title.
+If there is no run folder, say so and suggest `/brainstorm plan`. If the request could mean different runs, ask with AskUserQuestion, showing each candidate's name and title.
 
 ## Build a run
 
@@ -78,7 +80,7 @@ Whenever these steps say the plan stops, set its status to `blocked` and go on w
 
 ### Spike plans
 
-A spike plan (Kind `spike` in the index) uses the same flow. Its steps write findings.md in the plan folder, and the final review checks that findings.md answers every question. When a spike plan is `done`, report the findings path and say that the idea needs a new `/brainstorm-plan` run before anything is changed.
+A spike plan (Kind `spike` in the index) uses the same flow. Its steps write findings.md in the plan folder, and the final review checks that findings.md answers every question. When a spike plan is `done`, report the findings path and say that the idea needs a new `/brainstorm plan` run before anything is changed.
 
 ## Report
 

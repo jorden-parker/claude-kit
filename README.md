@@ -43,7 +43,6 @@ claude plugin marketplace remove claude-kit
 ```
 .claude-plugin/marketplace.json   lists every plugin and its folder
 plugins/<name>/                   one plugin: its own plugin.json, README, package.json and tests
-docs/plans/                       plans for changes to this repo
 ```
 
 ## Rules for plugins

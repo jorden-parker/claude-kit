@@ -22,27 +22,33 @@ export const PAGE_SCRIPT = String.raw`
     return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + labelHtml + "</a>";
   }
   function renderInline(text){
-    var codeSpans = [];
+    var finishedHtml = [];
     var codeSpanPattern = new RegExp(TICK + "([^" + TICK + "]+)" + TICK, "g");
     var placeholderPattern = new RegExp(PLACEHOLDER_MARK + "(\\d+)" + PLACEHOLDER_MARK, "g");
+    function setAside(pieceHtml){
+      finishedHtml.push(pieceHtml);
+      return PLACEHOLDER_MARK + (finishedHtml.length - 1) + PLACEHOLDER_MARK;
+    }
     var html = escapeHtml(text).replace(codeSpanPattern, function(match, code){
-      codeSpans.push(code);
-      return PLACEHOLDER_MARK + (codeSpans.length - 1) + PLACEHOLDER_MARK;
+      return setAside("<code>" + code + "</code>");
     });
-    html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function(match, label, url){
-      return isSafeUrl(url) ? buildLinkHtml(url, label) : match;
+    html = html.replace(/\[([^\]]+)\]\(([^)\s\x00]+)\)/g, function(match, label, url){
+      return isSafeUrl(url) ? setAside(buildLinkHtml(url, label)) : match;
     });
-    html = html.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, function(match, leadingText, url){
-      return leadingText + buildLinkHtml(url, url);
+    html = html.replace(/(^|[\s(])(https?:\/\/[^\s<)\x00]+)/g, function(match, leadingText, url){
+      return leadingText + setAside(buildLinkHtml(url, url));
     });
     html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     html = html.replace(/(^|[^\w])__([^_]+)__(?!\w)/g, "$1<strong>$2</strong>");
     html = html.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
     html = html.replace(/(^|[^\w])_([^_\s][^_]*)_(?!\w)/g, "$1<em>$2</em>");
     html = html.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-    return html.replace(placeholderPattern, function(match, spanIndex){
-      return "<code>" + codeSpans[Number(spanIndex)] + "</code>";
-    });
+    while (html.search(placeholderPattern) !== -1) {
+      html = html.replace(placeholderPattern, function(match, pieceIndex){
+        return finishedHtml[Number(pieceIndex)];
+      });
+    }
+    return html;
   }
   function isFenceLine(line){
     var trimmedLine = line.trim();

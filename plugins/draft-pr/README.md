@@ -136,4 +136,4 @@ pnpm test
 pnpm typecheck
 ```
 
-`pnpm test` runs the hooks tests with `claude plugin test`, then the helper's tests with `node --test`.
+`pnpm test` runs the hooks tests with `claude plugin test`, then the tests of the helper and of the page script with `node --test`. The plugin test runner refuses `new Function`, which the page script's tests need.

@@ -12,6 +12,7 @@ install any of them on its own.
 | [brainstorm](plugins/brainstorm/)             | `/brainstorm`, with `plan` and `build` modes: ideas to plans to code.                 |
 | [draft-pr](plugins/draft-pr/)                 | `/draft-pr`, `/draft-pr-review`: drafts in the browser, posted only when you click.   |
 | [adhd-style](plugins/adhd-style/)             | Output style: answer first, short chunks, one next step.                              |
+| [code-style](plugins/code-style/) | Writes the comment and naming rules into each session and blocks edits that break them. |
 
 ## Install
 

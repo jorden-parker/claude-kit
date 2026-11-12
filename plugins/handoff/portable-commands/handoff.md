@@ -1,5 +1,5 @@
 ---
-description: Hand the work off to a fresh session: store a recap, list stored handoffs, or resume one
+description: "Hand the work off to a fresh session: store a recap, list stored handoffs, or resume one"
 ---
 
 This command runs through the `mcp__handoff__run_handoff` tool. The user's arguments are inside the <arguments> tags.

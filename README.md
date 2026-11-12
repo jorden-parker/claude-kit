@@ -60,7 +60,8 @@ any change here.
 ```
 ./sync-qwen              # every plugin
 ./sync-qwen tdd guards   # only these
-./sync-pi                # every register.ts plugin
+./sync-pi                # every register.ts plugin, for your user
+./sync-pi --local        # for the project in the current folder only
 ```
 
 Both need `jq`, `rsync`, `bun` and `node`, plus `qwen` or `pi`. `QWEN_HOME` overrides
@@ -113,6 +114,12 @@ servers on install.
 `~/.pi/agent/claude-kit/<plugin>/` and adds it with `pi install`. It skips hook-only
 and output-style plugins: pi runs no Claude Code hooks. pi has no subagents, so
 `/brainstorm build` and the plan clarity pass cannot delegate there.
+
+`./sync-pi --local` builds the packages under `.pi/claude-kit/` of the current folder
+and lists them in its `.pi/settings.json`, so only that project gets them. This repo
+is set up that way: `.pi/settings.json` is committed and the built packages are not,
+so run `./sync-pi --local` once after cloning, and again after changing a plugin. pi
+asks you to trust the project before it loads them.
 
 `qwen extensions link` does not work here: it wants a `qwen-extension.json` in the source folder.
 

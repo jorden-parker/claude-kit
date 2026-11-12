@@ -1,0 +1,10 @@
+{
+  "packages": [
+    "claude-kit/brainstorm",
+    "claude-kit/design",
+    "claude-kit/draft-pr",
+    "claude-kit/handoff",
+    "claude-kit/prompt-optimizer",
+    "claude-kit/session-notes"
+  ]
+}

@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="Usage: ./sync-pi [plugin...]
+usage="Usage: ./sync-pi [--local] [plugin...]
 Installs this repo's register.ts plugins into pi as local packages. Run it again after changes.
-Without arguments it syncs every plugin under plugins/. PI_CODING_AGENT_DIR overrides ~/.pi/agent."
+Without arguments it syncs every plugin under plugins/. PI_CODING_AGENT_DIR overrides ~/.pi/agent.
+--local installs into the current folder's .pi/settings.json instead, for that project only."
 
 source "$(dirname "$0")/plugin-host/sync-lib.sh"
 exit_after_usage_request "$usage" "${1:-}"
 
-agent_folder="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
-package_root="$agent_folder/claude-kit"
+install_options=()
+installed_where="installed."
+package_root="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/claude-kit"
+if [ "${1:-}" = "--local" ]; then
+  shift
+  install_options=(-l --approve)
+  installed_where="installed in this project."
+  package_root="$(pwd -P)/.pi/claude-kit"
+  mkdir -p "$package_root"
+  echo "claude-kit/" > "$package_root/../.gitignore"
+fi
 failed_plugins=()
 
 sync_plugin() {
@@ -22,16 +32,16 @@ sync_plugin() {
     return 0
   fi
 
-  if ! stage_plugin pi "$plugin_folder" "$package_folder" || ! pi install "$package_folder" >/dev/null; then
+  if ! stage_plugin pi "$plugin_folder" "$package_folder" || ! pi install "$package_folder" ${install_options[@]+"${install_options[@]}"} >/dev/null; then
     echo "$plugin_name: FAILED to install"
     failed_plugins+=("$plugin_name")
     return 0
   fi
 
   if [ -f "$package_folder/plugin-host-extension.js" ]; then
-    echo "$plugin_name: installed. Its tools run in a pi extension and its slash commands as prompt templates; panes, autocomplete, composer fill and subagents stay in Claude Code"
+    echo "$plugin_name: $installed_where Its tools run in a pi extension and its slash commands as prompt templates; panes, autocomplete, composer fill and subagents stay in Claude Code"
   else
-    echo "$plugin_name: installed. Its slash commands run as prompt templates in pi"
+    echo "$plugin_name: $installed_where Its slash commands run as prompt templates in pi"
   fi
 }
 

@@ -56,4 +56,22 @@ expect "a hook-only plugin is not installed" log_lacks "claude-kit/tdd"
 expect "a hook-only plugin is flagged as skipped" output_has "tdd: skipped"
 expect "an output-style plugin is flagged as skipped" output_has "adhd-style: skipped"
 
+unquoted_colon_descriptions() { grep -hE '^description: [^"].*: ' "$repository_root"/plugins/*/portable-commands/*.md; }
+expect "a description holding a colon is quoted, or its front matter is not valid YAML" test -z "$(unquoted_colon_descriptions)"
+
+mkdir -p "$sandbox/project"
+: > "$FAKE_PI_LOG"
+local_output="$(cd "$sandbox/project" && PATH="$sandbox/bin:$PATH" PI_CODING_AGENT_DIR="$sandbox/agent" bash "$sync_script" --local handoff tdd 2>&1)"
+local_status=$?
+log="$(cat "$FAKE_PI_LOG")"
+output="$local_output"
+local_package="$(cd "$sandbox/project" && pwd -P)/.pi/claude-kit/handoff"
+
+expect "local sync exits 0" test "$local_status" -eq 0
+expect "--local builds the package under the project's .pi folder" test -f "$local_package/plugin-host-extension.js"
+expect "--local installs into the project settings" log_has "install $local_package -l --approve"
+expect "--local says where it installed" output_has "handoff: installed in this project."
+expect "--local still skips a hook-only plugin" output_has "tdd: skipped"
+expect "--local keeps the built packages out of git" grep -qxF 'claude-kit/' "$sandbox/project/.pi/.gitignore"
+
 [ "$failures" -eq 0 ] || exit 1

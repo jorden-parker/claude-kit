@@ -82,13 +82,14 @@ _session_notes() {
       case $subcommand in
         delete|amend)
           candidates=(${(f)"$(session-notes list 2>/dev/null | awk '
-            /^\[[0-9]+\] / {
-              number = substr($1, 2, length($1) - 2)
-              sub(/^[^ ]+ /, "")
+            /^\[[0-9]+\] / { current_session = substr($1, 2, length($1) - 2); next }
+            $1 == "note" {
+              number = $2
+              sub(/^ *note [0-9]+ /, "")
               gsub(/:/, "\\:")
-              print number ":" $0
+              print current_session " " number ":" $0
             }')"})
-          _describe session candidates
+          _describe note candidates -Q
           ;;
         completion)
           candidates=(zsh)

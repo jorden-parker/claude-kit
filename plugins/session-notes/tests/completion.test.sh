@@ -40,7 +40,7 @@ printf '%s\n' "$completion_script" > "$fixture_directory/completion.zsh"
 complete_words() {
   PATH="$cli_directory:$PATH" zsh -f -c '
     compdef() { :; }
-    _describe() { print -rl -- "${(@P)2}"; }
+    _describe() { print -rl -- "${(@P)2}" "${@:3}"; }
     source "$1"
     shift
     words=("$@")
@@ -55,10 +55,18 @@ delete:delete a note
 amend:replace the text of a note
 completion:print the shell completion script" \
   "$(complete_words session-notes '')"
-expect_equal "completes session numbers for delete" \
-  '1:2026-11-12 09\:30 UTC  /repo
-2:2026-11-01 10\:00 UTC  /old' \
+expect_equal "completes every note as its session and note numbers for delete" \
+  '1 1:Login bug\: a stale cookie
+1 2:Deploy is on Friday
+2 1:Old note
+-Q' \
   "$(complete_words session-notes delete '')"
+expect_equal "completes every note as its session and note numbers for amend" \
+  '1 1:Login bug\: a stale cookie
+1 2:Deploy is on Friday
+2 1:Old note
+-Q' \
+  "$(complete_words session-notes amend '')"
 expect_equal "completes note numbers of the chosen session for amend" \
   '1:Login bug\: a stale cookie
 2:Deploy is on Friday' \

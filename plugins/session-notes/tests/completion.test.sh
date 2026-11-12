@@ -50,7 +50,8 @@ complete_words() {
 }
 
 expect_equal "completes the subcommands" \
-  "list:list every session and its notes
+  "browse:pick a note to view, edit or delete
+list:list every session and its notes
 delete:delete a note
 amend:replace the text of a note
 completion:print the shell completion script" \

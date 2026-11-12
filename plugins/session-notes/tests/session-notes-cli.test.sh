@@ -89,6 +89,48 @@ expect_equal "a non-number argument is a usage error" "2" "$?"
 bash "$cli_path" > /dev/null 2>&1
 expect_equal "no command is a usage error" "2" "$?"
 
+browse_with_keys() {
+  printf '%b' "$1" | bash "$cli_path" browse 2>&1
+}
+
+write_fixture_store
+output="$(browse_with_keys 'q')"
+expect_equal "browse lists every note with its session" "yes" \
+  "$(grep -q 'Login bug was a stale cookie' <<< "$output" && grep -q 'Deploy is on Friday' <<< "$output" && echo yes || echo no)"
+
+write_fixture_store
+browse_with_keys 'jdyq' > /dev/null
+expect_equal "browse deletes the selected note after confirming" '["Login bug was a stale cookie"]' \
+  "$(stored_notes_of_first_session)"
+
+write_fixture_store
+browse_with_keys '\e[Bdyq' > /dev/null
+expect_equal "browse moves the selection with the arrow keys" '["Login bug was a stale cookie"]' \
+  "$(stored_notes_of_first_session)"
+
+write_fixture_store
+browse_with_keys 'dnq' > /dev/null
+expect_equal "browse keeps the note when delete is not confirmed" \
+  '["Login bug was a stale cookie","Deploy is on Friday"]' "$(stored_notes_of_first_session)"
+
+write_fixture_store
+editor_path="$fixture_directory/editor.sh"
+printf '#!/usr/bin/env bash\nprintf "Cookie expiry was wrong\\n\\n" > "$1"\n' > "$editor_path"
+chmod +x "$editor_path"
+printf 'eq' | EDITOR="$editor_path" VISUAL="" bash "$cli_path" browse > /dev/null 2>&1
+expect_equal "browse edits the selected note in the editor" \
+  '["Cookie expiry was wrong","Deploy is on Friday"]' "$(stored_notes_of_first_session)"
+
+write_fixture_store
+output="$(browse_with_keys 'vxq')"
+expect_equal "browse views the session of the selected note" "yes" \
+  "$(grep -q 'fix the login bug' <<< "$output" && grep -q 'pnpm test' <<< "$output" && echo yes || echo no)"
+
+write_fixture_store
+jq '.notes |= map(del(.notes))' "$SESSION_NOTES_STORE" > "$fixture_directory/empty.json"
+output="$(printf 'q' | SESSION_NOTES_STORE="$fixture_directory/empty.json" bash "$cli_path" browse 2>&1)"
+expect_equal "browse without notes says so" "No notes to browse." "$output"
+
 rm -f "$SESSION_NOTES_STORE"
 output="$(bash "$cli_path" list 2>&1)"
 expect_equal "a missing store says so" "No session notes yet." "$output"

@@ -35,12 +35,12 @@ Limits keep the store small: the latest 100 sessions, 100 entries per list, 500 
 
 `bin/session-notes` reads and edits the same store from your own terminal. It needs `jq`.
 
-Run `session-notes` with no arguments to browse every note in a full-screen list:
+Run `session-notes` with no arguments to browse every session in a full-screen list, each with its notes indented under it:
 
 - `↑`/`↓` (or `j`/`k`) move the selection
-- `enter` (or `v`) shows the note's whole session in `less`
-- `e` opens the note in `$VISUAL` or `$EDITOR` (default `vi`); saving it empty leaves the note as it was
-- `d` deletes the note after you press `y`
+- `enter` (or `v`) shows the whole session in `less`
+- `e` on a note opens it in `$VISUAL` or `$EDITOR` (default `vi`); saving it empty leaves the note as it was
+- `d` deletes the selected note, or the whole session, after you press `y`
 - `q` (or `esc`) quits
 
 The same commands work without the list, for scripts:

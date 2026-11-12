@@ -38,11 +38,12 @@ list_notes() {
     (.notes // []) | to_entries
     | map(select($only_session_index == null or .key == $only_session_index)) | map(
       .key as $session_index | .value as $session |
-      ["[\($session_index + 1)] \($session.startedAt[0:10]) \($session.startedAt[11:16]) UTC  \($session.cwd)"]
-      + ($session.prompts | map("  > \(.)"))
+      ($session.startedAt // "") as $started_at |
+      ["[\($session_index + 1)] \($started_at[0:10]) \($started_at[11:16]) UTC  \($session.cwd // "")"]
+      + (($session.prompts // []) | map("  > \(.)"))
       + (($session.notes // []) | to_entries | map("  note \(.key + 1) \(.value)"))
-      + ($session.files | map("  edited \(.)"))
-      + ($session.commands | map("  $ \(.)"))
+      + (($session.files // []) | map("  edited \(.)"))
+      + (($session.commands // []) | map("  $ \(.)"))
       | join("\n")
     ) | join("\n\n")
   ' "$store_path"
@@ -67,14 +68,24 @@ replace_note() {
 
 load_note_rows() {
   note_rows=()
-  local note_row
-  while IFS= read -r note_row; do
-    note_rows+=("$note_row")
-  done < <(jq -r '
+  local store_rows note_row
+  store_rows="$(jq -r '
+    def one_line: if type == "string" then . else tojson end | gsub("[\t\n]"; " ");
     (.notes // []) | to_entries[] | .key as $session_index | .value as $session
-    | ($session.notes // []) | to_entries[]
-    | "\($session_index + 1)\t\(.key + 1)\t\($session.startedAt[0:10])  \($session.cwd | split("/") | last)  \(.value | gsub("[\t\n]"; " "))"
-  ' "$store_path")
+    | ($session.startedAt // "") as $started_at
+    | "\($session_index + 1)\t\t\($started_at[0:10]) \($started_at[11:16])  \($session.cwd // "")  \(($session.prompts // [])[0] // "" | one_line)",
+      (($session.notes // []) | to_entries[] | "\($session_index + 1)\t\(.key + 1)\t    note \(.value | one_line)")
+  ' "$store_path")" || fail "Could not read the session notes in $store_path."
+  while IFS= read -r note_row; do
+    [ -z "$note_row" ] || note_rows+=("$note_row")
+  done <<< "$store_rows"
+}
+
+delete_session() {
+  local updated_store
+  updated_store="$(mktemp "$store_path.XXXXXX")"
+  jq --argjson session_index $(($1 - 1)) 'del(.notes[$session_index])' "$store_path" > "$updated_store"
+  mv "$updated_store" "$store_path"
 }
 
 read_key() {
@@ -121,7 +132,7 @@ draw_note_list() {
   elif [ "$selected_index" -ge $((first_visible_index + visible_row_count)) ]; then
     first_visible_index=$((selected_index - visible_row_count + 1))
   fi
-  printf '\033[H\033[2J\033[1mSession notes\033[0m  %d notes\n\n' "${#note_rows[@]}"
+  printf '\033[H\033[2J\033[1mSession notes\033[0m\n\n'
   for ((row_index = first_visible_index; row_index < ${#note_rows[@]} && row_index < first_visible_index + visible_row_count; row_index++)); do
     note_display="${note_rows[row_index]#*$'\t'*$'\t'}"
     note_display="${note_display:0:columns-2}"
@@ -131,7 +142,7 @@ draw_note_list() {
       printf '  %s\n' "$note_display"
     fi
   done
-  printf '\n\033[2m↑/↓ move  enter view  e edit  d delete  q quit\033[0m'
+  printf '\n\033[2m↑/↓ move  enter view  e edit note  d delete  q quit\033[0m'
 }
 
 edit_note() {
@@ -152,7 +163,7 @@ edit_note() {
 browse_notes() {
   load_note_rows
   if [ "${#note_rows[@]}" -eq 0 ]; then
-    printf 'No notes to browse.\n'
+    printf 'No session notes yet.\n'
     return
   fi
   selected_index=0
@@ -170,13 +181,23 @@ browse_notes() {
       up) [ "$selected_index" -eq 0 ] || selected_index=$((selected_index - 1)) ;;
       down) [ "$selected_index" -ge $((${#note_rows[@]} - 1)) ] || selected_index=$((selected_index + 1)) ;;
       view) list_notes $((session_number - 1)) | less ;;
-      edit) edit_note "$session_number" "$note_number" ;;
+      edit) [ -z "$note_number" ] || edit_note "$session_number" "$note_number" ;;
       delete)
-        printf '\r\033[K\033[1mDelete this note? [y/N]\033[0m '
-        IFS= read -rsn1 confirmation || confirmation=n
-        if [ "$confirmation" = y ] || [ "$confirmation" = Y ]; then
-          replace_note "$session_number" "$note_number" '[]'
+        if [ -n "$note_number" ]; then
+          printf '\r\033[K\033[1mDelete this note? [y/N]\033[0m '
+        else
+          printf '\r\033[K\033[1mDelete this session and its notes? [y/N]\033[0m '
         fi
+        IFS= read -rsn1 confirmation || confirmation=n
+        case "$confirmation" in
+          y | Y)
+            if [ -n "$note_number" ]; then
+              replace_note "$session_number" "$note_number" '[]'
+            else
+              delete_session "$session_number"
+            fi
+            ;;
+        esac
         ;;
       quit) break ;;
     esac

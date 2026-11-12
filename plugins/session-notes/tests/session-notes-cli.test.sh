@@ -97,19 +97,33 @@ write_fixture_store
 output="$(browse_with_keys 'q')"
 expect_equal "browse lists every note with its session" "yes" \
   "$(grep -q 'Login bug was a stale cookie' <<< "$output" && grep -q 'Deploy is on Friday' <<< "$output" && echo yes || echo no)"
+expect_equal "browse lists sessions that have no notes" "yes" \
+  "$(grep -q 'old prompt' <<< "$output" && echo yes || echo no)"
+
+printf '%s' '{"notes": [{"sessionId": "partial", "notes": ["Note of a partial session", {"text": "object note"}]}]}' \
+  > "$fixture_directory/partial.json"
+output="$(printf 'q' | SESSION_NOTES_STORE="$fixture_directory/partial.json" bash "$cli_path" browse 2>&1)"
+expect_equal "browse lists notes of a session with missing fields" "yes" \
+  "$(grep -q 'Note of a partial session' <<< "$output" && grep -q 'object note' <<< "$output" && echo yes || echo no)"
+expect_equal "list shows a session with missing fields" "yes" \
+  "$(SESSION_NOTES_STORE="$fixture_directory/partial.json" bash "$cli_path" list 2>&1 | grep -q 'note 1 Note of a partial session' && echo yes || echo no)"
+
+printf 'not json' > "$fixture_directory/broken.json"
+printf 'q' | SESSION_NOTES_STORE="$fixture_directory/broken.json" bash "$cli_path" browse > /dev/null 2>&1
+expect_equal "browse of an unreadable store fails" "1" "$?"
 
 write_fixture_store
-browse_with_keys 'jdyq' > /dev/null
+browse_with_keys 'jjdyq' > /dev/null
 expect_equal "browse deletes the selected note after confirming" '["Login bug was a stale cookie"]' \
   "$(stored_notes_of_first_session)"
 
 write_fixture_store
-browse_with_keys '\e[Bdyq' > /dev/null
+browse_with_keys '\e[B\e[Bdyq' > /dev/null
 expect_equal "browse moves the selection with the arrow keys" '["Login bug was a stale cookie"]' \
   "$(stored_notes_of_first_session)"
 
 write_fixture_store
-browse_with_keys 'dnq' > /dev/null
+browse_with_keys 'jjdnq' > /dev/null
 expect_equal "browse keeps the note when delete is not confirmed" \
   '["Login bug was a stale cookie","Deploy is on Friday"]' "$(stored_notes_of_first_session)"
 
@@ -117,7 +131,7 @@ write_fixture_store
 editor_path="$fixture_directory/editor.sh"
 printf '#!/usr/bin/env bash\nprintf "Cookie expiry was wrong\\n\\n" > "$1"\n' > "$editor_path"
 chmod +x "$editor_path"
-printf 'eq' | EDITOR="$editor_path" VISUAL="" bash "$cli_path" browse > /dev/null 2>&1
+printf 'jeq' | EDITOR="$editor_path" VISUAL="" bash "$cli_path" browse > /dev/null 2>&1
 expect_equal "browse edits the selected note in the editor" \
   '["Cookie expiry was wrong","Deploy is on Friday"]' "$(stored_notes_of_first_session)"
 
@@ -127,9 +141,19 @@ expect_equal "browse views the session of the selected note" "yes" \
   "$(grep -q 'fix the login bug' <<< "$output" && grep -q 'pnpm test' <<< "$output" && echo yes || echo no)"
 
 write_fixture_store
-jq '.notes |= map(del(.notes))' "$SESSION_NOTES_STORE" > "$fixture_directory/empty.json"
+printf '{"notes": []}' > "$fixture_directory/empty.json"
+write_fixture_store
+browse_with_keys 'jjjdyq' > /dev/null
+expect_equal "browse deletes the selected session after confirming" '["session-b"]' \
+  "$(jq -c '[.notes[].sessionId]' "$SESSION_NOTES_STORE")"
+
+write_fixture_store
+printf 'eq' | EDITOR="$editor_path" VISUAL="" bash "$cli_path" browse > /dev/null 2>&1
+expect_equal "browse edit on a session changes nothing" \
+  '["Login bug was a stale cookie","Deploy is on Friday"]' "$(stored_notes_of_first_session)"
+
 output="$(printf 'q' | SESSION_NOTES_STORE="$fixture_directory/empty.json" bash "$cli_path" browse 2>&1)"
-expect_equal "browse without notes says so" "No notes to browse." "$output"
+expect_equal "browse without sessions says so" "No session notes yet." "$output"
 
 rm -f "$SESSION_NOTES_STORE"
 output="$(bash "$cli_path" list 2>&1)"

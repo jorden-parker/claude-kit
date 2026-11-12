@@ -27,6 +27,26 @@ text_line() {
   printf '{"type":"assistant","uuid":"%s","message":{"role":"assistant","content":[{"type":"text","text":"%s"}]}}' "$1" "$2"
 }
 
+qwen_prompt_line() {
+  printf '{"type":"user","uuid":"%s","provenance":"real_user","message":{"role":"user","parts":[{"text":"%s"}]}}' "$1" "$2"
+}
+
+qwen_call_line() {
+  printf '{"type":"assistant","uuid":"%s","provenance":"assistant_output","message":{"role":"model","parts":[{"functionCall":{"id":"%s","name":"%s","args":%s}}]}}' "$1" "$1" "$2" "$3"
+}
+
+qwen_tool_result_line() {
+  printf '{"type":"tool_result","uuid":"%s","provenance":"tool_result","message":{"role":"user","parts":[{"functionResponse":{"id":"%s","name":"%s","response":{"output":"ok"}}}]}}' "$1" "$1" "$2"
+}
+
+qwen_notification_line() {
+  printf '{"type":"user","uuid":"%s","subtype":"notification","provenance":"system","message":{"role":"user","parts":[{"text":"%s"}]}}' "$1" "$2"
+}
+
+qwen_text_line() {
+  printf '{"type":"assistant","uuid":"%s","provenance":"assistant_output","message":{"role":"model","parts":[{"text":"%s"}]}}' "$1" "$2"
+}
+
 run_gate() {
   local transcript_path="$1" session_id="$2" stop_hook_active="${3:-false}"
   printf '{"session_id":"%s","transcript_path":"%s","cwd":"%s","stop_hook_active":%s}' \
@@ -210,6 +230,56 @@ write_transcript "$transcript" \
   "$(text_line a4 'Done.')"
 run_gate "$transcript" session-code-verify-then-docs; status=$?
 expect_exit "allows a trailing docs edit after the code was verified" 0 "$status"
+
+transcript="$fixture_directory/qwen-edit-then-stop.jsonl"
+write_transcript "$transcript" \
+  "$(qwen_prompt_line u1 'fix the bug')" \
+  "$(qwen_call_line a1 edit '{"file_path":"/x/app.py","old_string":"a","new_string":"b"}')" \
+  "$(qwen_tool_result_line r1 edit)" \
+  "$(qwen_text_line a2 'Done.')"
+run_gate "$transcript" session-qwen-edit-then-stop; status=$?
+expect_exit "Qwen Code: blocks when the last action of the turn is an edit with no verification after it" 2 "$status"
+
+transcript="$fixture_directory/qwen-edit-then-shell.jsonl"
+write_transcript "$transcript" \
+  "$(qwen_prompt_line u1 'fix the bug')" \
+  "$(qwen_call_line a1 write_file '{"file_path":"/x/app.py","content":"b"}')" \
+  "$(qwen_tool_result_line r1 write_file)" \
+  "$(qwen_call_line a2 run_shell_command '{"command":"pytest -q"}')" \
+  "$(qwen_tool_result_line r2 run_shell_command)" \
+  "$(qwen_text_line a3 'Done, tests pass.')"
+run_gate "$transcript" session-qwen-edit-then-shell; status=$?
+expect_exit "Qwen Code: allows when a run_shell_command follows the last edit" 0 "$status"
+
+transcript="$fixture_directory/qwen-edit-then-read.jsonl"
+write_transcript "$transcript" \
+  "$(qwen_prompt_line u1 'fix the bug')" \
+  "$(qwen_call_line a1 edit '{"file_path":"/x/app.py","old_string":"a","new_string":"b"}')" \
+  "$(qwen_tool_result_line r1 edit)" \
+  "$(qwen_call_line a2 read_file '{"file_path":"/x/app.py"}')" \
+  "$(qwen_tool_result_line r2 read_file)" \
+  "$(qwen_text_line a3 'Done.')"
+run_gate "$transcript" session-qwen-edit-then-read; status=$?
+expect_exit "Qwen Code: allows when a read_file follows the last edit" 0 "$status"
+
+transcript="$fixture_directory/qwen-notification-between.jsonl"
+write_transcript "$transcript" \
+  "$(qwen_prompt_line u1 'fix the bug')" \
+  "$(qwen_call_line a1 edit '{"file_path":"/x/app.py","old_string":"a","new_string":"b"}')" \
+  "$(qwen_tool_result_line r1 edit)" \
+  "$(qwen_notification_line n1 'background task finished')" \
+  "$(qwen_text_line a2 'Done.')"
+run_gate "$transcript" session-qwen-notification; status=$?
+expect_exit "Qwen Code: a system notification does not start a new turn" 2 "$status"
+
+transcript="$fixture_directory/qwen-docs-only.jsonl"
+write_transcript "$transcript" \
+  "$(qwen_prompt_line u1 'update the readme')" \
+  "$(qwen_call_line a1 edit '{"file_path":"/x/README.md","old_string":"a","new_string":"b"}')" \
+  "$(qwen_tool_result_line r1 edit)" \
+  "$(qwen_text_line a2 'Done.')"
+run_gate "$transcript" session-qwen-docs-only; status=$?
+expect_exit "Qwen Code: allows a turn that only changed docs" 0 "$status"
 
 transcript="$fixture_directory/no-transcript.jsonl"
 run_gate "$transcript" session-missing; status=$?

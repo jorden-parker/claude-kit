@@ -10,24 +10,31 @@ transcript_path="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>
 
 current_turn_actions="$(jq -c '
   def is_user_prompt:
-    .type == "user"
-    and (.isMeta != true)
-    and ((.message.content | type) == "string"
-         or ((.message.content | type) == "array"
-             and all(.message.content[]; .type != "tool_result")));
+    (.type == "user"
+     and (.isMeta != true)
+     and ((.message.content | type) == "string"
+          or ((.message.content | type) == "array"
+              and all(.message.content[]; .type != "tool_result"))))
+    or (.type == "user" and .provenance == "real_user");
   def is_non_code_extension:
     test("\\.(md|mdx|markdown|txt|rst|adoc|json|jsonc|jsonl|ya?ml|toml|ini|cfg|conf|env|lock|csv|tsv|log|svg|png|jpe?g|gif)$"; "i");
   def is_scratch_location:
     test("/\\.claude/(projects|plans|todos|file-history|paste-cache|session-env)/|/scratchpad/|^/(private/)?tmp/");
   def is_code_path: (length > 0) and (is_non_code_extension | not) and (is_scratch_location | not);
+  def tool_calls:
+    if (.message.content | type) == "array" then
+      [.message.content[] | select(.type == "tool_use") | {name, input}]
+    elif (.message.parts | type) == "array" then
+      [.message.parts[] | select(.functionCall) | {name: .functionCall.name, input: .functionCall.args}]
+    else [] end;
   def bash_changed_code_paths:
     [(.toolUseResult.bashEditDiff.files? // [])[]
      | (if type == "object" then .filePath else . end)
      | select(is_code_path)];
   if is_user_prompt then {kind: "prompt", uuid: .uuid}
-  elif .type == "assistant" and (.message.content | type) == "array" then
-    .message.content[] | select(.type == "tool_use")
-    | if .name == "Edit" or .name == "Write" or .name == "NotebookEdit" then
+  elif .type == "assistant" then
+    tool_calls[]
+    | if (.name | IN("Edit", "Write", "NotebookEdit", "edit", "write_file", "notebook_edit")) then
         (.input.file_path // .input.notebook_path // "") as $edited_path
         | if ($edited_path | is_code_path) then {kind: "edit", path: $edited_path}
           else {kind: "non_code_edit"} end
@@ -47,7 +54,7 @@ last_mutation_line_number="$(printf '%s\n' "$turn_actions" \
 
 verification_after_last_mutation="$(printf '%s\n' "$turn_actions" \
   | tail -n +"$((last_mutation_line_number + 1))" \
-  | jq -r 'select(.kind == "tool" and (.name | IN("Bash", "Read", "Grep", "Glob")))
+  | jq -r 'select(.kind == "tool" and (.name | IN("Bash", "Read", "Grep", "Glob", "run_shell_command", "read_file", "grep_search", "glob")))
       | "verified"' | head -n 1)"
 [ "$verification_after_last_mutation" = "verified" ] && exit 0
 

@@ -50,6 +50,8 @@ expect_equal "adds completion to .zshrc" "1" "$(completion_line_count "$fresh_ho
 expect_equal "adds completion to .zshrc when already on PATH" "1" "$(completion_line_count "$on_path_home")"
 run_install "$on_path_home" "$on_path_home/.local/bin:$system_path" > /dev/null
 expect_equal "a second run does not add completion again" "1" "$(completion_line_count "$on_path_home")"
+expect_equal "the completion line hides errors" "1" \
+  "$(grep -cF 'eval "$(session-notes completion zsh 2>/dev/null)"' "$on_path_home/.zshrc")"
 
 blocked_home="$fixture_directory/blocked"
 mkdir -p "$blocked_home/.local/bin"

@@ -17,7 +17,7 @@ if [ "$(basename "${SHELL:-}")" = "zsh" ]; then
   # shellcheck disable=SC2016
   path_line='export PATH="$HOME/.local/bin:$PATH"'
   # shellcheck disable=SC2016
-  completion_line='(( $+commands[session-notes] )) && eval "$(session-notes completion zsh)"'
+  completion_line='(( $+commands[session-notes] )) && eval "$(session-notes completion zsh 2>/dev/null)"'
   if [ "$is_on_path" = false ] && ! grep -qsF "$path_line" "$zshrc_path"; then
     printf '\n%s\n' "$path_line" >> "$zshrc_path"
     printf 'Added ~/.local/bin to your PATH in %s\n' "$zshrc_path"

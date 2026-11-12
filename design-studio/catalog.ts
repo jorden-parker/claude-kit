@@ -49,8 +49,57 @@ const ICON_SHAPES: Record<string, string> = {
   map: '<path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
   bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/>',
   gift: '<rect x="3" y="9" width="18" height="12"/><path d="M12 9v12M3 13h18M12 9c-2-4-7-3-5 0zM12 9c2-4 7-3 5 0z"/>',
+  bread: '<path d="M5 11a4 4 0 0 1 2-7h10a4 4 0 0 1 2 7v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1zM10 8v3M14 8v3"/>',
+  coffee: '<path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM17 10h1a3 3 0 0 1 0 6h-1M8 3v3M12 3v3"/>',
+  cake: '<path d="M4 20v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7zM4 16h16M12 11V7M12 4v.5"/>',
+  fork: '<path d="M7 3v7a2 2 0 0 0 4 0V3M9 12v9M17 21V3c-2 1-3 4-3 8h3"/>',
+  glass: '<path d="M7 3h10l-1 6a4 4 0 0 1-8 0zM12 13v8M8 21h8"/>',
+  book: '<path d="M4 5a2 2 0 0 1 2-2h14v15H6a2 2 0 0 0-2 2zM4 20a2 2 0 0 0 2 2h14v-4M9 8h6"/>',
+  cap: '<path d="M2 9l10-5 10 5-10 5zM6 11.5V16c2 2.5 10 2.5 12 0v-4.5M22 9v6"/>',
+  pen: '<path d="M4 20l1-5L16 4l4 4L9 19zM14 6l4 4"/>',
+  bike: '<circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 16l3.5-8H15l3 8M9.5 8l2.5 8 3-8M8 5h3M15 8l-1-3h2"/>',
+  car: '<path d="M3 16v-4l2-5h14l2 5v4zM3 12h18"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/>',
+  plane: '<path d="M21 3L3 10l7 3 3 7zM10 13l5-4"/>',
+  rocket: '<path d="M12 2c4 3 5 8 3 13H9C7 10 8 5 12 2zM9 15l-3 3 1-6M15 15l3 3-1-6M11 19l1 3 1-3"/><circle cx="12" cy="9" r="1.5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+  mountain: '<path d="M2 20l7-13 4 7 2.5-4L22 20z"/>',
+  tent: '<path d="M12 4L3 20h18zM12 13l-3 7M12 13l3 7"/>',
+  tree: '<path d="M12 3l6 8h-3l4 6H5l4-6H6zM12 17v4"/>',
+  flower: '<circle cx="12" cy="8" r="5"/><circle cx="12" cy="8" r="1.5"/><path d="M12 13v8M12 18c-3 0-5-1-5-4M12 16c3 0 5-1 5-4"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+  moon: '<path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/>',
+  drop: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+  flame: '<path d="M12 3c1 4 6 6 6 11a6 6 0 0 1-12 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3 0-6 2-9.5z"/>',
+  water: '<path d="M2 9q2.5-3 5 0t5 0 5 0 5 0M2 15q2.5-3 5 0t5 0 5 0 5 0"/>',
+  fish: '<path d="M3 12c3-5 9-6 14-2l4-3v10l-4-3c-5 4-11 3-14-2zM8 11v.5"/>',
+  paw: '<circle cx="7" cy="9" r="1.8"/><circle cx="12" cy="6.5" r="1.8"/><circle cx="17" cy="9" r="1.8"/><path d="M12 12c-3 0-5 3-5 5.5 0 2 2.5 2 5 1 2.5 1 5 1 5-1C17 15 15 12 12 12z"/>',
+  home: '<path d="M3 11l9-8 9 8M5 10v10h14V10M10 20v-6h4v6"/>',
+  building: '<path d="M5 21V4h9v17M14 9h5v12M3 21h18M8 8h3M8 12h3M8 16h3"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  lamp: '<path d="M9 18h6M10 21h4M8 14a6 6 0 1 1 8 0c-.7.7-1 1.5-1 2.5H9c0-1-.3-1.8-1-2.5z"/>',
+  camera: '<path d="M3 8h4l2-3h6l2 3h4v12H3z"/><circle cx="12" cy="13" r="4"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>',
+  headphones: '<path d="M4 15v-3a8 8 0 0 1 16 0v3M4 14h3v6H5a1 1 0 0 1-1-1zM20 14h-3v6h2a1 1 0 0 0 1-1z"/>',
+  play: '<circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4z"/>',
+  game: '<path d="M6 8h12a4 4 0 0 1 4 4v3a3 3 0 0 1-5.5 1.5L15 15H9l-1.5 1.5A3 3 0 0 1 2 15v-3a4 4 0 0 1 4-4zM7 10.5v3M5.5 12h3M16 12h.5"/>',
+  cart: '<path d="M3 4h2l2.5 11h10l2-8H6.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/>',
+  bag: '<path d="M5 8h14l1 13H4zM9 8V6a3 3 0 0 1 6 0v2"/>',
+  tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
+  card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
+  dumbbell: '<path d="M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12"/>',
+  health: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
+  scissors: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.5 7.5L21 19M8.5 16.5L21 5"/>',
+  wrench: '<path d="M15 4a4 4 0 0 0-4.5 5.5L4 16l4 4 6.5-6.5A4 4 0 0 0 20 9l-3 2-2-2 2-3z"/>',
+  code: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/>',
+  phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
 };
 const LOGO_SHAPES: Record<string, string> = {
+  plain: "<g/>",
   circle: '<circle cx="20" cy="20" r="18"/>',
   square: '<rect x="3" y="3" width="34" height="34" rx="8"/>',
   diamond: '<rect x="6" y="6" width="28" height="28" rx="4" transform="rotate(45 20 20)"/>',
@@ -170,8 +219,14 @@ const PLACEMENT_CLASS_STEMS: Record<string, string> = {
 const renderArtFrame = (alt: string, ratio: string, frameClass: string, svgClass: string, drawing: string) =>
   `<div class="image image-art${frameClass} ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}"><svg class="graphic${svgClass}" viewBox="0 0 ${ART_WIDTHS[ratio]} ${ART_HEIGHT}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${drawing}</svg></div>`;
 
+const drawIconPicture = (iconShape: string, ratio: string) => {
+  const centerX = ART_WIDTHS[ratio]! / 2;
+  return `<circle class="tone-accent" opacity="0.14" cx="${centerX}" cy="50" r="42"/><circle class="tone-accent outline" opacity="0.3" stroke-width="1" cx="${centerX}" cy="50" r="48"/><g class="tone-accent outline" stroke-width="1.6" stroke-linejoin="round" transform="translate(${centerX - 30} 20) scale(2.5)">${iconShape}</g>`;
+};
+
 const renderImage = (givenAlt: string, ratio: string, art = "") => {
   const alt = /^\w+:\/\//.test(givenAlt) ? "Picture" : givenAlt;
+  if (ICON_SHAPES[art]) return renderArtFrame(alt, ratio, "", " art-icon", drawIconPicture(ICON_SHAPES[art], ratio));
   return ART_DRAWINGS[art]
     ? renderArtFrame(alt, ratio, "", ` art-${art}`, ART_DRAWINGS[art])
     : `<div class="image ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}">${IMAGE_ICON}<span>${alt === givenAlt ? escapeHtml(alt) : ""}</span></div>`;
@@ -183,12 +238,12 @@ const renderIcon = (icon: string) =>
 const renderLogoMark = (name: string, shape: string, icon: string) =>
   `<svg class="logo-mark logo-${shape}" viewBox="0 0 40 40" aria-hidden="true">${LOGO_SHAPES[shape]}${
     ICON_SHAPES[icon]
-      ? `<g class="logo-icon" transform="translate(9 9) scale(0.92)">${ICON_SHAPES[icon]}</g>`
+      ? `<g class="logo-icon" transform="${shape === "plain" ? "translate(2 2) scale(1.5)" : "translate(9 9) scale(0.92)"}">${ICON_SHAPES[icon]}</g>`
       : `<text class="logo-letter" x="20" y="21" text-anchor="middle" dominant-baseline="central">${escapeHtml(name.trim().charAt(0).toUpperCase())}</text>`
   }</svg>`;
 
 const shapeProps = z.object({
-  shape: defineOption(Object.keys(DRAWN_SHAPES), "circle"),
+  shape: plainText,
   x: z.coerce.number().min(0).max(100).default(50),
   y: z.coerce.number().min(0).max(100).default(50),
   size: z.coerce.number().min(1).max(100).default(30),
@@ -196,10 +251,17 @@ const shapeProps = z.object({
   rotate: z.coerce.number().default(0),
 });
 
+const readIconShape = (icon: string) =>
+  ICON_SHAPES[icon] && {
+    isOutline: true,
+    draw: (size: number) =>
+      `<g transform="scale(${size / 24}) translate(-12 -12)" stroke-width="2" stroke-linejoin="round">${ICON_SHAPES[icon]}</g>`,
+  };
+
 const renderShape = (givenShape: unknown, ratio: string) => {
   if (!givenShape || typeof givenShape !== "object") return "";
   const drawn = readProps(shapeProps, { type: "Shape", props: givenShape as Record<string, unknown> });
-  const { isOutline, draw } = DRAWN_SHAPES[drawn.shape]!;
+  const { isOutline, draw } = DRAWN_SHAPES[drawn.shape] ?? readIconShape(drawn.shape) ?? DRAWN_SHAPES.circle!;
   return `<g transform="translate(${(drawn.x * ART_WIDTHS[ratio]!) / 100} ${drawn.y}) rotate(${drawn.rotate})" class="tone-${drawn.tone}${isOutline ? " outline" : ""}">${draw(drawn.size)}</g>`;
 };
 
@@ -463,16 +525,16 @@ const components = {
     (props) => renderAvatar(props.name, props.detail)
   ),
   Image: defineComponent(
-    "A picture. With art it is drawn artwork in the theme's colors; with art photo it is a placeholder for a photo, described in alt.",
+    "A picture, described in alt. art draws it in the theme's colors: an ICONS name draws that subject large, an ARTWORK name draws a pattern or a scene. Without art it is a placeholder for a photo.",
     z.object({
       alt: plainText,
       ratio: defineOption(readKeys(IMAGE_RATIOS), "wide"),
-      art: defineOption(["photo", ...Object.keys(ART_DRAWINGS)], "photo"),
+      art: plainText,
     }),
     (props) => renderImage(props.alt, props.ratio, props.art)
   ),
   Graphic: defineComponent(
-    "A picture you draw yourself from shapes, such as a record, a sunrise, a coffee cup or an abstract pattern. Each shape has x and y from 0 to 100 (its center, from the left and from the top), size from 1 to 100, and rotate in degrees. Shapes later in the list lie on top. Use 5 to 10 shapes that overlap and touch, so they read as one picture.",
+    "A picture you compose yourself. A shape is any ICONS name, drawn as that subject, or a geometric shape. Each has x and y from 0 to 100 (its center, from the left and from the top), size from 1 to 100, and rotate in degrees. Later shapes lie on top. Build a scene of the subject: one or two large icons, with a few geometric shapes around them as ground, sky or accent.",
     z.object({
       alt: plainText,
       ratio: defineOption(readKeys(IMAGE_RATIOS), "wide"),
@@ -489,10 +551,10 @@ const components = {
       )
   ),
   Logo: defineComponent(
-    "A brand mark you design: a shape holding an icon from ICONS, or the first letter of the name when icon is empty, beside the name and an optional tagline.",
+    "A brand mark you design: an icon from ICONS that shows what the brand does, beside the name and an optional tagline. Shape plain draws the icon alone; the other shapes put it in a filled badge. With no icon it shows the first letter of the name.",
     z.object({
       name: plainText,
-      shape: defineOption(Object.keys(LOGO_SHAPES), "circle"),
+      shape: defineOption(Object.keys(LOGO_SHAPES), "plain"),
       icon: plainText,
       tagline: plainText,
       size: defineOption(["sm", "md", "lg"], "md"),
@@ -920,6 +982,8 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     ".logo-lg .logo-mark{width:72px;height:72px}",
     `.logo-mark>:first-child{fill:${accent}}`,
     `.logo-letter{fill:${onAccent};font-family:${heading};font-size:20px;font-weight:800}`,
+    `.logo-plain .logo-icon{stroke:${accent}}`,
+    `.logo-plain .logo-letter{fill:${accent};font-size:30px}`,
     `.logo-icon{fill:none;stroke:${onAccent};stroke-width:2;stroke-linecap:round;stroke-linejoin:round}`,
     ".logo-text{display:flex;flex-direction:column}",
     `.logo-name{font-family:${heading};font-size:20px;font-weight:700}`,
@@ -1080,11 +1144,11 @@ const DESIGN_MOVES: Record<string, string[]> = {
     "a Split with ratio wide-right: a narrow column of Stats or a List, then the main content",
   ],
   Artwork: [
-    "give the brand a logo with a shape and an icon that fit the product",
-    "draw one Graphic of 5 to 9 shapes that pictures the product",
-    "use Image art instead of photos, a different art each time",
-    "use large Icons as decoration beside the headings",
-    "a Logo with a tagline, and one Graphic with background accent",
+    "a logo whose icon shows the product, drawn plain with no shape around it, and Images whose art is an icon of the subject",
+    "one Graphic that is a scene of the subject: a large icon or two, with geometric shapes as ground and sky",
+    "a logo in a badge shape with an icon of the product, and pattern art for mood beside pictures of the subject",
+    "large Icons of the subject as decoration beside the headings, a different fitting icon for each",
+    "a Logo with a tagline and an icon of the product, and a Hero whose imageArt is an icon of the subject",
   ],
 };
 
@@ -1139,8 +1203,9 @@ export const buildCatalogPrompt = (tokens: StyleToken[]) =>
     [
       `ICONS: ${Object.keys(ICON_SHAPES).join(", ")}.`,
       `ARTWORK names, for an Image's art and a Hero's imageArt: ${Object.keys(ART_DRAWINGS).join(", ")}.`,
-      `- A Graphic's shapes: {"shape":"${Object.keys(DRAWN_SHAPES).join(" | ")}","x":50,"y":50,"size":30,"tone":"${SHAPE_TONES.join(" | ")}","rotate":0}.`,
-      "- You make the pictures. Give the brand a logo: on the Nav, or as a Logo. Draw a Graphic from shapes when the product has a clear symbol: 3 to 6 large shapes that read as one thing, such as a circle sun over two half hills, a triangle mountain above a wave, a ring around a star. Use art for mood, and photo only for a real product photo.",
+      `- A Graphic's shapes: {"shape":"<an ICONS name> | ${Object.keys(DRAWN_SHAPES).join(" | ")}","x":50,"y":50,"size":30,"tone":"${SHAPE_TONES.join(" | ")}","rotate":0}.`,
+      "- You make the pictures, and they show what this product is: a bakery gets bread, a bike shop a bike, a podcast a mic. Never pick an icon that has nothing to do with the subject.",
+      "- Give the brand a logo with such an icon: on the Nav, or as a Logo. Give each Feature its own fitting icon. Use an icon name as an Image's art or a Hero's imageArt for a picture of the subject, and compose a Graphic from icons for a scene. Patterns and geometric shapes are for mood, and photo only for a real product photo.",
     ].join("\n"),
     [
       "HEADERS AND TITLES. You shape them too, so no two screens open alike:",

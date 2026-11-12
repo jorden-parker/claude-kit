@@ -382,7 +382,7 @@ test("renderSpecToHtml draws a standalone icon, and a known icon for an unknown 
     elements: {
       page: { type: "Page", children: ["icon", "unknown"] },
       icon: { type: "Icon", props: { icon: "bolt", size: "lg", tone: "accent" } },
-      unknown: { type: "Feature", props: { icon: "rocket", title: "Fast" } },
+      unknown: { type: "Feature", props: { icon: "no-such-icon", title: "Fast" } },
     },
   });
   expect(html).toContain('<span class="icon icon-lg icon-accent"><svg');
@@ -543,4 +543,39 @@ test("the stylesheet styles every header and title option, and the prompt tells 
     expect(css).toContain(selector);
   }
   expect(buildCatalogPrompt(THEME_TOKENS)).toContain("HEADERS AND TITLES");
+});
+
+test("the icons cover real subjects, so a bakery, a bookshop or a bike shop gets its own picture", () => {
+  const fallbackIcon = renderOne("Icon", { icon: "no-such-icon" });
+  for (const icon of ["bread", "coffee", "book", "bike", "mountain", "music", "home", "camera", "cart", "dumbbell", "mic", "tree"]) {
+    expect(renderOne("Icon", { icon })).not.toBe(fallbackIcon);
+    expect(buildCatalogPrompt(THEME_TOKENS)).toContain(`, ${icon}`);
+  }
+});
+
+test("a logo is by default its icon alone, and a geometric shape around it stays a choice", () => {
+  const plainLogo = renderOne("Logo", { name: "Loaf", icon: "bread" });
+  expect(plainLogo).toContain('<svg class="logo-mark logo-plain"');
+  expect(plainLogo).toContain("M5 11a4 4");
+  expect(renderOne("Logo", { name: "Loaf", icon: "bread", shape: "hexagon" })).toContain("logo-hexagon");
+  expect(renderOne("Nav", { brand: "Loaf", logo: "plain", logoIcon: "bread" })).toContain("logo-plain");
+  expect(renderCatalogCss(THEME_TOKENS)).toContain(".logo-plain .logo-icon{");
+});
+
+test("an icon name works as a picture's art and as a shape of a Graphic", () => {
+  const picture = renderOne("Image", { alt: "A loaf", art: "bread" });
+  expect(picture).toContain('<svg class="graphic art-icon"');
+  expect(picture).toContain("M5 11a4 4");
+  expect(renderOne("Hero", { title: "Bread", image: "A loaf", imageArt: "bread" })).toContain("art-icon");
+  const graphic = renderOne("Graphic", { alt: "Ride", shapes: [{ shape: "bike", x: 50, y: 50, size: 60 }, { shape: "no-such-shape" }] });
+  expect(graphic).toContain('class="tone-accent outline"><g transform="scale(2.5) translate(-12 -12)"');
+  expect(graphic).toContain('<circle r="15"/>');
+});
+
+test("the prompt asks for pictures of the subject, with geometric shapes as one choice among them", () => {
+  const prompt = buildCatalogPrompt(THEME_TOKENS);
+  expect(prompt).toContain("show what this product is");
+  expect(prompt).not.toContain("a ring around a star");
+  const artworkIdeas = Array.from({ length: 40 }, (_, drawIndex) => pickDesignMoves(() => drawIndex / 40).split("\n").at(-1)!);
+  expect(artworkIdeas.filter((idea) => /subject|product/.test(idea)).length).toBe(artworkIdeas.length);
 });

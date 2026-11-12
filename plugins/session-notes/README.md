@@ -35,13 +35,14 @@ Limits keep the store small: the latest 100 sessions, 100 entries per list, 500 
 
 `bin/session-notes` reads and edits the same store from your own terminal. It needs `jq`.
 
-Run `session-notes` with no arguments to browse every session in a full-screen list, each with its notes indented under it:
+Run `session-notes` with no arguments to browse every session in a full-screen list, each with its notes indented under it. The list is a small Go program built with Charm's Bubble Tea; the first run builds it, so it needs Go (`brew install go`) once.
 
 - `↑`/`↓` (or `j`/`k`) move the selection
-- `enter` (or `v`) shows the whole session in `less`
+- `enter` (or `v`) shows the whole session; `esc` or `q` goes back to the list, as the footer says
 - `e` on a note opens it in `$VISUAL` or `$EDITOR` (default `vi`); saving it empty leaves the note as it was
 - `d` deletes the selected note, or the whole session, after you press `y`
-- `q` (or `esc`) quits
+- `/` filters the list
+- `q` quits from the list; the footer always shows the keys
 
 The same commands work without the list, for scripts:
 

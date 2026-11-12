@@ -34,9 +34,8 @@ require_number() {
 }
 
 list_notes() {
-  jq -r --argjson only_session_index "${1:-null}" '
-    (.notes // []) | to_entries
-    | map(select($only_session_index == null or .key == $only_session_index)) | map(
+  jq -r '
+    (.notes // []) | to_entries | map(
       .key as $session_index | .value as $session |
       ($session.startedAt // "") as $started_at |
       ["[\($session_index + 1)] \($started_at[0:10]) \($started_at[11:16]) UTC  \($session.cwd // "")"]
@@ -66,144 +65,17 @@ replace_note() {
   mv "$updated_store" "$store_path"
 }
 
-load_note_rows() {
-  note_rows=()
-  local store_rows note_row
-  store_rows="$(jq -r '
-    def one_line: if type == "string" then . else tojson end | gsub("[\t\n]"; " ");
-    (.notes // []) | to_entries[] | .key as $session_index | .value as $session
-    | ($session.startedAt // "") as $started_at
-    | "\($session_index + 1)\t\t\($started_at[0:10]) \($started_at[11:16])  \($session.cwd // "")  \(($session.prompts // [])[0] // "" | one_line)",
-      (($session.notes // []) | to_entries[] | "\($session_index + 1)\t\(.key + 1)\t    note \(.value | one_line)")
-  ' "$store_path")" || fail "Could not read the session notes in $store_path."
-  while IFS= read -r note_row; do
-    [ -z "$note_row" ] || note_rows+=("$note_row")
-  done <<< "$store_rows"
-}
-
-delete_session() {
-  local updated_store
-  updated_store="$(mktemp "$store_path.XXXXXX")"
-  jq --argjson session_index $(($1 - 1)) 'del(.notes[$session_index])' "$store_path" > "$updated_store"
-  mv "$updated_store" "$store_path"
-}
-
-read_key() {
-  local key escape_sequence
-  if ! IFS= read -rsn1 key; then
-    pressed_key=quit
-    return
-  fi
-  case "$key" in
-    $'\e')
-      IFS= read -rsn2 -t 1 escape_sequence || true
-      case "$escape_sequence" in
-        '[A') pressed_key=up ;;
-        '[B') pressed_key=down ;;
-        '') pressed_key=quit ;;
-        *) pressed_key=none ;;
-      esac
-      ;;
-    k) pressed_key=up ;;
-    j) pressed_key=down ;;
-    '' | v) pressed_key=view ;;
-    e) pressed_key=edit ;;
-    d) pressed_key=delete ;;
-    q) pressed_key=quit ;;
-    *) pressed_key=none ;;
-  esac
-}
-
-enter_full_screen() {
-  printf '\033[?1049h\033[?25l'
-}
-
-leave_full_screen() {
-  printf '\033[?1049l\033[?25h'
-}
-
-draw_note_list() {
-  local columns lines visible_row_count row_index note_display
-  columns="$(tput cols 2> /dev/null || echo 80)"
-  lines="$(tput lines 2> /dev/null || echo 24)"
-  visible_row_count=$((lines > 5 ? lines - 4 : 1))
-  if [ "$selected_index" -lt "$first_visible_index" ]; then
-    first_visible_index="$selected_index"
-  elif [ "$selected_index" -ge $((first_visible_index + visible_row_count)) ]; then
-    first_visible_index=$((selected_index - visible_row_count + 1))
-  fi
-  printf '\033[H\033[2J\033[1mSession notes\033[0m\n\n'
-  for ((row_index = first_visible_index; row_index < ${#note_rows[@]} && row_index < first_visible_index + visible_row_count; row_index++)); do
-    note_display="${note_rows[row_index]#*$'\t'*$'\t'}"
-    note_display="${note_display:0:columns-2}"
-    if [ "$row_index" -eq "$selected_index" ]; then
-      printf '\033[7m> %s\033[0m\n' "$note_display"
-    else
-      printf '  %s\n' "$note_display"
-    fi
-  done
-  printf '\n\033[2m↑/↓ move  enter view  e edit note  d delete  q quit\033[0m'
-}
-
-edit_note() {
-  local session_number="$1" note_number="$2" note_file note_text
-  note_file="$(mktemp -t session-note.XXXXXX)"
-  jq -r --argjson session_index $((session_number - 1)) --argjson note_index $((note_number - 1)) \
-    '.notes[$session_index].notes[$note_index]' "$store_path" > "$note_file"
-  leave_full_screen
-  # shellcheck disable=SC2086
-  ${VISUAL:-${EDITOR:-vi}} "$note_file"
-  enter_full_screen
-  note_text="$(tr '\n' ' ' < "$note_file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  rm -f "$note_file"
-  [ -n "$note_text" ] || return 0
-  replace_note "$session_number" "$note_number" "$(jq -cn --arg text "${note_text:0:500}" '[$text]')"
-}
-
 browse_notes() {
-  load_note_rows
-  if [ "${#note_rows[@]}" -eq 0 ]; then
-    printf 'No session notes yet.\n'
-    return
+  local script_path="$0" tui_directory browser_path
+  [ ! -L "$script_path" ] || script_path="$(readlink "$script_path")"
+  tui_directory="$(cd "$(dirname "$script_path")/../tui" && pwd)"
+  browser_path="${XDG_CACHE_HOME:-$HOME/.cache}/session-notes/browse-$(printf '%s' "$tui_directory" | cksum | cut -d ' ' -f 1)"
+  if [ ! -x "$browser_path" ] || [ -n "$(find "$tui_directory" -newer "$browser_path" -print -quit)" ]; then
+    command -v go > /dev/null || fail "Browsing needs Go once, to build the browser. Install it (brew install go) and run session-notes again."
+    [ ! -t 2 ] || printf 'Building the session-notes browser...\n' >&2
+    (cd "$tui_directory" && go build -o "$browser_path" .) || fail "Could not build the session-notes browser."
   fi
-  selected_index=0
-  first_visible_index=0
-  enter_full_screen
-  trap leave_full_screen EXIT
-  local session_number note_number confirmation
-  while [ "${#note_rows[@]}" -gt 0 ]; do
-    draw_note_list
-    read_key
-    session_number="${note_rows[selected_index]%%$'\t'*}"
-    note_number="${note_rows[selected_index]#*$'\t'}"
-    note_number="${note_number%%$'\t'*}"
-    case "$pressed_key" in
-      up) [ "$selected_index" -eq 0 ] || selected_index=$((selected_index - 1)) ;;
-      down) [ "$selected_index" -ge $((${#note_rows[@]} - 1)) ] || selected_index=$((selected_index + 1)) ;;
-      view) list_notes $((session_number - 1)) | less ;;
-      edit) [ -z "$note_number" ] || edit_note "$session_number" "$note_number" ;;
-      delete)
-        if [ -n "$note_number" ]; then
-          printf '\r\033[K\033[1mDelete this note? [y/N]\033[0m '
-        else
-          printf '\r\033[K\033[1mDelete this session and its notes? [y/N]\033[0m '
-        fi
-        IFS= read -rsn1 confirmation || confirmation=n
-        case "$confirmation" in
-          y | Y)
-            if [ -n "$note_number" ]; then
-              replace_note "$session_number" "$note_number" '[]'
-            else
-              delete_session "$session_number"
-            fi
-            ;;
-        esac
-        ;;
-      quit) break ;;
-    esac
-    load_note_rows
-    [ "$selected_index" -lt "${#note_rows[@]}" ] || selected_index=$((${#note_rows[@]} - 1))
-  done
+  SESSION_NOTES_STORE="$store_path" exec "$browser_path"
 }
 
 print_zsh_completion() {

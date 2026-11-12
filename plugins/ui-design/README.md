@@ -174,6 +174,17 @@ It ends with one line per number and a suggestion to run `/ui-design audit` agai
 
 Saved files that do not parse, or lack what the page needs, are skipped. In plain words, Claude opens the same page through the `open_design_gallery` tool.
 
+### Outside a session
+
+`gallery.ts` builds the same page from a terminal, across projects. It needs `bun`.
+
+```
+plugins/ui-design/gallery.ts                      # every project in ~/.claude.json
+plugins/ui-design/gallery.ts ~/src/app ~/src/web  # only these projects
+```
+
+It writes `~/.claude/ui-design/gallery.html` and opens it. `--no-open` leaves the browser alone. Each card links to the page in its own project. An apply command still has to run in a session inside that project.
+
 ## Limits
 
 - Mockups are plain HTML and CSS. They approximate the project's components; they do not render them.

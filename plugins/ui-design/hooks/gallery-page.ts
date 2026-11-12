@@ -19,6 +19,7 @@ type DesignEntry = {
   name: string;
   savedAt: string;
   project: string;
+  folderUrl?: string;
   design: Design;
 };
 
@@ -27,6 +28,7 @@ type AuditEntry = {
   name: string;
   savedAt: string;
   project: string;
+  folderUrl?: string;
   severities: string[];
   groupCount: number;
 };
@@ -266,6 +268,9 @@ export const readGalleryEntry = (
   };
 };
 
+const readPageLink = ({ name, folderUrl }: GalleryEntry) =>
+  escapeHtml(`${folderUrl ? `${folderUrl}/` : ""}${name}.html`);
+
 const describeApplyCommand = (designName: string, letter: string) =>
   `/ui-design apply ${designName} ${letter}`;
 
@@ -308,7 +313,7 @@ const renderDesignCard = (entry: DesignEntry) => {
 <p class="muted">${escapeHtml(design.project)}</p>
 <div class="chips" role="group" aria-label="Variants">${design.variants.map(renderVariantChip(name)).join("")}</div>
 <div class="apply"><code data-command-output>${escapeHtml(describeApplyCommand(name, readVariantLetter(0)))}</code><button type="button" class="button secondary" data-copy>Copy</button></div>
-<a class="button secondary" href="${escapeHtml(name)}.html">Open</a>
+<a class="button secondary" href="${readPageLink(entry)}">Open</a>
 </div>
 </article>`;
 };
@@ -329,7 +334,7 @@ const renderAuditCard = (entry: AuditEntry) => {
 <div class="card-head"><span class="pill">Audit</span>${renderSavedTime(entry.savedAt)}</div>
 <h2 class="card-title">${escapeHtml(entry.project)}</h2>
 <ul class="counts">${counts}${renderCount("Component groups", entry.groupCount)}</ul>
-<a class="button secondary" href="${escapeHtml(entry.name)}.html">Open</a>
+<a class="button secondary" href="${readPageLink(entry)}">Open</a>
 </div>
 </article>`;
 };
@@ -348,11 +353,11 @@ const renderToolbar = (total: number) =>
 const renderEmptyState = () =>
   `<section class="empty"><p>No designs yet. Run /ui-design new … to make one.</p></section>`;
 
-export const renderGalleryPage = (entries: GalleryEntry[]) => {
+export const renderGalleryPage = (entries: GalleryEntry[], title = "") => {
   const newestFirst = entries.toSorted((first, second) =>
     second.savedAt.localeCompare(first.savedAt)
   );
-  const project = newestFirst[0]?.project ?? FALLBACK_PROJECT;
+  const project = title || (newestFirst[0]?.project ?? FALLBACK_PROJECT);
   const designCount = entries.filter((entry) => entry.kind === "design").length;
   const auditCount = entries.length - designCount;
   const countLine = entries.length

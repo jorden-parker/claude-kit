@@ -106,6 +106,35 @@ test("the gallery lists designs and audits newest first, each with its own page 
   expect(middleIndex).toBeLessThan(oldestIndex);
 });
 
+test("entries from other folders link to their own folder, under the given title", () => {
+  const html = renderGalleryPage(
+    [
+      {
+        ...designEntry(
+          "design-2026-11-10-090000",
+          "2026-11-10T09:00:00Z",
+          NEW_DESIGN
+        ),
+        folderUrl: "file:///work/acme/.claude/ui-design",
+      },
+      {
+        ...auditEntry("audit-2026-11-12-120000", "2026-11-12T12:00:00Z", [], 0),
+        folderUrl: "file:///work/notes/.claude/ui-design",
+      },
+    ],
+    "All projects"
+  );
+
+  expect(html).toContain(
+    'href="file:///work/acme/.claude/ui-design/design-2026-11-10-090000.html"'
+  );
+  expect(html).toContain(
+    'href="file:///work/notes/.claude/ui-design/audit-2026-11-12-120000.html"'
+  );
+  expect(html).toContain("<h1>All projects</h1>");
+  expect(html).toContain("<title>Gallery · All projects</title>");
+});
+
 test("a redesign card shows its mode, subject, variant chips and apply command", () => {
   const html = renderGalleryPage([
     designEntry("design-2026-11-11-093000", "2026-11-11T09:30:00Z", REDESIGN),

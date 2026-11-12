@@ -39,6 +39,12 @@ claude plugin install <plugin>@claude-kit --scope user
 Other machines pick up pushed changes with
 `claude plugin marketplace update claude-kit`.
 
+To put the `session-notes` shell command on your PATH, run from the checkout:
+
+```
+./install-session-notes
+```
+
 To remove the marketplace and every plugin from it:
 
 ```

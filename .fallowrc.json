@@ -6,7 +6,17 @@
   "entry": ["plugins/*/hooks/register.ts", "plugins/*/hooks/run.ts", "plugins/*/hooks/*.test.ts", "plugins/*/server/*.mjs"],
   "duplicates": {
     // describeRecentMessages is copied between prompt-optimizer and handoff on purpose: plugins must be self-contained.
-    // formatFileStamp, readPlanFiles/readTemplateFiles and escapeHtml are copied between brainstorm and draft-pr for the same reason.
-    "ignoredClones": ["dup:e67f2e0e:2", "dup:1865dba4:2", "dup:f469e6dc:2", "dup:8038f0a0:2"]
+    // readPlanFiles/readTemplateFiles are copied between brainstorm and draft-pr for the same reason.
+    // formatFileStamp and escapeHtml are copied between brainstorm, draft-pr and design.
+    // openInBrowser, describeError and resolveProjectPath are copied between brainstorm and design.
+    "ignoredClones": [
+      "dup:e67f2e0e:2",
+      "dup:f469e6dc:2",
+      "dup:8038f0a0:2",
+      "dup:6e0b87e8:3",
+      "dup:af9f93b3:3",
+      "dup:51f3f0ab:2",
+      "dup:62f2276b:2"
+    ]
   }
 }

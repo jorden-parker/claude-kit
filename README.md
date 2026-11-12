@@ -16,6 +16,7 @@ install any of them on its own.
 | [tdd](plugins/tdd/) | Enforces red, green, refactor: blocks implementation edits until a failing test run and finishing while tests fail. |
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
 | [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
+| [design](plugins/design/) | `/design`, with `new`, `redesign`, `audit` and `apply` modes: mockups in the project's own theme, opened in the browser, and a consistency audit. |
 
 ## Install
 

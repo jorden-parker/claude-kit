@@ -212,10 +212,10 @@ test("Use this carries the apply command of its own design and variant letter", 
   const pageHtml = renderDesignPage(REDESIGN, "design-2026-11-12-153000");
 
   expect(pageHtml).toContain(
-    '<code id="command-a">/design apply design-2026-11-12-153000 A</code><button type="button" class="button primary" data-copies="command-a">Use this</button>'
+    '<code id="command-a">/ui-design apply design-2026-11-12-153000 A</code><button type="button" class="button primary" data-copies="command-a">Use this</button>'
   );
   expect(pageHtml).toContain(
-    '<code id="command-b">/design apply design-2026-11-12-153000 B</code><button type="button" class="button primary" data-copies="command-b">Use this</button>'
+    '<code id="command-b">/ui-design apply design-2026-11-12-153000 B</code><button type="button" class="button primary" data-copies="command-b">Use this</button>'
   );
 });
 

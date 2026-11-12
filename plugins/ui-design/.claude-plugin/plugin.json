@@ -1,0 +1,5 @@
+{
+  "name": "ui-design",
+  "version": "0.3.0",
+  "description": "/ui-design new and /ui-design redesign open mockups in the browser, built from the project's own colors, type, spacing and components; redesign asks for the go-ahead before it changes project code; /ui-design audit checks the theme, the components and their consistency; /ui-design apply builds the picked variant of a saved design in project code; /ui-design fix fixes numbered audit findings in project code"
+}

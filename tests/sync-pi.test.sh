@@ -37,7 +37,7 @@ output_has() { grep -qF -- "$1" <<<"$output"; }
 manifest_has() { jq -e "$2" "$package_root/$1/package.json" >/dev/null; }
 
 expect "sync exits 0" test "$sync_status" -eq 0
-for module_plugin in brainstorm design draft-pr handoff session-notes; do
+for module_plugin in brainstorm ui-design draft-pr handoff session-notes; do
   expect "$module_plugin is installed as a local package" log_has "install $package_root/$module_plugin"
   expect "$module_plugin ships its extension" test -f "$package_root/$module_plugin/plugin-host-extension.js"
   expect "$module_plugin names its extension in the manifest" manifest_has "$module_plugin" '.pi.extensions == ["./plugin-host-extension.js"]'

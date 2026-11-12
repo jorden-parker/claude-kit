@@ -138,7 +138,7 @@ const buildPage = (clipboard) => {
   const command = createElement(
     "code",
     { id: "command-a" },
-    { textContent: "/design apply A" }
+    { textContent: "/ui-design apply A" }
   );
   const copyButton = createElement("button", { "data-copies": "command-a" });
   const status = createElement("p", { id: "copy-status" });
@@ -312,10 +312,10 @@ test("the copy button copies the command it names and says so", async () => {
   page.copyButton.click();
   await settle();
 
-  assert.deepEqual(clipboard.writes, ["/design apply A"]);
+  assert.deepEqual(clipboard.writes, ["/ui-design apply A"]);
   assert.equal(
     page.status.textContent,
-    "Copied /design apply A. Paste it in the session."
+    "Copied /ui-design apply A. Paste it in the session."
   );
 });
 
@@ -330,7 +330,7 @@ test("when the clipboard refuses, the command is selected instead", async () => 
   await settle();
 
   assert.equal(page.selection.ranges.length, 1);
-  assert.equal(page.selection.ranges[0].node.textContent, "/design apply A");
+  assert.equal(page.selection.ranges[0].node.textContent, "/ui-design apply A");
   assert.equal(
     page.status.textContent,
     "Could not copy. The command is selected: press Cmd/Ctrl+C."
@@ -342,7 +342,7 @@ test("without a clipboard API, the command is selected at once", () => {
 
   page.copyButton.click();
 
-  assert.equal(page.selection.ranges[0].node.textContent, "/design apply A");
+  assert.equal(page.selection.ranges[0].node.textContent, "/ui-design apply A");
   assert.equal(
     page.status.textContent,
     "Could not copy. The command is selected: press Cmd/Ctrl+C."

@@ -1,5 +1,5 @@
 ---
-name: design
+name: ui-design
 description: Design UI as themed mockups in the browser, built from the project's own colors, type, spacing and components, or audit the project's theme and components for consistency. Use whenever the user asks to design, mock up or sketch a new screen, page or component, to redesign, restyle or rethink existing UI, to audit or check the theme, design system, design tokens, hardcoded colors, typography or component consistency, or to apply, build or implement a design variant, or to fix audit findings. Changes no project code until the user picks a variant with apply, answers the go-ahead question after redesign, or names findings with fix.
 argument-hint: "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors>"
 ---
@@ -28,16 +28,16 @@ A request in plain words picks the mode by what it asks for.
 In `new`, `redesign` and `audit`, the page is the only output.
 
 - Do not print the theme, the variants, the findings or a summary in the session, while you work or at the end.
-- Do not edit project files. The tools write to `.claude/design/` themselves.
+- Do not edit project files. The tools write to `.claude/ui-design/` themselves.
 - Your last message is the tool's one-line result, and nothing else. The one exception is a question the steps below allow, such as the go-ahead question that ends `redesign`.
 
 ## The tools
 
-Three tools, all writing to `.claude/design/` in the project. If a tool's schema is not loaded, load it with `ToolSearch` first. If the tool does not exist even then, stop and say in one line that the design plugin's tools are not loaded. Do not write a page yourself.
+Three tools, all writing to `.claude/ui-design/` in the project. If a tool's schema is not loaded, load it with `ToolSearch` first. If the tool does not exist even then, stop and say in one line that the design plugin's tools are not loaded. Do not write a page yourself.
 
-- `mcp__design__save_design_theme` checks and saves the theme as `theme.json`.
-- `mcp__design__render_design` checks the variants against the saved theme, writes the mockup page and opens it.
-- `mcp__design__render_design_audit` scans the files, merges its findings with yours, writes the audit page and opens it.
+- `mcp__ui-design__save_design_theme` checks and saves the theme as `theme.json`.
+- `mcp__ui-design__render_design` checks the variants against the saved theme, writes the mockup page and opens it.
+- `mcp__ui-design__render_design_audit` scans the files, merges its findings with yours, writes the audit page and opens it.
 
 A tool that refuses a call replies with one problem per line. Fix every problem and call it again.
 
@@ -51,10 +51,10 @@ Every mode starts here.
 
 ### Reuse a saved theme
 
-If `.claude/design/theme.json` exists, read it. From the project root, take the distinct paths of its tokens' `source` fields, without the `:line`, and add the theme's config files that exist: `package.json`, `components.json`, `tailwind.config.{ts,js,cjs,mjs}`, the global CSS entry, and the other "Look here first" locations in `theme-sources.md`. Leave out any path that does not exist, since `find` fails on a missing one. Then run:
+If `.claude/ui-design/theme.json` exists, read it. From the project root, take the distinct paths of its tokens' `source` fields, without the `:line`, and add the theme's config files that exist: `package.json`, `components.json`, `tailwind.config.{ts,js,cjs,mjs}`, the global CSS entry, and the other "Look here first" locations in `theme-sources.md`. Leave out any path that does not exist, since `find` fails on a missing one. Then run:
 
 ```
-find <path> <path> … -maxdepth 0 -newer .claude/design/theme.json
+find <path> <path> … -maxdepth 0 -newer .claude/ui-design/theme.json
 ```
 
 No output and no error: the theme is current. Use it and skip to the mode. Any output, a missing file, or a request to refresh the theme: extract it again.
@@ -107,7 +107,7 @@ The tool refuses a token whose file is missing, or whose name and value both do 
 }
 ```
 
-Save it with `mcp__design__save_design_theme`.
+Save it with `mcp__ui-design__save_design_theme`.
 
 ### When there is almost no theme
 
@@ -155,7 +155,7 @@ For every variant, in both modes:
 
 ## 5. Open the page
 
-Call `mcp__design__render_design` once, with every variant. It reads the saved theme itself.
+Call `mcp__ui-design__render_design` once, with every variant. It reads the saved theme itself.
 
 ```json
 {
@@ -183,7 +183,7 @@ In `new`, stop there.
 In `redesign`, then ask for the go-ahead, once, with `AskUserQuestion`: which variant to build. Offer one option per variant, by letter and name, and a last option, `Not yet`.
 
 - A letter: that is the go-ahead. Build it as section 7 says, from the design just rendered.
-- `Not yet`, or any other answer: stop. Nothing in the project has changed. Say in one line that `/design apply <letter>` builds a variant later.
+- `Not yet`, or any other answer: stop. Nothing in the project has changed. Say in one line that `/ui-design apply <letter>` builds a variant later.
 
 Never edit a project file before the user picks a letter.
 
@@ -295,7 +295,7 @@ A finding is:
 
 Do not number anything. The tool numbers the groups first, in the order you pass them, then the findings, sorted by category and then by severity.
 
-Call `mcp__design__render_design_audit` once. Leave `componentGroups` out when there are no groups.
+Call `mcp__ui-design__render_design_audit` once. Leave `componentGroups` out when there are no groups.
 
 ```json
 {
@@ -362,7 +362,7 @@ When the tool succeeds, reply with its result line and stop.
 
 Apply builds one variant in the project's real code. This mode is not quiet.
 
-1. Find the design. The words after `apply` are an optional design name, then the letter: `apply design-2026-11-12-153000 B`. The name is the file's name, with or without `.json`, and the file is in `.claude/design/`. Without a name, use the last `design-*.json` there, by name. The design holds the `mode`, the `subject`, the `variants` in order, and the `theme` they were drawn with. With no design at all, say so in one line and suggest `/design new` or `/design redesign`. With a name that matches no file, list the saved designs, one line each with its name, mode and subject, and ask which.
+1. Find the design. The words after `apply` are an optional design name, then the letter: `apply design-2026-11-12-153000 B`. The name is the file's name, with or without `.json`, and the file is in `.claude/ui-design/`. Without a name, use the last `design-*.json` there, by name. The design holds the `mode`, the `subject`, the `variants` in order, and the `theme` they were drawn with. With no design at all, say so in one line and suggest `/ui-design new` or `/ui-design redesign`. With a name that matches no file, list the saved designs, one line each with its name, mode and subject, and ask which.
 2. Take the variant by its letter: A is the first. With no letter, or a letter the design lacks, list the variants and ask which.
 3. Check the theme for drift. Load the current theme, as in section 1, and compare it with the design's `theme`:
    - A token whose name is gone is renamed when a current token of the same kind has the same value. Otherwise it is removed.
@@ -382,11 +382,11 @@ Apply builds one variant in the project's real code. This mode is not quiet.
 
 Fix changes the project's code for numbered findings of the newest audit. Like apply, it is not quiet.
 
-1. Find the audit: the last `audit-*.json` in `.claude/design/`, by name. It holds the `findings` and the `componentGroups`, each with its `number`. With none, say so in one line and suggest `/design audit`.
+1. Find the audit: the last `audit-*.json` in `.claude/ui-design/`, by name. It holds the `findings` and the `componentGroups`, each with its `number`. With none, say so in one line and suggest `/ui-design audit`.
 2. Take the numbers the user gives: `fix 3 5 7`, `fix all` for every finding and group, or `fix errors` for every finding with severity `error`. With no numbers, or a number the audit lacks, list the valid numbers, one line each, and ask which to fix.
 3. Load the theme, as in section 1.
 4. Fix each number in turn, in the order given. Use the project's own tokens and components, as section 7 step 4 says. Add no token to the theme. A finding that needs a value no token holds is left as it is, and the reply says why.
 5. A finding is fixed at its `file` and `line`. A theme finding, such as duplicate tokens or a missing dark value, is fixed where the token is declared. Read the code first: the finding's `fix` is a suggestion.
 6. A component group is fixed by migrating its usages to the `recommended` member. First add what the group's `reasoning` says that member lacks, then move each other member's usages to it. Delete a member only when nothing imports it any more.
 7. Follow every hook the project has installed. Where a test must come first, write it first. Run the project's type check and tests.
-8. End with one line per number: what changed and in which files, or why it was left. Then what to check in the browser. Last, suggest running `/design audit` again to confirm the findings are gone.
+8. End with one line per number: what changed and in which files, or why it was left. Then what to check in the browser. Last, suggest running `/ui-design audit` again to confirm the findings are gone.

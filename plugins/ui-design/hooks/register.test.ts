@@ -5,10 +5,10 @@ import type {
 } from "claude-code";
 import { expect, test, type Engine } from "claude-code/testing";
 
-const THEME_TOOL = "mcp__design__save_design_theme";
-const DESIGN_TOOL = "mcp__design__render_design";
-const AUDIT_TOOL = "mcp__design__render_design_audit";
-const DESIGN_FOLDER = "/repo/.claude/design";
+const THEME_TOOL = "mcp__ui-design__save_design_theme";
+const DESIGN_TOOL = "mcp__ui-design__render_design";
+const AUDIT_TOOL = "mcp__ui-design__render_design_audit";
+const DESIGN_FOLDER = "/repo/.claude/ui-design";
 const THEME_PATH = `${DESIGN_FOLDER}/theme.json`;
 const DESIGN_PAGE_PATH = `${DESIGN_FOLDER}/design-2026-11-12-120000.html`;
 const AUDIT_PAGE_PATH = `${DESIGN_FOLDER}/audit-2026-11-12-120000.html`;
@@ -180,7 +180,7 @@ test("session start registers the three tools and no command, since the engine s
   });
   on("tool.register", (_, e) => {
     tools.push({ name: e.name, isDeferred: e.isDeferred });
-    return { value: { tool: `mcp__design__${e.name}` } };
+    return { value: { tool: `mcp__ui-design__${e.name}` } };
   });
   on("session.start", (_, e) => ({ cwd: e.cwd }));
 
@@ -792,11 +792,11 @@ const autocomplete = ($: Engine, text: string) =>
 const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
   reply.suggestions.map((suggestion) => suggestion.text);
 
-test("the first word after /design suggests the matching modes", async ($, on) => {
+test("the first word after /ui-design suggests the matching modes", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
-  const allReply = await autocomplete($, "/design ");
-  const auditReply = await autocomplete($, "/design au");
+  const allReply = await autocomplete($, "/ui-design ");
+  const auditReply = await autocomplete($, "/ui-design au");
 
   expect(suggestedTexts(allReply)).toEqual([
     "new",
@@ -809,11 +809,11 @@ test("the first word after /design suggests the matching modes", async ($, on) =
   expect(auditReply.suggestions[0]!.description).toContain("consistency");
 });
 
-test("the menu form /design:design suggests the same modes", async ($, on) => {
+test("the menu form /ui-design:ui-design suggests the same modes", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
-  const menuReply = await autocomplete($, "/design:design ");
-  const auditReply = await autocomplete($, "/design:design au");
+  const menuReply = await autocomplete($, "/ui-design:ui-design ");
+  const auditReply = await autocomplete($, "/ui-design:ui-design au");
 
   expect(suggestedTexts(menuReply)).toEqual([
     "new",
@@ -825,10 +825,10 @@ test("the menu form /design:design suggests the same modes", async ($, on) => {
   expect(suggestedTexts(auditReply)).toEqual(["audit"]);
 });
 
-test("later words and other commands get no /design mode suggestions", async ($, on) => {
+test("later words and other commands get no /ui-design mode suggestions", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
-  const laterReply = await autocomplete($, "/design new a");
+  const laterReply = await autocomplete($, "/ui-design new a");
   const otherReply = await autocomplete($, "/handoff a");
 
   expect(suggestedTexts(laterReply)).toEqual([]);

@@ -1,49 +1,49 @@
-# design
+# ui-design
 
-One skill, `/design`, designs UI in the project's own theme and opens the result as a page in the browser. Project code changes only when you pick a variant, through `apply` or the go-ahead after `redesign`, or when you name findings with `fix`.
+One skill, `/ui-design`, designs UI in the project's own theme and opens the result as a page in the browser. Project code changes only when you pick a variant, through `apply` or the go-ahead after `redesign`, or when you name findings with `fix`.
 
-| Command                             | What it does                                                                                                          |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `/design new <brief>`               | Mockups of a screen or component that does not exist yet.                                                             |
-| `/design redesign <target> [notes]` | Mockups of new looks for an existing file, route or component. Asks for the go-ahead before any project code changes. |
-| `/design audit [scope]`             | Checks the theme, the components and their consistency.                                                               |
-| `/design apply [design] <letter>`   | Builds the picked variant of a saved design in project code.                                                          |
-| `/design fix <numbers>`             | Fixes numbered audit findings in project code.                                                                        |
+| Command                                | What it does                                                                                                          |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `/ui-design new <brief>`               | Mockups of a screen or component that does not exist yet.                                                             |
+| `/ui-design redesign <target> [notes]` | Mockups of new looks for an existing file, route or component. Asks for the go-ahead before any project code changes. |
+| `/ui-design audit [scope]`             | Checks the theme, the components and their consistency.                                                               |
+| `/ui-design apply [design] <letter>`   | Builds the picked variant of a saved design in project code.                                                          |
+| `/ui-design fix <numbers>`             | Fixes numbered audit findings in project code.                                                                        |
 
 With no mode word, a target that exists in the project means `redesign`, and anything else means `new`.
 
 Plain words work too: "redesign the settings page", "mock up a pricing page", "audit the design system".
 
-The menu lists the skill by its full name, `/design:design`. The plugin registers no command of its own: the engine serves the skill as a command.
+The menu lists the skill by its full name, `/ui-design:ui-design`. The plugin registers no command of its own: the engine serves the skill as a command.
 
 In `new`, `redesign` and `audit` the session stays quiet. Claude prints no theme, variant or finding: the result is on the page, and the last line in the session says the page opened.
 
-`redesign` then asks which variant to build, with a `Not yet` option. Picking a letter is the go-ahead: Claude builds it as `/design apply` does. Until then, no project file changes. Only `.claude/design/` is written, to hold the page, its `.json` and the theme.
+`redesign` then asks which variant to build, with a `Not yet` option. Picking a letter is the go-ahead: Claude builds it as `/ui-design apply` does. Until then, no project file changes. Only `.claude/ui-design/` is written, to hold the page, its `.json` and the theme.
 
 ## Usage
 
-`/design new a pricing page with three plans and a FAQ` mocks up a new screen.
+`/ui-design new a pricing page with three plans and a FAQ` mocks up a new screen.
 
-`/design redesign src/app/settings/page.tsx less scrolling` mocks up new looks for the settings page.
+`/ui-design redesign src/app/settings/page.tsx less scrolling` mocks up new looks for the settings page.
 
-`/design redesign the sidebar` finds the sidebar component first.
+`/ui-design redesign the sidebar` finds the sidebar component first.
 
-`/design audit` checks the whole project. `/design audit src/components` checks one folder.
+`/ui-design audit` checks the whole project. `/ui-design audit src/components` checks one folder.
 
-`/design apply B` builds variant B of the newest design. `/design apply design-2026-11-12-153000 B` builds variant B of that saved design instead.
+`/ui-design apply B` builds variant B of the newest design. `/ui-design apply design-2026-11-12-153000 B` builds variant B of that saved design instead.
 
-`/design fix 3 5 7` fixes findings 3, 5 and 7 of the newest audit. `/design fix all` fixes every finding and group. `/design fix errors` fixes every finding with severity `error`.
+`/ui-design fix 3 5 7` fixes findings 3, 5 and 7 of the newest audit. `/ui-design fix all` fixes every finding and group. `/ui-design fix errors` fixes every finding with severity `error`.
 
 ## The theme
 
-Every mode starts from the project's theme. Claude reads it once and saves it as `.claude/design/theme.json`:
+Every mode starts from the project's theme. Claude reads it once and saves it as `.claude/ui-design/theme.json`:
 
 - **Tokens**: each with a name, a kind (`color`, `font`, `text-size`, `space`, `radius` or `shadow`), a value, a dark value where the project has one, and its source as `path:line`.
 - **Stack**: the framework, the styling method, how dark mode is switched, and the icon set.
 - **Components**: the core components, their paths and their variants.
 - **Inconsistencies**: near-duplicates, such as two grays a shade apart.
 
-Declared tokens come first: a Tailwind config or `@theme` block, CSS custom properties, shadcn's `components.json`, a MUI, Chakra, styled-components or Emotion theme object, token files, Sass and Less variables. `skills/design/theme-sources.md` says where each stack keeps them. With no declared tokens, Claude counts what the UI code uses most and marks those tokens **inferred**.
+Declared tokens come first: a Tailwind config or `@theme` block, CSS custom properties, shadcn's `components.json`, a MUI, Chakra, styled-components or Emotion theme object, token files, Sass and Less variables. `skills/ui-design/theme-sources.md` says where each stack keeps them. With no declared tokens, Claude counts what the UI code uses most and marks those tokens **inferred**.
 
 The `save_design_theme` tool refuses a token whose source file is missing, or whose name and value both do not appear in that file. A token cannot be invented.
 
@@ -53,14 +53,14 @@ With almost no theme to find, Claude stops and asks before it proposes one.
 
 ## The mockup page
 
-`/design new` and `/design redesign` end with the `render_design` tool. It writes one self-contained page and opens it in the browser.
+`/ui-design new` and `/ui-design redesign` end with the `render_design` tool. It writes one self-contained page and opens it in the browser.
 
 - One tab per variant, A to D. Two variants by default.
 - Each variant renders in its own sandboxed frame, with the theme injected as CSS variables. A variant's CSS only uses `var(--token)`.
 - **Desktop** and **Mobile** switch the frame's width. **Dark** appears when the theme has dark values.
 - Each variant has a name and a rationale. A redesign also lists what it **Kept** and what it **Changed**.
 - **Proposed additions**: up to three tokens a variant needs that the theme lacks.
-- **Use this** copies `/design apply <design> <letter>`, naming this page's own design, so a newer design cannot take its place. The command is also shown beside the button.
+- **Use this** copies `/ui-design apply <design> <letter>`, naming this page's own design, so a newer design cannot take its place. The command is also shown beside the button.
 - A **Theme** panel: the tokens by kind, with swatches, sources and an **inferred** mark, and the inconsistencies.
 - The browser tab reads `Redesign · <project>` or `New design · <project>`.
 
@@ -89,7 +89,7 @@ The tool names every problem, so a mockup cannot drift from the theme.
 
 ## The audit
 
-`/design audit` ends with the `render_design_audit` tool. It writes a page of numbered findings and opens it in the browser. The audit changes no project code.
+`/ui-design audit` ends with the `render_design_audit` tool. It writes a page of numbered findings and opens it in the browser. The audit changes no project code.
 
 The page:
 
@@ -101,7 +101,7 @@ The page:
 
 The session's last line gives the counts: `Opened <path> in the browser. 3 findings: 2 hardcoded, 1 typography. 2 component groups.`
 
-When an earlier audit is saved in `.claude/design/`, the tool compares the findings with the newest one. A finding is the same when its category, title and file match, so a moved line or a new number is not a change. The hero and the session's last line then add `Since the last audit: 3 fixed, 1 new.` With no earlier audit, or one that cannot be read, nothing is added.
+When an earlier audit is saved in `.claude/ui-design/`, the tool compares the findings with the newest one. A finding is the same when its category, title and file match, so a moved line or a new number is not a change. The hero and the session's last line then add `Since the last audit: 3 fixed, 1 new.` With no earlier audit, or one that cannot be read, nothing is added.
 
 The tool checks these itself, in the files Claude hands it:
 
@@ -142,7 +142,7 @@ Groups are numbered first, in the order Claude lists them. The findings carry on
 
 ## Apply
 
-`/design apply B` reads the newest saved design and builds variant B with the project's real components and tokens. Name another saved design before the letter to build from it instead: `/design apply design-2026-11-12-153000 B`, or the file name with `.json`. An unknown name lists the saved designs and asks which.
+`/ui-design apply B` reads the newest saved design and builds variant B with the project's real components and tokens. Name another saved design before the letter to build from it instead: `/ui-design apply design-2026-11-12-153000 B`, or the file name with `.json`. An unknown name lists the saved designs and asks which.
 
 Before it builds, Apply compares the design's theme with the current one. It lists the tokens renamed, removed or changed since. If the variant uses one of them, it names the token and builds with the nearest current token, telling you which.
 
@@ -150,11 +150,11 @@ The mockup's HTML is never copied into the project. A redesign edits the target 
 
 ## Fix
 
-`/design fix <numbers>` fixes numbered findings of the newest audit in project code. `fix all` takes every finding and group, and `fix errors` every finding with severity `error`. With no numbers, or an unknown one, it lists the valid numbers and asks.
+`/ui-design fix <numbers>` fixes numbered findings of the newest audit in project code. `fix all` takes every finding and group, and `fix errors` every finding with severity `error`. With no numbers, or an unknown one, it lists the valid numbers and asks.
 
 Each finding is fixed at its file and line, and a theme finding where its token is declared. A same-purpose group is fixed by moving its usages to the recommended member, after adding what that member lacks. Fix adds no token to the theme. Project hooks still apply, and the type check and tests run.
 
-It ends with one line per number and a suggestion to run `/design audit` again to confirm.
+It ends with one line per number and a suggestion to run `/ui-design audit` again to confirm.
 
 ## Limits
 
@@ -170,10 +170,10 @@ It ends with one line per number and a suggestion to run `/design audit` again t
 
 ## Where things are saved
 
-Everything goes to `.claude/design/` in the project:
+Everything goes to `.claude/ui-design/` in the project:
 
 - `theme.json`: the saved theme.
-- `design-YYYY-MM-DD-HHMMSS.html` (UTC): a mockup page. The `.json` beside it holds the project, the mode, the subject, the theme and the variants. `/design apply` reads the newest one.
+- `design-YYYY-MM-DD-HHMMSS.html` (UTC): a mockup page. The `.json` beside it holds the project, the mode, the subject, the theme and the variants. `/ui-design apply` reads the newest one.
 - `audit-YYYY-MM-DD-HHMMSS.html` (UTC): an audit page. The `.json` beside it holds the project, the files, the theme, the component groups and the findings, each with its `number`. A finding has its `lines` as a list, and the tool's own findings add the `value` they found. After an earlier audit, it also has `progress`: the earlier file's name as `previousAudit`, and the counts `fixed` and `new`.
 
 The folder gets a `.gitignore` of `*`, so pages stay out of git.
@@ -182,21 +182,21 @@ If no browser opens, the tool reports the page's path instead.
 
 ## Where things live
 
-| File                             | Holds                                                             |
-| -------------------------------- | ----------------------------------------------------------------- |
-| `hooks/register.ts`              | The three tools, the wiring of their checks and the autocomplete. |
-| `hooks/mockup-checks.ts`         | The checks on a variant's CSS, markup and proposed tokens.        |
-| `hooks/theme.ts`                 | The theme's shape, and its tokens as CSS variables.               |
-| `hooks/design-page.ts`           | The HTML of the mockup page.                                      |
-| `hooks/hardcoded-values.ts`      | The finder of hardcoded colors, fonts, sizes and spacing.         |
-| `hooks/audit.ts`                 | The findings, the theme's self-checks, numbering and counts.      |
-| `hooks/audit-page.ts`            | The HTML of the audit page.                                       |
-| `hooks/component-groups.ts`      | The same-purpose groups and their shape checks.                   |
-| `hooks/input.ts`                 | The shared readers and small checks of tool input.                |
-| `hooks/page-style.ts`            | The CSS of both pages.                                            |
-| `hooks/page-script.ts`           | The behavior of both pages: tabs, width, dark and copy.           |
-| `skills/design/SKILL.md`         | How Claude reads the theme, designs, audits and applies.          |
-| `skills/design/theme-sources.md` | Where each stack keeps its theme.                                 |
+| File                                | Holds                                                             |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `hooks/register.ts`                 | The three tools, the wiring of their checks and the autocomplete. |
+| `hooks/mockup-checks.ts`            | The checks on a variant's CSS, markup and proposed tokens.        |
+| `hooks/theme.ts`                    | The theme's shape, and its tokens as CSS variables.               |
+| `hooks/design-page.ts`              | The HTML of the mockup page.                                      |
+| `hooks/hardcoded-values.ts`         | The finder of hardcoded colors, fonts, sizes and spacing.         |
+| `hooks/audit.ts`                    | The findings, the theme's self-checks, numbering and counts.      |
+| `hooks/audit-page.ts`               | The HTML of the audit page.                                       |
+| `hooks/component-groups.ts`         | The same-purpose groups and their shape checks.                   |
+| `hooks/input.ts`                    | The shared readers and small checks of tool input.                |
+| `hooks/page-style.ts`               | The CSS of both pages.                                            |
+| `hooks/page-script.ts`              | The behavior of both pages: tabs, width, dark and copy.           |
+| `skills/ui-design/SKILL.md`         | How Claude reads the theme, designs, audits and applies.          |
+| `skills/ui-design/theme-sources.md` | Where each stack keeps its theme.                                 |
 
 ## Install
 
@@ -204,14 +204,14 @@ Installs at user scope, so it works in every directory. On any machine:
 
 ```
 claude plugin marketplace add jorden-parker/claude-kit
-claude plugin install design@claude-kit --scope user
+claude plugin install ui-design@claude-kit --scope user
 ```
 
 On the dev machine, add the local checkout instead:
 
 ```
 claude plugin marketplace add ~/src/claude-kit
-claude plugin install design@claude-kit --scope user
+claude plugin install ui-design@claude-kit --scope user
 ```
 
 The marketplace is defined in `.claude-plugin/marketplace.json` at the repo root.
@@ -227,7 +227,7 @@ Don't load this mod with `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir` while it is
 ## Uninstall
 
 ```
-claude plugin uninstall design@claude-kit
+claude plugin uninstall ui-design@claude-kit
 ```
 
 ## Dev

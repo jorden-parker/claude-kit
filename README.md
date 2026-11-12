@@ -16,7 +16,7 @@ install any of them on its own.
 | [tdd](plugins/tdd/) | Enforces red, green, refactor: blocks implementation edits until a failing test run and finishing while tests fail. |
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
 | [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
-| [design](plugins/design/) | `/design`, with `new`, `redesign`, `audit` and `apply` modes: mockups in the project's own theme, opened in the browser, and a consistency audit. |
+| [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply` and `fix` modes: mockups in the project's own theme, opened in the browser, a consistency audit, and fixes for its findings. |
 | [session-notes](plugins/session-notes/) | Keeps Claude's notes for each session, what is left to do first, outside Claude's context; `/notes` shows them in a pane. |
 
 ## Install
@@ -103,7 +103,7 @@ servers on install.
 - **Hook and skill plugins** (`tdd`, `code-style`, `quality-gates`, `guards`) are
   installed as they are. Hooks that read Claude Code's transcript format may never
   block in Qwen Code; the script warns for each.
-- **register.ts plugins** (`brainstorm`, `design`, `draft-pr`, `handoff`,
+- **register.ts plugins** (`brainstorm`, `ui-design`, `draft-pr`, `handoff`,
   `session-notes`, `prompt-optimizer`) are installed with their MCP server and
   commands. Their `hooks/hooks.json` is dropped so Qwen Code does not warn about an
   invalid `modules` hook event.

@@ -50,16 +50,16 @@ import {
   type ThemeToken,
 } from "./theme";
 
-const DESIGN_FOLDER = ".claude/design";
+const DESIGN_FOLDER = ".claude/ui-design";
 const THEME_FILE_NAME = "theme.json";
 const THEME_TOOL_NAME = "save_design_theme";
 const DESIGN_TOOL_NAME = "render_design";
 const AUDIT_TOOL_NAME = "render_design_audit";
-const QUALIFIED_THEME_TOOL_NAME = `mcp__design__${THEME_TOOL_NAME}`;
-const QUALIFIED_DESIGN_TOOL_NAME = `mcp__design__${DESIGN_TOOL_NAME}`;
-const QUALIFIED_AUDIT_TOOL_NAME = `mcp__design__${AUDIT_TOOL_NAME}`;
+const QUALIFIED_THEME_TOOL_NAME = `mcp__ui-design__${THEME_TOOL_NAME}`;
+const QUALIFIED_DESIGN_TOOL_NAME = `mcp__ui-design__${DESIGN_TOOL_NAME}`;
+const QUALIFIED_AUDIT_TOOL_NAME = `mcp__ui-design__${AUDIT_TOOL_NAME}`;
 const DESIGN_MODES: readonly DesignMode[] = ["redesign", "new"];
-const DESIGN_COMMAND_PREFIXES = ["/design ", "/design:design "];
+const DESIGN_COMMAND_PREFIXES = ["/ui-design ", "/ui-design:ui-design "];
 const DESIGN_MODE_SUGGESTIONS = [
   {
     text: "new",
@@ -712,14 +712,14 @@ export const register: Register = (on) => {
     await $.tool.register({
       name: THEME_TOOL_NAME,
       description:
-        "Saves the project's theme to .claude/design/theme.json, after checking that every token cites a real file that holds its name or its value. Call it once the theme is extracted, before render_design or render_design_audit. A refusal lists every problem: fix them all, then call again.",
+        "Saves the project's theme to .claude/ui-design/theme.json, after checking that every token cites a real file that holds its name or its value. Call it once the theme is extracted, before render_design or render_design_audit. A refusal lists every problem: fix them all, then call again.",
       inputSchema: THEME_TOOL_SCHEMA,
       isDeferred: false,
     });
     await $.tool.register({
       name: DESIGN_TOOL_NAME,
       description:
-        "Renders design variants as one self-contained page of themed mockups, saves it under .claude/design/ and opens it in the browser. It reads the saved theme itself and defines every token as a CSS variable, and refuses a variant that writes a color or a font as a literal instead of var(--token). Call it once, with every variant.",
+        "Renders design variants as one self-contained page of themed mockups, saves it under .claude/ui-design/ and opens it in the browser. It reads the saved theme itself and defines every token as a CSS variable, and refuses a variant that writes a color or a font as a literal instead of var(--token). Call it once, with every variant.",
       inputSchema: DESIGN_TOOL_SCHEMA,
       isDeferred: false,
     });

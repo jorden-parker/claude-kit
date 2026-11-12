@@ -117,7 +117,7 @@ const renderPanel =
         ? `${renderList("Kept", variant.kept)}${renderList("Changed", variant.changed)}`
         : "";
     return `<section role="tabpanel" id="panel-${slug}" aria-labelledby="tab-${slug}"${variantIndex ? " hidden" : ""}>
-<div class="variant-head"><h2>${letter} · ${name}</h2><div class="apply"><code id="command-${slug}">/design apply ${designName ? `${escapeHtml(designName)} ` : ""}${letter}</code><button type="button" class="button primary" data-copies="command-${slug}">Use this</button></div></div>
+<div class="variant-head"><h2>${letter} · ${name}</h2><div class="apply"><code id="command-${slug}">/ui-design apply ${designName ? `${escapeHtml(designName)} ` : ""}${letter}</code><button type="button" class="button primary" data-copies="command-${slug}">Use this</button></div></div>
 <p class="muted">${escapeHtml(variant.rationale)}</p>
 <div class="stage"><iframe sandbox="" title="Variant ${letter}: ${name}" srcdoc="${escapeHtml(renderVariantDocument(theme, variant))}"></iframe></div>
 <div class="notes">${redesignNotes}${renderTokenTable("Proposed additions", readProposedTokens(variant))}</div>

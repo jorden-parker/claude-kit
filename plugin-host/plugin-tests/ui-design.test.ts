@@ -4,11 +4,11 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { startPlugin, TARGET_NAMES, type TargetName } from "../testing";
 
-const DESIGN_FOLDER = ".claude/design";
+const DESIGN_FOLDER = ".claude/ui-design";
 const THEME_TOOL = "save_design_theme";
 const DESIGN_TOOL = "render_design";
 const AUDIT_TOOL = "render_design_audit";
-const SKILL_PATH = ["skills", "design", "SKILL.md"];
+const SKILL_PATH = ["skills", "ui-design", "SKILL.md"];
 
 const PROJECT_FILES: Record<string, string> = {
   "src/app/globals.css":
@@ -70,7 +70,7 @@ const AUDIT_INPUT = {
 };
 
 const startProject = async (target: TargetName) => {
-  const plugin = await startPlugin(target, "design");
+  const plugin = await startPlugin(target, "ui-design");
   for (const [relativePath, text] of Object.entries(PROJECT_FILES)) {
     const filePath = join(plugin.workingDirectory, relativePath);
     await mkdir(dirname(filePath), { recursive: true });
@@ -216,7 +216,7 @@ for (const target of TARGET_NAMES) {
       );
       const pagePath = openedPagePath(reply.text);
       const pageText = await readFile(pagePath, "utf8");
-      expect(pageText).toContain("<title>Audit · acme-notes</title>");
+      expect(pageText).toContain("<title>Design audit · acme-notes</title>");
       expect(pageText).toContain("Hardcoded color #f0f");
       const [savedJsonName] = await listDesignFiles(plugin.workingDirectory, "audit", ".json");
       const savedAudit = JSON.parse(
@@ -256,7 +256,7 @@ for (const target of TARGET_NAMES) {
   });
 
   test(`${target}: the design skill is installed and names exactly the tools the plugin exposes`, async () => {
-    const plugin = await startPlugin(target, "design");
+    const plugin = await startPlugin(target, "ui-design");
     try {
       const skillText = await readFile(
         join(plugin.installedFolder, ...SKILL_PATH),
@@ -264,7 +264,7 @@ for (const target of TARGET_NAMES) {
       );
       const mentionedToolNames = [
         ...new Set(
-          [...skillText.matchAll(/mcp__design__(\w+)/g)].map((match) => match[1]!)
+          [...skillText.matchAll(/mcp__ui-design__(\w+)/g)].map((match) => match[1]!)
         ),
       ];
       expect(mentionedToolNames.sort()).toEqual(
@@ -279,7 +279,7 @@ for (const target of TARGET_NAMES) {
         const mcpConfig = JSON.parse(
           await readFile(join(plugin.installedFolder, ".mcp.json"), "utf8")
         );
-        expect(Object.keys(mcpConfig.mcpServers)).toEqual(["design"]);
+        expect(Object.keys(mcpConfig.mcpServers)).toEqual(["ui-design"]);
       }
     } finally {
       await plugin.stop();

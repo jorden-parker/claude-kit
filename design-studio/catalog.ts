@@ -203,8 +203,23 @@ const renderShape = (givenShape: unknown, ratio: string) => {
   return `<g transform="translate(${(drawn.x * ART_WIDTHS[ratio]!) / 100} ${drawn.y}) rotate(${drawn.rotate})" class="tone-${drawn.tone}${isOutline ? " outline" : ""}">${draw(drawn.size)}</g>`;
 };
 
-const renderHeading = (text: string, level: string) =>
-  text ? `<h${level} class="heading heading-${level}">${escapeHtml(text)}</h${level}>` : "";
+const HEADING_STYLES = ["plain", "uppercase", "underline", "bar", "accent"];
+const HEADING_SIZES = ["auto", "sm", "md", "lg", "xl"];
+const HEADING_WEIGHTS = ["auto", "light", "regular", "bold", "black"];
+const UNSTYLED_OPTIONS = ["plain", "auto", "line", "none", "row", "stacked", "md", undefined];
+
+type TitleTreatment = { style?: string; size?: string; weight?: string; eyebrow?: string };
+
+const listOptionClasses = (chosenByPrefix: Record<string, string | undefined>) =>
+  Object.entries(chosenByPrefix)
+    .filter(([, chosen]) => !UNSTYLED_OPTIONS.includes(chosen))
+    .map(([prefix, chosen]) => ` ${prefix}-${chosen}`)
+    .join("");
+
+const renderHeading = (text: string, level: string, { style, size, weight, eyebrow }: TitleTreatment = {}) =>
+  text
+    ? `${eyebrow ? `<p class="eyebrow">${escapeHtml(eyebrow)}</p>` : ""}<h${level} class="heading heading-${level}${listOptionClasses({ "heading-style": style, "heading-size": size, "heading-weight": weight })}">${escapeHtml(text)}</h${level}>`
+    : "";
 
 const renderText = (text: string, toneAndSize: string) =>
   text ? `<p class="text ${toneAndSize}">${escapeHtml(text)}</p>` : "";
@@ -247,17 +262,20 @@ const components = {
       `<main class="page"><div class="page-inner page-${props.width} spacing-${props.spacing}">${children}</div></main>`
   ),
   Nav: defineComponent(
-    "The top bar: a brand, links, and one optional action button. The first child of the Page. Layout centered puts the brand in the middle. logo draws a mark of that shape before the brand, holding the icon named in logoIcon or else the brand's first letter.",
+    "The top bar: a brand, links, and one optional action button. The first child of the Page. Layout centered puts all of it in the middle, stacked puts a big brand above the links, split puts the brand between the links and the button, left puts the links right after the brand. Style is its treatment: a line under it, plain, a filled color bar, a box, or a floating pill. logo draws a mark of that shape before the brand, holding the icon named in logoIcon or else the brand's first letter.",
     z.object({
       brand: plainText,
       items: textList,
       action: plainText,
-      layout: defineOption(["spread", "centered"], "spread"),
+      layout: defineOption(["spread", "centered", "stacked", "split", "left"], "spread"),
       logo: defineOption(["none", ...Object.keys(LOGO_SHAPES)], "none"),
       logoIcon: plainText,
+      style: defineOption(["line", "plain", "filled", "boxed", "floating"], "line"),
+      links: defineOption(["plain", "underline", "pill", "uppercase"], "plain"),
+      brandSize: defineOption(["md", "lg", "xl"], "md"),
     }),
     (props) =>
-      `<nav class="nav nav-${props.layout}"><span class="nav-brand">${props.logo === "none" ? "" : renderLogoMark(props.brand, props.logo, props.logoIcon)}${escapeHtml(props.brand)}</span><span class="nav-links">${props.items
+      `<nav class="nav nav-${props.layout}${listOptionClasses({ "nav-style": props.style, "nav-links": props.links })}"><span class="nav-brand${listOptionClasses({ "nav-brand": props.brandSize })}">${props.logo === "none" ? "" : renderLogoMark(props.brand, props.logo, props.logoIcon)}${escapeHtml(props.brand)}</span><span class="nav-links">${props.items
         .map((link: string) => `<a href="#">${escapeHtml(link)}</a>`)
         .join("")}</span>${renderButton(props.action, "primary")}</nav>`
   ),
@@ -269,28 +287,42 @@ const components = {
       text: plainText,
       primaryAction: plainText,
       secondaryAction: plainText,
-      align: defineOption(["center", "start"], "center"),
+      align: defineOption(["center", "start", "end"], "center"),
       image: plainText,
       imageArt: plainText,
-      imageSide: defineOption(["right", "left"], "right"),
+      imageSide: defineOption(["right", "left", "below", "above"], "right"),
+      tone: defineOption(["plain", "muted", "accent", "outline"], "plain"),
+      titleSize: defineOption(HEADING_SIZES, "auto"),
+      titleStyle: defineOption(HEADING_STYLES, "plain"),
     }),
     (props) => {
-      const copy = `${renderBadge(props.badge, "neutral")}<h1 class="heading heading-1">${escapeHtml(props.title)}</h1>${renderText(props.text, "text-muted text-lg")}<div class="row gap-sm items-center">${renderButton(props.primaryAction, "primary")}${renderButton(props.secondaryAction, "secondary")}</div>`;
+      const copy = `${renderBadge(props.badge, "neutral")}${renderHeading(props.title, "1", { style: props.titleStyle, size: props.titleSize })}${renderText(props.text, "text-muted text-lg")}<div class="row gap-sm items-center">${renderButton(props.primaryAction, "primary")}${renderButton(props.secondaryAction, "secondary")}</div>`;
+      const toneClass = listOptionClasses({ "hero-tone": props.tone });
       return props.image
-        ? `<header class="hero hero-split hero-image-${props.imageSide}"><div class="hero-copy">${copy}</div>${renderImage(props.image, "wide", props.imageArt)}</header>`
-        : `<header class="hero hero-${props.align}">${copy}</header>`;
+        ? `<header class="hero hero-split hero-image-${props.imageSide}${toneClass}"><div class="hero-copy">${copy}</div>${renderImage(props.image, "wide", props.imageArt)}</header>`
+        : `<header class="hero hero-${props.align}${toneClass}">${copy}</header>`;
     }
   ),
   Section: defineComponent(
-    "A band of the screen with its own title, sentence and children. Tone muted or accent gives it a full-width background, which breaks up a long screen.",
+    "A band of the screen with its own title, sentence and children. Eyebrow is a small label or number above the title. Layout side puts the title in a left column beside the children. Tone muted or accent gives it a full-width background, which breaks up a long screen.",
     z.object({
       title: plainText,
       text: plainText,
       tone: defineOption(["plain", "muted", "accent"], "plain"),
-      align: defineOption(["start", "center"], "start"),
+      align: defineOption(["start", "center", "end"], "start"),
+      layout: defineOption(["stacked", "side"], "stacked"),
+      eyebrow: plainText,
+      titleStyle: defineOption(HEADING_STYLES, "plain"),
+      titleSize: defineOption(HEADING_SIZES, "auto"),
     }),
-    (props, children) =>
-      `<section class="section section-${props.tone} section-${props.align}">${renderHeading(props.title, "2")}${renderText(props.text, "text-muted text-lg")}${children}</section>`
+    (props, children) => {
+      const header = `${renderHeading(props.title, "2", { style: props.titleStyle, size: props.titleSize, eyebrow: props.eyebrow })}${renderText(props.text, "text-muted text-lg")}`;
+      const content =
+        props.layout === "side"
+          ? `<div class="section-header">${header}</div><div class="section-body">${children}</div>`
+          : `${header}${children}`;
+      return `<section class="section section-${props.tone} section-${props.align}${listOptionClasses({ section: props.layout })}">${content}</section>`;
+    }
   ),
   Split: defineContainer(
     "Two columns side by side: exactly two children, such as text beside a picture, or an order beside a form. Put several things in one column with a Stack. Reverse swaps the sides.",
@@ -327,9 +359,16 @@ const components = {
     (props, children) => `<section class="card card-${props.tone}">${children}</section>`
   ),
   Heading: defineComponent(
-    "A heading. Level 1 is the screen title and appears once.",
-    z.object({ text: plainText, level: defineOption(["1", "2", "3"], "2") }),
-    (props) => `<h${props.level} class="heading heading-${props.level}">${escapeHtml(props.text)}</h${props.level}>`
+    "A heading. Level 1 is the screen title and appears once. Style bar draws a color bar beside it, accent colors it. Eyebrow is a small label above it.",
+    z.object({
+      text: plainText,
+      level: defineOption(["1", "2", "3"], "2"),
+      size: defineOption(HEADING_SIZES, "auto"),
+      weight: defineOption(HEADING_WEIGHTS, "auto"),
+      style: defineOption(HEADING_STYLES, "plain"),
+      eyebrow: plainText,
+    }),
+    (props) => renderHeading(props.text, props.level, props)
   ),
   Text: defineComponent(
     "A paragraph.",
@@ -494,9 +533,16 @@ const components = {
   ),
   Banner: defineComponent(
     "A wide closing call to action: a title, a sentence and one button.",
-    z.object({ title: plainText, text: plainText, action: plainText, tone: defineOption(["accent", "muted"], "accent") }),
+    z.object({
+      title: plainText,
+      text: plainText,
+      action: plainText,
+      tone: defineOption(["accent", "muted"], "accent"),
+      layout: defineOption(["row", "centered"], "row"),
+      titleStyle: defineOption(HEADING_STYLES, "plain"),
+    }),
     (props) =>
-      `<aside class="banner banner-${props.tone}"><div class="banner-copy">${renderHeading(props.title, "2")}${renderText(props.text, "text-md")}</div>${renderButton(props.action, "primary")}</aside>`
+      `<aside class="banner banner-${props.tone}${listOptionClasses({ banner: props.layout })}"><div class="banner-copy">${renderHeading(props.title, "2", { style: props.titleStyle })}${renderText(props.text, "text-md")}</div>${renderButton(props.action, "primary")}</aside>`
   ),
   Spacer: defineComponent(
     "Empty space, to push things apart.",
@@ -887,6 +933,64 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     `.icon-accent{color:${accent}}`,
     `.icon-muted{${quietStyle}}`,
     ".hero-split .image,.split .image{max-height:420px}",
+    ".nav-stacked{flex-direction:column;gap:12px;text-align:center}",
+    ".nav-stacked .nav-links,.nav-left .nav-links,.nav-split .nav-links{margin-left:0}",
+    ".nav-stacked .nav-links{justify-content:center}",
+    ".nav-left .button{margin-left:auto}",
+    ".nav-stacked .button{align-self:center}",
+    ".nav-split{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}",
+    ".nav-split .nav-links{order:-1}",
+    ".nav-split .button{justify-self:end}",
+    ".page .nav.nav-style-plain{border-bottom:0}",
+    `.page .nav.nav-style-filled{margin:-24px calc(50% - 50vw) 0;padding:16px calc(50vw - 50%);border-bottom:0;background:${accent};color:${onAccent}}`,
+    `.nav-style-filled .button-primary{border-color:${onAccent};background:${onAccent};color:${accent}}`,
+    `.page .nav.nav-style-boxed{padding:12px 20px;border:1px solid ${border};border-radius:${radius}}`,
+    `.page .nav.nav-style-floating{padding:10px 24px;border:0;border-radius:999px;background:${muted}}`,
+    ".nav-links-underline a{padding-bottom:4px;border-bottom:2px solid currentColor}",
+    ".nav-links-pill a{padding:5px 14px;border:1px solid currentColor;border-radius:999px}",
+    ".nav-links-pill{gap:10px}",
+    ".nav-links-uppercase a{font-size:12px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase}",
+    ".page .nav-brand.nav-brand-lg{font-size:26px}",
+    ".page .nav-brand.nav-brand-xl{font-size:38px;letter-spacing:-0.02em}",
+    ".nav-brand-lg .logo-mark{width:38px;height:38px}",
+    ".nav-brand-xl .logo-mark{width:48px;height:48px}",
+    `.eyebrow{margin:0;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:${accent}}`,
+    ".page .heading.heading-size-sm{font-size:18px}",
+    ".page .heading.heading-size-md{font-size:26px}",
+    ".page .heading.heading-size-lg{font-size:40px}",
+    ".page .heading.heading-size-xl{font-size:68px;line-height:1.02}",
+    ".page .heading.heading-weight-light{font-weight:300}",
+    ".page .heading.heading-weight-regular{font-weight:400}",
+    ".page .heading.heading-weight-bold{font-weight:700}",
+    ".page .heading.heading-weight-black{font-weight:900}",
+    ".page .heading.heading-style-uppercase{letter-spacing:0.04em;text-transform:uppercase}",
+    `.page .heading.heading-style-underline{width:fit-content;padding-bottom:10px;border-bottom:4px solid ${accent}}`,
+    `.page .heading.heading-style-bar{padding-left:16px;border-left:6px solid ${accent}}`,
+    `.page .heading.heading-style-accent{color:${accent}}`,
+    ":is(.section-accent,.banner-accent,.card-accent,.hero-tone-accent,.look-bold .hero) :is(.heading,.eyebrow){border-color:currentColor;color:inherit}",
+    ".hero>.badge{align-self:auto}",
+    ".hero-end{align-items:flex-end;text-align:right}",
+    ".hero-end .row{justify-content:flex-end}",
+    ".hero-image-below{flex-direction:column;gap:32px}",
+    ".hero-image-above{flex-direction:column-reverse;gap:32px}",
+    ".hero-image-below>*,.hero-image-above>*{flex:none;width:100%}",
+    ".hero-image-below .image,.hero-image-above .image{max-height:340px}",
+    `.hero-tone-muted,.hero-tone-accent,.hero-tone-outline{border-radius:${radius}}`,
+    ".page .hero.hero-tone-muted,.page .hero.hero-tone-accent,.page .hero.hero-tone-outline{padding:56px 40px;border:0}",
+    `.page:not(.look-bold) .hero-tone-muted{background:${muted}}`,
+    ".page:not(.look-bold) .hero.hero-tone-outline{border:2px solid currentColor}",
+    `.hero-tone-accent{background:${accent};color:${onAccent}}`,
+    ".hero-tone-accent .text-muted{color:inherit;opacity:0.85}",
+    `.hero-tone-accent .button-primary{border-color:${onAccent};background:${onAccent};color:${accent}}`,
+    ".hero-tone-accent .button-secondary,.hero-tone-accent .badge{border-color:currentColor;background:transparent;color:inherit}",
+    ".section-center>.eyebrow{align-self:center}",
+    ".section-end>.heading,.section-end>.text,.section-end>.eyebrow{align-self:flex-end;text-align:right}",
+    ".section-side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:40px;align-items:start}",
+    ".section-header,.section-body{display:flex;flex-direction:column;gap:16px;min-width:0}",
+    ".section-body{gap:24px}",
+    ".banner-centered{flex-direction:column;justify-content:center;text-align:center}",
+    ".banner-centered .banner-copy{align-items:center}",
+    "@media (max-width:760px){.section-side,.nav-split{grid-template-columns:minmax(0,1fr)}.page .heading.heading-size-xl{font-size:40px}}",
     ...renderLookCss({ ink, accent, onAccent, muted }),
     ...Object.entries(CORNER_RADII).map(
       ([name, cornerRadius]) =>
@@ -948,12 +1052,22 @@ const DESIGN_MOVES: Record<string, string[]> = {
     'magazine: look "editorial", headingFont "sans", corners "square", large type',
     'gentle and calm: look "soft", headingFont "serif", corners "pill", spacing "airy"',
   ],
+  Header: [
+    'a Nav with layout "stacked", style "plain" and brandSize "xl"; every title with titleStyle "bar"',
+    'a Nav with layout "split", style "floating" and links "pill"; an eyebrow above every Section title',
+    'a Nav with style "filled" and links "uppercase"; Sections with layout "side"',
+    'a Nav with layout "left", style "boxed" and links "underline"; titles with titleStyle "underline" and titleSize "lg"',
+    'a Nav with layout "centered" and brandSize "lg"; titles with titleStyle "uppercase", Headings with weight "light" and size "xl"',
+    'a Nav with layout "spread", style "plain", links "pill" and a logo; titles with titleStyle "accent"; centered Sections',
+    'a Nav with layout "split" and style "line"; numbered eyebrows such as "01", "02" above Section titles; Sections with layout "side"',
+    'a Nav with layout "stacked", style "filled" and links "uppercase"; Section titles aligned "end" with titleSize "lg"',
+  ],
   Opening: [
     "a Hero whose picture sits on the left",
     "a Split: a big Heading and Text on one side, a Card or a Graphic on the other",
-    "a start-aligned Hero with no picture, and a Row of Stats or Badges right under it",
+    'a start-aligned Hero with no picture, tone "outline" and titleSize "xl", and a Row of Stats or Badges right under it',
     "a centered Nav and a large centered Logo above a centered Hero",
-    "a Hero whose picture sits on the right, drawn as artwork",
+    'a Hero with tone "muted" whose picture sits below the text, drawn as artwork',
     "a Split: the title, a Text and a Button on one side, a square Graphic you draw on the other",
   ],
   Body: [
@@ -1027,6 +1141,12 @@ export const buildCatalogPrompt = (tokens: StyleToken[]) =>
       `ARTWORK names, for an Image's art and a Hero's imageArt: ${Object.keys(ART_DRAWINGS).join(", ")}.`,
       `- A Graphic's shapes: {"shape":"${Object.keys(DRAWN_SHAPES).join(" | ")}","x":50,"y":50,"size":30,"tone":"${SHAPE_TONES.join(" | ")}","rotate":0}.`,
       "- You make the pictures. Give the brand a logo: on the Nav, or as a Logo. Draw a Graphic from shapes when the product has a clear symbol: 3 to 6 large shapes that read as one thing, such as a circle sun over two half hills, a triangle mountain above a wave, a ring around a star. Use art for mood, and photo only for a real product photo.",
+    ].join("\n"),
+    [
+      "HEADERS AND TITLES. You shape them too, so no two screens open alike:",
+      "- The Nav: its layout, style, links and brandSize. The Hero: its align, tone, titleSize, titleStyle and imageSide.",
+      "- A Section: its layout, align, eyebrow, titleStyle and titleSize. A Heading: its size, weight, style and eyebrow. A Banner: its layout and titleStyle.",
+      "- Keep one title treatment through a screen. Do not leave these at their defaults.",
     ].join("\n"),
     ["LAYOUTS TO START FROM. Change them when the brief or your own idea calls for it.", ...LAYOUT_ADVICE].join("\n"),
     `TOKENS, an optional last line: TOKENS: [{"name":"<token>","value":"<new value>"}] gives theme tokens new values for this design only. Leave it out unless the brief asks for other colors. The tokens: ${tokens

@@ -156,7 +156,7 @@ test("buildCatalogPrompt lists the components and the reply shape, without json-
   expect(prompt).toContain("primary, primary-foreground");
   expect(prompt).not.toContain("$state");
   expect(prompt).not.toContain("```");
-  expect(prompt.length).toBeLessThan(13500);
+  expect(prompt.length).toBeLessThan(16000);
 });
 
 test("the example spec in the prompt renders with no problems", () => {
@@ -403,7 +403,8 @@ test("the stylesheet colors drawn shapes from the theme, and the prompt lists th
 test("pickDesignMoves draws a mood, an opening, a body and an asset idea, and differs with the numbers drawn", () => {
   const firstMoves = pickDesignMoves(() => 0);
   const lastMoves = pickDesignMoves(() => 0.99);
-  expect(firstMoves.split("\n")).toHaveLength(5);
+  expect(firstMoves.split("\n")).toHaveLength(6);
+  expect(firstMoves).toContain("- Header: ");
   expect(firstMoves).toContain("- Mood: ");
   expect(firstMoves).toContain("- Opening: ");
   expect(firstMoves).toContain("- Body: ");
@@ -474,4 +475,72 @@ test("the moods between them name every look, so a model is steered to all of th
   for (const corners of ["square", "rounded", "pill"]) {
     expect(moods.some((mood) => mood.includes(`corners "${corners}"`))).toBe(true);
   }
+});
+
+const renderOne = (type: string, props: Record<string, unknown>) =>
+  renderSpecToHtml({ root: "only", elements: { only: { type, props } } });
+
+test("a model shapes the Nav: its layout, its style, its links and the size of the brand", () => {
+  const html = renderOne("Nav", {
+    brand: "Loaf",
+    items: ["Menu"],
+    layout: "split",
+    style: "floating",
+    links: "pill",
+    brandSize: "xl",
+  });
+  expect(html).toContain('<nav class="nav nav-split nav-style-floating nav-links-pill">');
+  expect(html).toContain('<span class="nav-brand nav-brand-xl">');
+  expect(renderOne("Nav", { brand: "Loaf" })).toContain('<nav class="nav nav-spread"><span class="nav-brand">');
+  for (const layout of ["stacked", "left"]) expect(renderOne("Nav", { layout })).toContain(`nav-${layout}`);
+});
+
+test("a model shapes a Heading: its size, weight and style, and a small label above it", () => {
+  const html = renderOne("Heading", { text: "Fresh daily", size: "xl", weight: "light", style: "bar", eyebrow: "Our bread" });
+  expect(html).toContain(
+    '<p class="eyebrow">Our bread</p><h2 class="heading heading-2 heading-style-bar heading-size-xl heading-weight-light">Fresh daily</h2>'
+  );
+});
+
+test("a model shapes the Hero: its tone, the size and style of its title, and a picture above or below", () => {
+  const html = renderOne("Hero", {
+    title: "Bread at seven",
+    tone: "muted",
+    titleSize: "xl",
+    titleStyle: "uppercase",
+    image: "A loaf",
+    imageSide: "below",
+  });
+  expect(html).toContain('<header class="hero hero-split hero-image-below hero-tone-muted">');
+  expect(html).toContain('<h1 class="heading heading-1 heading-style-uppercase heading-size-xl">');
+  expect(renderOne("Hero", { title: "Bread", align: "end", tone: "accent" })).toContain('class="hero hero-end hero-tone-accent"');
+});
+
+test("a model shapes a Section: a label above the title, the title's style, and the title beside the content", () => {
+  const html = renderSpecToHtml({
+    root: "band",
+    elements: {
+      band: { type: "Section", props: { title: "Events", eyebrow: "02", titleStyle: "underline", layout: "side" }, children: ["note"] },
+      note: { type: "Text", props: { text: "Readings every Friday." } },
+    },
+  });
+  expect(html).toContain(
+    '<section class="section section-plain section-start section-side"><div class="section-header"><p class="eyebrow">02</p><h2 class="heading heading-2 heading-style-underline">Events</h2></div><div class="section-body">'
+  );
+  expect(renderOne("Banner", { title: "Join", layout: "centered", titleStyle: "accent" })).toContain(
+    '<aside class="banner banner-accent banner-centered">'
+  );
+});
+
+test("the stylesheet styles every header and title option, and the prompt tells a model to use them", () => {
+  const css = renderCatalogCss(THEME_TOKENS);
+  for (const selector of [
+    ".nav-stacked{", ".nav-split{", ".nav-left .button{", ".nav-style-filled{", ".nav-style-boxed{", ".nav-style-floating{",
+    ".nav-links-underline a{", ".nav-links-pill a{", ".nav-links-uppercase a{", ".nav-brand-xl{",
+    ".heading-size-xl{", ".heading-weight-black{", ".heading-style-bar{", ".heading-style-underline{", ".eyebrow{",
+    ".hero>.badge{align-self:auto}", ".hero-end{", ".hero-image-below", ".hero-tone-outline{", ".section-side{", ".banner-centered{",
+  ]) {
+    expect(css).toContain(selector);
+  }
+  expect(buildCatalogPrompt(THEME_TOKENS)).toContain("HEADERS AND TITLES");
 });

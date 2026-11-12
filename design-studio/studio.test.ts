@@ -272,7 +272,7 @@ test("runStudio reports a failure and throws when every variant stays refused", 
 test("runStudio gives each variant its own creative brief, drawn with the random source it is handed", async () => {
   const projectFolder = await makeProject(SAVED_THEME);
   const { tools, conversations } = makeTools(projectFolder, [OPENED_REPLY]);
-  const drawnNumbers = [0, 0, 0, 0, 0.99, 0.99, 0.99, 0.99];
+  const drawnNumbers = [0, 0, 0, 0, 0, 0.99, 0.99, 0.99, 0.99, 0.99];
   await runStudio(
     { brief: "Recipe onboarding", variantCount: 2, projectFolder },
     { ...tools, random: () => drawnNumbers.shift() ?? 0.5 }

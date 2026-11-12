@@ -1,0 +1,5 @@
+{
+  "name": "quality-gates",
+  "version": "0.1.0",
+  "description": "Blocks git commit and push when fallow audit fails, and finishing a turn that changed code without a verification step"
+}

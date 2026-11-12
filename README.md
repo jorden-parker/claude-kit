@@ -14,6 +14,7 @@ install any of them on its own.
 | [adhd-style](plugins/adhd-style/)             | Output style: answer first, short chunks, one next step.                              |
 | [code-style](plugins/code-style/) | Writes the comment and naming rules into each session and blocks edits that break them. |
 | [tdd](plugins/tdd/) | Enforces red, green, refactor: blocks implementation edits until a failing test run and finishing while tests fail. |
+| [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
 
 ## Install
 

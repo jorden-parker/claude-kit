@@ -13,6 +13,7 @@
     { "name": "adhd-style", "source": "./plugins/adhd-style",
       "description": "ADHD output style: answer first, short chunks, one next step" },
     {"name": "code-style", "source": "./plugins/code-style", "description": "Comment and naming rules at session start; hooks block comments, short or vague identifiers, and finishing before a naming review"},
-    {"name": "tdd", "source": "./plugins/tdd", "description": "Red, green, refactor enforced: the TDD rules at session start; hooks block implementation edits until a failing test run is recorded and block finishing while tests fail"}
+    {"name": "tdd", "source": "./plugins/tdd", "description": "Red, green, refactor enforced: the TDD rules at session start; hooks block implementation edits until a failing test run is recorded and block finishing while tests fail"},
+    {"name": "quality-gates", "source": "./plugins/quality-gates", "description": "Blocks git commit and push when fallow audit fails, and finishing a turn that changed code without a verification step"}
   ]
 }

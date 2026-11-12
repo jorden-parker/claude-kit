@@ -42,6 +42,18 @@ const AMEND_NOTE_TOOL_SCHEMA = {
   },
   required: ["old", "text"],
 };
+const DELETE_NOTE_TOOL_NAME = "delete_note";
+const QUALIFIED_DELETE_NOTE_TOOL_NAME = `mcp__session-notes__${DELETE_NOTE_TOOL_NAME}`;
+const DELETE_NOTE_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    text: {
+      type: "string",
+      description: "The exact text of the note to delete, as you wrote it.",
+    },
+  },
+  required: ["text"],
+};
 const SESSION_SUMMARY_TOPIC =
   "a short summary of this session: what was done, what was decided, and what is left to do";
 const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -98,10 +110,10 @@ const addToSessionNote = (engine: EngineInterface, addition: NoteAddition) => {
   return pendingWrite;
 };
 
-const amendSessionNote = (
+const replaceSessionNote = (
   engine: EngineInterface,
   oldText: string,
-  newText: string
+  replacementNotes: string[]
 ) => {
   const amendment = pendingWrite
     .then(async () => {
@@ -111,10 +123,10 @@ const amendSessionNote = (
       const sessionNotes = currentNote?.notes ?? [];
       const storedOldText = oldText.slice(0, MAX_ENTRY_LENGTH);
       if (!sessionNotes.includes(storedOldText)) return false;
-      const amendedNotes = sessionNotes.map((noteText) =>
+      const amendedNotes = sessionNotes.flatMap((noteText) =>
         noteText === storedOldText
-          ? newText.slice(0, MAX_ENTRY_LENGTH)
-          : noteText
+          ? replacementNotes.map((entry) => entry.slice(0, MAX_ENTRY_LENGTH))
+          : [noteText]
       );
       await engine.store.set(
         NOTES_KEY,
@@ -174,11 +186,20 @@ const amendNote = async (
   const oldText = trimText(requestedOldText);
   const noteText = trimText(requestedText);
   if (!noteText) return { deny: "The note needs some text." };
-  const isAmended = await amendSessionNote(engine, oldText, noteText);
+  const isAmended = await replaceSessionNote(engine, oldText, [noteText]);
   if (!isAmended)
     return { deny: `No note in this session reads "${oldText}".` };
   await openNotesPane(engine);
   return { result: "Note amended and the notes pane opened." };
+};
+
+const deleteNote = async (engine: EngineInterface, requestedText: unknown) => {
+  const noteText = trimText(requestedText);
+  const isDeleted = await replaceSessionNote(engine, noteText, []);
+  if (!isDeleted)
+    return { deny: `No note in this session reads "${noteText}".` };
+  await openNotesPane(engine);
+  return { result: "Note deleted and the notes pane opened." };
 };
 
 const formatStartTime = (startedAt: string) =>
@@ -212,6 +233,13 @@ export const register: Register = (on) => {
       inputSchema: AMEND_NOTE_TOOL_SCHEMA,
       isDeferred: false,
     });
+    await $.tool.register({
+      name: DELETE_NOTE_TOOL_NAME,
+      description:
+        "Deletes one of this session's notes and opens the notes pane. Call it when the user asks you to delete or remove a note you already wrote.",
+      inputSchema: DELETE_NOTE_TOOL_SCHEMA,
+      isDeferred: false,
+    });
     return next(e);
   });
 
@@ -243,6 +271,8 @@ export const register: Register = (on) => {
       return writeNote($, toolInput.text);
     if (e.tool === (QUALIFIED_AMEND_NOTE_TOOL_NAME as string))
       return amendNote($, toolInput.old, toolInput.text);
+    if (e.tool === (QUALIFIED_DELETE_NOTE_TOOL_NAME as string))
+      return deleteNote($, toolInput.text);
     const addition = describeNoteToolCall(e.tool, toolInput);
     if (addition) await addToSessionNote($, addition);
     return next(e);

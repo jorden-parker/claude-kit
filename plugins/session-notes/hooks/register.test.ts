@@ -3,6 +3,7 @@ import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const WRITE_NOTE_TOOL = "mcp__session-notes__write_note";
 const AMEND_NOTE_TOOL = "mcp__session-notes__amend_note";
+const DELETE_NOTE_TOOL = "mcp__session-notes__delete_note";
 
 const submitted = (text: string) => ({ text }) as PromptSubmitInput;
 
@@ -280,6 +281,43 @@ test("amend_note refuses empty replacement text", async ($, on) => {
   } as never);
 
   expect(outcome).toEqual({ deny: "The note needs some text." });
+});
+
+test("delete_note removes an existing note", async ($, on) => {
+  const recorded = { openedPanes: [] as string[], submittedPrompts: [] };
+  const store = mockEngine(
+    on,
+    "session-a",
+    sessionWithNote("Login bug was a stale cookie"),
+    recorded
+  );
+
+  const outcome = await $.tool.call({
+    tool: DELETE_NOTE_TOOL,
+    text: "Login bug was a stale cookie",
+  } as never);
+
+  const [note] = store.get("notes") as Array<Record<string, unknown>>;
+  expect(note?.notes).toEqual(["Deploy is on Friday"]);
+  expect(recorded.openedPanes).toEqual(["session-notes"]);
+  expect(outcome).toEqual({
+    result: "Note deleted and the notes pane opened.",
+  });
+});
+
+test("delete_note refuses a note that does not exist", async ($, on) => {
+  const store = mockEngine(on, "session-a", sessionWithNote("Real note"));
+
+  const outcome = await $.tool.call({
+    tool: DELETE_NOTE_TOOL,
+    text: "Missing note",
+  } as never);
+
+  expect(outcome).toEqual({
+    deny: 'No note in this session reads "Missing note".',
+  });
+  const [note] = store.get("notes") as Array<Record<string, unknown>>;
+  expect(note?.notes).toEqual(["Real note", "Deploy is on Friday"]);
 });
 
 const runNoteCommand = async ($: Engine, on: On, commandArguments: string) => {

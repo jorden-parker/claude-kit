@@ -9,14 +9,11 @@ import (
 	"strings"
 )
 
-const maxNoteLength = 500
+const maxNoteLength = 2000
 
 type session struct {
 	StartedAt        string            `json:"startedAt"`
 	WorkingDirectory string            `json:"cwd"`
-	Prompts          []json.RawMessage `json:"prompts"`
-	Files            []json.RawMessage `json:"files"`
-	Commands         []json.RawMessage `json:"commands"`
 	Notes            []json.RawMessage `json:"notes"`
 }
 
@@ -54,18 +51,22 @@ func (store *noteStore) sessions() []session {
 	return parsedSessions
 }
 
-func displayText(rawValue json.RawMessage) string {
+func noteText(rawValue json.RawMessage) string {
 	var text string
 	if err := json.Unmarshal(rawValue, &text); err != nil {
 		var compacted bytes.Buffer
 		json.Compact(&compacted, rawValue)
 		text = compacted.String()
 	}
-	return strings.Join(strings.Fields(text), " ")
+	return text
 }
 
 func normalizeNoteText(text string) string {
-	normalized := []rune(strings.TrimSpace(strings.ReplaceAll(text, "\n", " ")))
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	normalized := []rune(strings.Trim(strings.Join(lines, "\n"), "\n "))
 	if len(normalized) > maxNoteLength {
 		normalized = normalized[:maxNoteLength]
 	}

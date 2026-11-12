@@ -4,28 +4,25 @@ type SessionNote = {
   sessionId: string;
   cwd: string;
   startedAt: string;
-  prompts: string[];
-  files: string[];
-  commands: string[];
   notes?: string[];
 };
-
-type NoteAddition = Partial<
-  Pick<SessionNote, "prompts" | "files" | "commands" | "notes">
->;
 
 const NOTES_KEY = "notes";
 const NOTES_PANE = "session-notes";
 const PANE_TITLE = "Session notes";
 const MAX_SESSIONS = 100;
 const MAX_ENTRIES_PER_LIST = 100;
-const MAX_ENTRY_LENGTH = 500;
+const MAX_ENTRY_LENGTH = 2000;
 const WRITE_NOTE_TOOL_NAME = "write_note";
 const QUALIFIED_WRITE_NOTE_TOOL_NAME = `mcp__session-notes__${WRITE_NOTE_TOOL_NAME}`;
 const WRITE_NOTE_TOOL_SCHEMA = {
   type: "object",
   properties: {
-    text: { type: "string", description: "The note, in plain words." },
+    text: {
+      type: "string",
+      description:
+        "The note in short Markdown: what is left to do first, then what was done. Outcomes only, never tool calls or commands.",
+    },
   },
   required: ["text"],
 };
@@ -54,9 +51,15 @@ const DELETE_NOTE_TOOL_SCHEMA = {
   },
   required: ["text"],
 };
-const SESSION_SUMMARY_TOPIC =
-  "a short summary of this session: what was done, what was decided, and what is left to do";
-const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+const SESSION_SUMMARY_TOPIC = `a short summary of this session, in exactly this Markdown shape:
+
+## Left to do
+- [ ] each unfinished task, open question, blocker or follow-up, most important first (write "- Nothing" when all is done)
+
+## Done
+- each result of the session: what changed, what was decided and why`;
+const NOTE_WRITING_RULES =
+  "Lead with anything still to do. Write outcomes in plain words, one idea per bullet, under 1500 characters. Leave out tool calls, commands, file reads, logs, code and step-by-step narration.";
 
 const readNotes = async (engine: EngineInterface): Promise<SessionNote[]> => {
   const storedNotes = await engine.store.get(NOTES_KEY);
@@ -71,17 +74,9 @@ const appendEntries = (existing: string[], additions: string[] = []) =>
       .filter((entry) => !existing.includes(entry)),
   ].slice(-MAX_ENTRIES_PER_LIST);
 
-const mergeIntoNote = (note: SessionNote, addition: NoteAddition) => ({
-  ...note,
-  prompts: appendEntries(note.prompts, addition.prompts),
-  files: appendEntries(note.files, addition.files),
-  commands: appendEntries(note.commands, addition.commands),
-  notes: appendEntries(note.notes ?? [], addition.notes),
-});
-
 let pendingWrite: Promise<void> = Promise.resolve();
 
-const addToSessionNote = (engine: EngineInterface, addition: NoteAddition) => {
+const addToSessionNote = (engine: EngineInterface, noteText: string) => {
   pendingWrite = pendingWrite
     .then(async () => {
       const sessionId = await engine.session.id();
@@ -92,17 +87,17 @@ const addToSessionNote = (engine: EngineInterface, addition: NoteAddition) => {
         sessionId,
         cwd: await engine.session.cwd(),
         startedAt: new Date().toISOString(),
-        prompts: [],
-        files: [],
-        commands: [],
       };
       const otherNotes = notes.filter((note) => note.sessionId !== sessionId);
       await engine.store.set(
         NOTES_KEY,
-        [mergeIntoNote(currentNote, addition), ...otherNotes].slice(
-          0,
-          MAX_SESSIONS
-        )
+        [
+          {
+            ...currentNote,
+            notes: appendEntries(currentNote.notes ?? [], [noteText]),
+          },
+          ...otherNotes,
+        ].slice(0, MAX_SESSIONS)
       );
       engine.ui.invalidate("ui.render");
     })
@@ -142,28 +137,13 @@ const replaceSessionNote = (
   return amendment;
 };
 
-const describeNoteToolCall = (
-  tool: string,
-  toolInput: Record<string, unknown>
-) => {
-  if (FILE_EDIT_TOOLS.has(tool)) {
-    const filePath = toolInput.file_path ?? toolInput.notebook_path;
-    return typeof filePath === "string" ? { files: [filePath] } : undefined;
-  }
-  if (tool === "Bash" && typeof toolInput.command === "string") {
-    return { commands: [toolInput.command] };
-  }
-  return undefined;
-};
-
-const noteInstructions = new Set<string>();
-
 const buildNoteInstruction = (topic: string) =>
-  `Call the ${QUALIFIED_WRITE_NOTE_TOOL_NAME} tool once with ${topic}. Write it in plain words, as short bullets, from what happened in this conversation. Reply with one line saying the note is saved.`;
+  `Call the ${QUALIFIED_WRITE_NOTE_TOOL_NAME} tool once with ${topic}
+
+Write it from what happened in this conversation. ${NOTE_WRITING_RULES} Reply with one line saying the note is saved.`;
 
 const askClaudeToWriteNote = (engine: EngineInterface, topic: string) => {
   const instruction = buildNoteInstruction(topic);
-  noteInstructions.add(instruction);
   engine.clock.after(0, () => void engine.prompt.submit({ text: instruction }));
 };
 
@@ -173,7 +153,7 @@ const trimText = (requestedText: unknown) =>
 const writeNote = async (engine: EngineInterface, requestedText: unknown) => {
   const noteText = trimText(requestedText);
   if (!noteText) return { deny: "The note needs some text." };
-  await addToSessionNote(engine, { notes: [noteText] });
+  await addToSessionNote(engine, noteText);
   await openNotesPane(engine);
   return { result: "Note saved and the notes pane opened." };
 };
@@ -202,6 +182,17 @@ const deleteNote = async (engine: EngineInterface, requestedText: unknown) => {
   return { result: "Note deleted and the notes pane opened." };
 };
 
+const formatNoteLine = (line: string) => {
+  const heading =
+    line.match(/^#{1,6}\s+(.*)$/) ?? line.match(/^\*\*(.+?)\*\*:?$/);
+  if (heading) return { isHeading: true, text: heading[1]!.trim() };
+  const bullet = line.match(/^(\s*)[-*+]\s+(?:\[( |x|X)\]\s+)?(.*)$/);
+  if (!bullet) return { isHeading: false, text: line.trim() };
+  const [, indent, checkbox, bulletText] = bullet;
+  const marker = checkbox === undefined ? "•" : checkbox === " " ? "○" : "✓";
+  return { isHeading: false, text: `${indent}${marker} ${bulletText}` };
+};
+
 const formatStartTime = (startedAt: string) =>
   `${startedAt.slice(0, 10)} ${startedAt.slice(11, 16)} UTC`;
 
@@ -222,7 +213,7 @@ export const register: Register = (on) => {
     await $.tool.register({
       name: WRITE_NOTE_TOOL_NAME,
       description:
-        "Writes a note to this session's notes and opens the notes pane. Call it when the user asks you to note, jot down or remember something for this session.",
+        "Writes a note to this session's notes and opens the notes pane. Call it when the user asks you to note, jot down or remember something for this session. Put what is left to do first, then what was done, as short Markdown bullets under ## headings. Never include tool calls, commands, file reads or other session transcript.",
       inputSchema: WRITE_NOTE_TOOL_SCHEMA,
       isDeferred: false,
     });
@@ -255,17 +246,11 @@ export const register: Register = (on) => {
     const requestedTopic = e.args.trim();
     askClaudeToWriteNote(
       $,
-      requestedTopic ? `a note about: ${requestedTopic}` : SESSION_SUMMARY_TOPIC
+      requestedTopic
+        ? `a note about: ${requestedTopic}.`
+        : SESSION_SUMMARY_TOPIC
     );
     return { text: "Writing a session note…" };
-  });
-
-  on("prompt.submit", async ($, e, next) => {
-    const isNoteInstruction = noteInstructions.delete(e.text);
-    const isUserPrompt =
-      !e.command && !isNoteInstruction && e.text.trim() !== "";
-    if (isUserPrompt) await addToSessionNote($, { prompts: [e.text.trim()] });
-    return next(e);
   });
 
   on("tool.call", async ($, e, next) => {
@@ -276,8 +261,6 @@ export const register: Register = (on) => {
       return amendNote($, toolInput.old, toolInput.text);
     if (e.tool === (QUALIFIED_DELETE_NOTE_TOOL_NAME as string))
       return deleteNote($, toolInput.text);
-    const addition = describeNoteToolCall(e.tool, toolInput);
-    if (addition) await addToSessionNote($, addition);
     return next(e);
   });
 
@@ -286,28 +269,38 @@ export const register: Register = (on) => {
     { component: "Pane", requestId: NOTES_PANE },
     async ($, e) => {
       const { Box, Text } = $.ui.resolve(e);
-      const notes = await readNotes($);
-      if (notes.length === 0)
-        return <Text dimColor>No session notes yet.</Text>;
+      const notedSessions = (await readNotes($)).filter(
+        (session) => (session.notes ?? []).length > 0
+      );
+      if (notedSessions.length === 0)
+        return (
+          <Text dimColor>
+            No notes yet. Ask Claude to note something, or run /note.
+          </Text>
+        );
 
       return (
         <Box flexDirection="column">
-          {notes.map((note) => (
+          {notedSessions.map((session) => (
             <Box flexDirection="column" marginBottom={1}>
-              <Text
-                bold
-              >{`${formatStartTime(note.startedAt)}  ${note.cwd}`}</Text>
-              {note.prompts.map((prompt) => (
-                <Text>{`  > ${prompt}`}</Text>
-              ))}
-              {(note.notes ?? []).map((noteText) => (
-                <Text>{`  note ${noteText}`}</Text>
-              ))}
-              {note.files.map((filePath) => (
-                <Text dimColor>{`  edited ${filePath}`}</Text>
-              ))}
-              {note.commands.map((command) => (
-                <Text dimColor>{`  $ ${command}`}</Text>
+              <Text bold color="magenta">
+                {`${formatStartTime(session.startedAt)} · ${session.cwd}`}
+              </Text>
+              {(session.notes ?? []).map((noteText) => (
+                <Box flexDirection="column" marginTop={1}>
+                  {noteText
+                    .split("\n")
+                    .map(formatNoteLine)
+                    .map((line) =>
+                      line.isHeading ? (
+                        <Text bold color="cyan">
+                          {line.text}
+                        </Text>
+                      ) : (
+                        <Text>{`  ${line.text}`}</Text>
+                      )
+                    )}
+                </Box>
               ))}
             </Box>
           ))}

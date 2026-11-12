@@ -1,5 +1,5 @@
 {
   "name": "session-notes",
-  "version": "0.11.0",
-  "description": "Notes each session's prompts, edited files and commands into the plugin store, never into Claude's context; Claude writes notes with write_note or /note amends them with amend_note and deletes them with delete_note; the session-notes shell command lists, amends and deletes notes outside Claude Code, with zsh tab completion; /notes shows them in a pane"
+  "version": "0.12.0",
+  "description": "Keeps the notes Claude writes for each session, what is left to do first, then what was done, in the plugin store, never in Claude's context or session data; Claude writes notes with write_note or /note, amends them with amend_note and deletes them with delete_note; the session-notes shell command lists, amends and deletes notes outside Claude Code, with zsh tab completion; /notes shows them in a pane"
 }

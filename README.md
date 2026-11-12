@@ -17,7 +17,7 @@ install any of them on its own.
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
 | [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
 | [design](plugins/design/) | `/design`, with `new`, `redesign`, `audit` and `apply` modes: mockups in the project's own theme, opened in the browser, and a consistency audit. |
-| [session-notes](plugins/session-notes/) | Notes each session's prompts, edited files and commands outside Claude's context; `/notes` shows them in a pane. |
+| [session-notes](plugins/session-notes/) | Keeps Claude's notes for each session, what is left to do first, outside Claude's context; `/notes` shows them in a pane. |
 
 ## Install
 

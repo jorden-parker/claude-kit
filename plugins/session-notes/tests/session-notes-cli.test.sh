@@ -34,17 +34,20 @@ stored_notes_of_first_session() {
 }
 
 write_fixture_store
-expected_listing='[1] 2026-11-12 09:30 UTC  /repo
-  > fix the login bug
+expected_listing='[1] 2026-11-12 09:30 UTC · /repo
   note 1 Login bug was a stale cookie
   note 2 Deploy is on Friday
-  edited /repo/login.ts
-  $ pnpm test
 
-[2] 2026-11-01 10:00 UTC  /old
-  > old prompt'
-expect_equal "list shows sessions newest first with numbered notes" \
+[2] 2026-11-01 10:00 UTC · /old'
+expect_equal "list shows sessions newest first with numbered notes and no session data" \
   "$expected_listing" "$(bash "$cli_path" list)"
+
+printf '%s' '{"notes": [{"sessionId": "s", "cwd": "/repo", "startedAt": "2026-11-12T09:30:00.000Z", "notes": ["## Left to do\nnote the deploy"]}]}' \
+  > "$fixture_directory/multiline.json"
+expect_equal "list indents the later lines of a note" '[1] 2026-11-12 09:30 UTC · /repo
+  note 1 ## Left to do
+         note the deploy' \
+  "$(SESSION_NOTES_STORE="$fixture_directory/multiline.json" bash "$cli_path" list)"
 
 write_fixture_store
 output="$(bash "$cli_path" delete 1 1)"

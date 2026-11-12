@@ -51,7 +51,7 @@ const mockEngine = (
   return store;
 };
 
-test("prompts, edited files and commands are noted in the store", async ($, on) => {
+test("prompts and tool use are never noted", async ($, on) => {
   const store = mockEngine(on, "session-a");
 
   await $.prompt.submit(submitted("fix the login bug"));
@@ -61,20 +61,9 @@ test("prompts, edited files and commands are noted in the store", async ($, on) 
     old_string: "a",
     new_string: "b",
   });
-  await $.tool.call({
-    tool: "Write",
-    file_path: "/repo/login.ts",
-    content: "",
-  });
   await $.tool.call({ tool: "Bash", command: "pnpm test" });
-  await $.tool.call({ tool: "Read", file_path: "/repo/other.ts" });
 
-  const [note] = store.get("notes") as Array<Record<string, unknown>>;
-  expect(note?.sessionId).toBe("session-a");
-  expect(note?.cwd).toBe("/repo");
-  expect(note?.prompts).toEqual(["fix the login bug"]);
-  expect(note?.files).toEqual(["/repo/login.ts"]);
-  expect(note?.commands).toEqual(["pnpm test"]);
+  expect(store.get("notes")).toBeUndefined();
 });
 
 test("each session gets its own note, newest first", async ($, on) => {
@@ -84,33 +73,47 @@ test("each session gets its own note, newest first", async ($, on) => {
         sessionId: "session-a",
         cwd: "/old",
         startedAt: "2026-11-01T10:00:00.000Z",
-        prompts: ["old prompt"],
-        files: [],
-        commands: [],
+        notes: ["Old note"],
       },
     ],
   });
 
-  await $.prompt.submit(submitted("new prompt"));
+  await $.tool.call({ tool: WRITE_NOTE_TOOL, text: "New note" } as never);
 
   const notes = store.get("notes") as Array<Record<string, unknown>>;
   expect(notes.map((note) => note.sessionId)).toEqual([
     "session-b",
     "session-a",
   ]);
+  expect(notes[0]).toEqual({
+    sessionId: "session-b",
+    cwd: "/repo",
+    startedAt: expect.any(String),
+    notes: ["New note"],
+  });
 });
 
 test("notes never reach the system prompt", async ($, on) => {
   mockEngine(on, "session-a");
   on("prompt.compose", () => ({ sections: [] }));
 
-  await $.prompt.submit(submitted("secret plan"));
+  await $.tool.call({ tool: WRITE_NOTE_TOOL, text: "secret plan" } as never);
   const composed = await $.prompt.compose({} as PromptComposeInput);
 
   expect(JSON.stringify(composed)).not.toContain("secret plan");
 });
 
-test("the pane shows saved notes", async ($, on) => {
+test("a long note keeps its lines and up to 2000 characters", async ($, on) => {
+  const store = mockEngine(on, "session-a");
+  const longNote = `## Left to do\n- [ ] ${"a".repeat(2100)}`;
+
+  await $.tool.call({ tool: WRITE_NOTE_TOOL, text: longNote } as never);
+
+  const [note] = store.get("notes") as Array<{ notes: string[] }>;
+  expect(note?.notes[0]).toBe(longNote.slice(0, 2000));
+});
+
+test("the pane shows formatted notes and no session data", async ($, on) => {
   mockEngine(on, "session-a", {
     notes: [
       {
@@ -120,24 +123,31 @@ test("the pane shows saved notes", async ($, on) => {
         prompts: ["fix the login bug"],
         files: ["/repo/login.ts"],
         commands: ["pnpm test"],
+        notes: [
+          "## Left to do\n- [ ] Ship the fix\n## Done\n- Found the stale cookie\n- [x] Wrote the test",
+        ],
+      },
+      {
+        sessionId: "session-old",
+        cwd: "/old",
+        startedAt: "2026-11-01T10:00:00.000Z",
+        prompts: ["old prompt"],
+        files: [],
+        commands: [],
       },
     ],
   });
 
   const mountedPane = await $.ui.mount(NOTES_PANE);
+  const findText = async (text: RegExp) =>
+    (await mountedPane.find({ type: "Text", text }))?.text;
 
-  expect(
-    (await mountedPane.find({ type: "Text", text: /\/repo$/ }))?.text
-  ).toBe("2026-11-12 09:30 UTC  /repo");
-  expect(
-    (await mountedPane.find({ type: "Text", text: /login bug/ }))?.text
-  ).toBe("  > fix the login bug");
-  expect(
-    (await mountedPane.find({ type: "Text", text: /login\.ts/ }))?.text
-  ).toBe("  edited /repo/login.ts");
-  expect((await mountedPane.find({ type: "Text", text: /pnpm/ }))?.text).toBe(
-    "  $ pnpm test"
-  );
+  expect(await findText(/\/repo$/)).toBe("2026-11-12 09:30 UTC · /repo");
+  expect(await findText(/Left to do/)).toBe("Left to do");
+  expect(await findText(/Ship/)).toBe("  ○ Ship the fix");
+  expect(await findText(/stale cookie/)).toBe("  • Found the stale cookie");
+  expect(await findText(/Wrote/)).toBe("  ✓ Wrote the test");
+  expect(await findText(/login|pnpm|old/)).toBeUndefined();
   await mountedPane.unmount();
 });
 
@@ -147,7 +157,7 @@ test("the pane says when there are no notes", async ($, on) => {
   const mountedPane = await $.ui.mount(NOTES_PANE);
 
   expect((await mountedPane.find({ type: "Text" }))?.text).toBe(
-    "No session notes yet."
+    "No notes yet. Ask Claude to note something, or run /note."
   );
   await mountedPane.unmount();
 });
@@ -163,9 +173,6 @@ test("Claude writes a note with the tool, and the pane opens", async ($, on) => 
           sessionId: "session-a",
           cwd: "/repo",
           startedAt: "2026-11-12T09:30:00.000Z",
-          prompts: [],
-          files: [],
-          commands: [],
         },
       ],
     },
@@ -184,7 +191,7 @@ test("Claude writes a note with the tool, and the pane opens", async ($, on) => 
 
   const mountedPane = await $.ui.mount(NOTES_PANE);
   expect((await mountedPane.find({ type: "Text", text: /stale/ }))?.text).toBe(
-    "  note Login bug was a stale session cookie"
+    "  Login bug was a stale session cookie"
   );
   await mountedPane.unmount();
 });
@@ -206,9 +213,6 @@ const sessionWithNote = (noteText: string) => ({
       sessionId: "session-a",
       cwd: "/repo",
       startedAt: "2026-11-12T09:30:00.000Z",
-      prompts: [],
-      files: [],
-      commands: [],
       notes: [noteText, "Deploy is on Friday"],
     },
   ],
@@ -363,7 +367,12 @@ test("/note asks Claude to note a summary and what is left", async ($, on) => {
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain(WRITE_NOTE_TOOL);
   expect(submittedPrompts[0]).toContain("summary of this session");
-  expect(submittedPrompts[0]).toContain("what is left");
+  expect(submittedPrompts[0]).toContain("## Left to do");
+  expect(submittedPrompts[0]).toContain("## Done");
+  expect(submittedPrompts[0]!.indexOf("## Left to do")).toBeLessThan(
+    submittedPrompts[0]!.indexOf("## Done")
+  );
+  expect(submittedPrompts[0]).toContain("Leave out tool calls");
 });
 
 test("/note with arguments asks Claude to note that instead", async ($, on) => {
@@ -376,6 +385,7 @@ test("/note with arguments asks Claude to note that instead", async ($, on) => {
   expect(submittedPrompts[0]).toContain(WRITE_NOTE_TOOL);
   expect(submittedPrompts[0]).toContain("the open questions");
   expect(submittedPrompts[0]).not.toContain("summary of this session");
+  expect(submittedPrompts[0]).toContain("Leave out tool calls");
 });
 
 test("the /note instructions are not noted as a prompt", async ($, on) => {

@@ -38,11 +38,12 @@ list_notes() {
     (.notes // []) | to_entries | map(
       .key as $session_index | .value as $session |
       ($session.startedAt // "") as $started_at |
-      ["[\($session_index + 1)] \($started_at[0:10]) \($started_at[11:16]) UTC  \($session.cwd // "")"]
-      + (($session.prompts // []) | map("  > \(.)"))
-      + (($session.notes // []) | to_entries | map("  note \(.key + 1) \(.value)"))
-      + (($session.files // []) | map("  edited \(.)"))
-      + (($session.commands // []) | map("  $ \(.)"))
+      ["[\($session_index + 1)] \($started_at[0:10]) \($started_at[11:16]) UTC · \($session.cwd // "")"]
+      + (($session.notes // []) | to_entries | map(
+          "  note \(.key + 1) " as $prefix |
+          (if (.value | type) == "string" then .value else (.value | tojson) end | split("\n")) as $lines |
+          $prefix + $lines[0] + ($lines[1:] | map("\n" + (" " * ($prefix | length)) + .) | join(""))
+        ))
       | join("\n")
     ) | join("\n\n")
   ' "$store_path"
@@ -99,7 +100,7 @@ _session_notes() {
         delete|amend)
           candidates=(${(f)"$(session-notes list 2>/dev/null | awk '
             /^\[[0-9]+\] / { current_session = substr($1, 2, length($1) - 2); next }
-            $1 == "note" {
+            /^  note [0-9]+ / {
               number = $2
               sub(/^ *note [0-9]+ /, "")
               gsub(/:/, "\\:")
@@ -118,7 +119,7 @@ _session_notes() {
         delete|amend)
           candidates=(${(f)"$(session-notes list 2>/dev/null | awk -v session="$words[3]" '
             /^\[[0-9]+\] / { current_session = substr($1, 2, length($1) - 2); next }
-            current_session == session && $1 == "note" {
+            current_session == session && /^  note [0-9]+ / {
               number = $2
               sub(/^ *note [0-9]+ /, "")
               gsub(/:/, "\\:")

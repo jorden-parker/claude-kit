@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -33,12 +34,17 @@ var (
 	backKey    = key.NewBinding(key.WithKeys("esc", "q", "backspace", "left"), key.WithHelp("esc/q", "back to list"))
 	scrollKey  = key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "scroll"))
 
-	titleStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-	sessionRowStyle  = lipgloss.NewStyle().Bold(true)
-	noteRowStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	selectedRowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
-	promptStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203"))
-	statusStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	titleStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+	sessionRowStyle   = lipgloss.NewStyle().Bold(true)
+	noteRowStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	selectedRowStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	promptStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203"))
+	sessionTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+	noteNumberStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	headingStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81"))
+	headingPattern    = regexp.MustCompile(`^(?:#{1,6}\s+(.*)|\*\*(.+?)\*\*:?)$`)
+	bulletPattern     = regexp.MustCompile(`^(\s*)[-*+]\s+(?:\[( |x|X)\]\s+)?(.*)$`)
+	statusStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
 type noteRow struct {
@@ -74,9 +80,6 @@ func sessionTitle(entry session) string {
 	if entry.WorkingDirectory != "" {
 		titleParts = append(titleParts, entry.WorkingDirectory)
 	}
-	if len(entry.Prompts) > 0 {
-		titleParts = append(titleParts, displayText(entry.Prompts[0]))
-	}
 	return strings.Join(titleParts, "  ")
 }
 
@@ -85,7 +88,7 @@ func buildRows(sessions []session) []noteRow {
 	for sessionIndex, entry := range sessions {
 		rows = append(rows, noteRow{sessionIndex, sessionRowNoteIndex, sessionTitle(entry)})
 		for noteIndex, note := range entry.Notes {
-			rows = append(rows, noteRow{sessionIndex, noteIndex, "    note " + displayText(note)})
+			rows = append(rows, noteRow{sessionIndex, noteIndex, "    " + noteHeadline(noteText(note))})
 		}
 	}
 	return rows
@@ -99,19 +102,43 @@ func rowItems(store *noteStore) []list.Item {
 	return items
 }
 
+func formatNoteLine(line string) (string, bool) {
+	if heading := headingPattern.FindStringSubmatch(line); heading != nil {
+		return strings.TrimSpace(heading[1] + heading[2]), true
+	}
+	bullet := bulletPattern.FindStringSubmatch(line)
+	if bullet == nil {
+		return strings.TrimSpace(line), false
+	}
+	marker := map[string]string{"": "•", " ": "○", "x": "✓", "X": "✓"}[bullet[2]]
+	return bullet[1] + marker + " " + bullet[3], false
+}
+
+func noteHeadline(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	headline, _ := formatNoteLine(lines[0])
+	headline = strings.Join(strings.Fields(headline), " ")
+	if len(lines) > 1 {
+		headline += " …"
+	}
+	return headline
+}
+
 func formatSession(sessionIndex int, entry session) string {
-	lines := []string{fmt.Sprintf("[%d] %s UTC  %s", sessionIndex+1, formatStartTime(entry.StartedAt), entry.WorkingDirectory)}
-	for _, prompt := range entry.Prompts {
-		lines = append(lines, "  > "+displayText(prompt))
+	lines := []string{sessionTitleStyle.Render(fmt.Sprintf("[%d] %s UTC · %s", sessionIndex+1, formatStartTime(entry.StartedAt), entry.WorkingDirectory))}
+	if len(entry.Notes) == 0 {
+		lines = append(lines, "", noteNumberStyle.Render("No notes in this session."))
 	}
 	for noteIndex, note := range entry.Notes {
-		lines = append(lines, fmt.Sprintf("  note %d %s", noteIndex+1, displayText(note)))
-	}
-	for _, file := range entry.Files {
-		lines = append(lines, "  edited "+displayText(file))
-	}
-	for _, command := range entry.Commands {
-		lines = append(lines, "  $ "+displayText(command))
+		lines = append(lines, "", noteNumberStyle.Render(fmt.Sprintf("Note %d", noteIndex+1)))
+		for _, line := range strings.Split(noteText(note), "\n") {
+			formatted, isHeading := formatNoteLine(line)
+			if isHeading {
+				lines = append(lines, headingStyle.Render(formatted))
+			} else {
+				lines = append(lines, "  "+formatted)
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -234,7 +261,7 @@ func (current browser) openEditor(row noteRow) (browser, tea.Cmd) {
 		current.status = "Could not open the editor: " + err.Error()
 		return current, nil
 	}
-	noteFile.WriteString(displayText(current.store.sessions()[row.sessionIndex].Notes[row.noteIndex]) + "\n")
+	noteFile.WriteString(noteText(current.store.sessions()[row.sessionIndex].Notes[row.noteIndex]) + "\n")
 	noteFile.Close()
 	commandLine := append(editorCommandLine(), noteFile.Name())
 	editorProcess := exec.Command(commandLine[0], commandLine[1:]...)

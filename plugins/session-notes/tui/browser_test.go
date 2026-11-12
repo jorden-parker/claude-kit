@@ -13,7 +13,7 @@ import (
 const fixtureStore = `{"notes": [
   {"sessionId": "session-b", "cwd": "/repo", "startedAt": "2026-11-12T09:30:00.000Z",
    "prompts": ["fix the login bug"], "files": ["/repo/login.ts"], "commands": ["pnpm test"],
-   "notes": ["Login bug was a stale cookie", "Deploy is on Friday"]},
+   "notes": ["Login bug was a stale cookie", "Deploy is on Friday", "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test"]},
   {"sessionId": "session-a", "cwd": "/old", "startedAt": "2026-11-01T10:00:00.000Z",
    "prompts": ["old prompt"], "files": [], "commands": []}
 ]}`
@@ -117,10 +117,11 @@ func TestRowsListEverySessionWithItsNotesIndented(t *testing.T) {
 		rowTexts = append(rowTexts, row.text)
 	}
 	expectStrings(t, "rows", []string{
-		"2026-11-12 09:30  /repo  fix the login bug",
-		"    note Login bug was a stale cookie",
-		"    note Deploy is on Friday",
-		"2026-11-01 10:00  /old  old prompt",
+		"2026-11-12 09:30  /repo",
+		"    Login bug was a stale cookie",
+		"    Deploy is on Friday",
+		"    Left to do …",
+		"2026-11-01 10:00  /old",
 	}, rowTexts)
 }
 
@@ -133,7 +134,7 @@ func TestRowsTolerateSessionsWithMissingFields(t *testing.T) {
 	for _, row := range buildRows(store.sessions()) {
 		rowTexts = append(rowTexts, row.text)
 	}
-	expectStrings(t, "rows", []string{"unknown time", "    note Plain note", `    note {"text":"object note"}`}, rowTexts)
+	expectStrings(t, "rows", []string{"unknown time", "    Plain note", `    {"text":"object note"}`}, rowTexts)
 }
 
 func TestLoadStoreRejectsAnUnreadableStore(t *testing.T) {
@@ -145,19 +146,19 @@ func TestLoadStoreRejectsAnUnreadableStore(t *testing.T) {
 func TestDeleteRemovesTheSelectedNoteAfterConfirming(t *testing.T) {
 	storePath := writeStore(t, fixtureStore)
 	pressKeys(openBrowser(t, storePath), "j", "j", "d", "y")
-	expectStrings(t, "notes", []string{"Login bug was a stale cookie"}, storedNotes(t, storePath, 0))
+	expectStrings(t, "notes", []string{"Login bug was a stale cookie", "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test"}, storedNotes(t, storePath, 0))
 }
 
 func TestArrowKeysMoveTheSelection(t *testing.T) {
 	storePath := writeStore(t, fixtureStore)
 	pressKeys(openBrowser(t, storePath), "down", "d", "y")
-	expectStrings(t, "notes", []string{"Deploy is on Friday"}, storedNotes(t, storePath, 0))
+	expectStrings(t, "notes", []string{"Deploy is on Friday", "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test"}, storedNotes(t, storePath, 0))
 }
 
 func TestDeleteKeepsTheNoteWhenNotConfirmed(t *testing.T) {
 	storePath := writeStore(t, fixtureStore)
 	pressKeys(openBrowser(t, storePath), "j", "j", "d", "n")
-	expectStrings(t, "notes", []string{"Login bug was a stale cookie", "Deploy is on Friday"}, storedNotes(t, storePath, 0))
+	expectStrings(t, "notes", []string{"Login bug was a stale cookie", "Deploy is on Friday", "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test"}, storedNotes(t, storePath, 0))
 }
 
 func TestDeleteAsksBeforeDeleting(t *testing.T) {
@@ -169,16 +170,21 @@ func TestDeleteAsksBeforeDeleting(t *testing.T) {
 
 func TestDeleteOnASessionRemovesTheWholeSession(t *testing.T) {
 	storePath := writeStore(t, fixtureStore)
-	pressKeys(openBrowser(t, storePath), "j", "j", "j", "d", "y")
+	pressKeys(openBrowser(t, storePath), "j", "j", "j", "j", "d", "y")
 	expectStrings(t, "sessions", []string{"session-b"}, storedSessionIds(t, storePath))
 }
 
 func TestEnterOpensTheSessionWithAVisibleWayBack(t *testing.T) {
 	current, _ := pressKeys(openBrowser(t, writeStore(t, fixtureStore)), "enter")
 	view := current.View()
-	for _, expected := range []string{"fix the login bug", "pnpm test", "note 1 Login bug was a stale cookie", "esc", "back"} {
+	for _, expected := range []string{"Note 1", "Login bug was a stale cookie", "Left to do", "○ Ship the fix", "✓ Wrote the test", "esc", "back"} {
 		if !strings.Contains(view, expected) {
 			t.Errorf("session view is missing %q:\n%s", expected, view)
+		}
+	}
+	for _, sessionData := range []string{"fix the login bug", "pnpm test", "login.ts"} {
+		if strings.Contains(view, sessionData) {
+			t.Errorf("session view shows session data %q:\n%s", sessionData, view)
 		}
 	}
 }
@@ -223,7 +229,7 @@ func TestEditedNoteIsSaved(t *testing.T) {
 	editedPath := filepath.Join(t.TempDir(), "note.txt")
 	os.WriteFile(editedPath, []byte("Cookie expiry\nwas wrong\n\n"), 0o600)
 	openBrowser(t, storePath).Update(editorClosedMessage{notePath: editedPath, sessionIndex: 0, noteIndex: 0})
-	expectStrings(t, "notes", []string{"Cookie expiry was wrong", "Deploy is on Friday"}, storedNotes(t, storePath, 0))
+	expectStrings(t, "notes", []string{"Cookie expiry\nwas wrong", "Deploy is on Friday", "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test"}, storedNotes(t, storePath, 0))
 }
 
 func TestEmptiedNoteIsLeftAsItWas(t *testing.T) {
@@ -231,11 +237,11 @@ func TestEmptiedNoteIsLeftAsItWas(t *testing.T) {
 	editedPath := filepath.Join(t.TempDir(), "note.txt")
 	os.WriteFile(editedPath, []byte("  \n"), 0o600)
 	openBrowser(t, storePath).Update(editorClosedMessage{notePath: editedPath, sessionIndex: 0, noteIndex: 0})
-	expectStrings(t, "notes", []string{"Login bug was a stale cookie", "Deploy is on Friday"}, storedNotes(t, storePath, 0))
+	expectStrings(t, "notes", []string{"Login bug was a stale cookie", "Deploy is on Friday", "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test"}, storedNotes(t, storePath, 0))
 }
 
-func TestNoteTextIsCutAt500Characters(t *testing.T) {
-	if length := len([]rune(normalizeNoteText(strings.Repeat("é", 600)))); length != 500 {
-		t.Errorf("expected 500 characters, got %d", length)
+func TestNoteTextIsCutAt2000Characters(t *testing.T) {
+	if length := len([]rune(normalizeNoteText(strings.Repeat("é", 2100)))); length != 2000 {
+		t.Errorf("expected 2000 characters, got %d", length)
 	}
 }

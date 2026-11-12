@@ -397,7 +397,7 @@ test("the stylesheet colors drawn shapes from the theme, and the prompt lists th
   expect(css).toContain(".graphic .outline{fill:none}");
   const prompt = buildCatalogPrompt(THEME_TOKENS);
   expect(prompt.match(/ICONS: check, star/g)).toHaveLength(1);
-  expect(prompt).toContain("ARTWORK");
+  expect(prompt).toContain("PATTERNS");
 });
 
 test("pickDesignMoves draws a mood, an opening, a body and an asset idea, and differs with the numbers drawn", () => {
@@ -599,4 +599,17 @@ test("an icon is found by a common other name for it", () => {
   expect(renderOne("Icon", { icon: "microphone" })).toBe(renderOne("Icon", { icon: "mic" }));
   expect(renderOne("Logo", { name: "Spoke", icon: "Bicycle" })).toBe(renderOne("Logo", { name: "Spoke", icon: "bike" }));
   expect(renderOne("Image", { alt: "Dog", art: "dog" })).toContain("art-icon");
+});
+
+test("a logo stays visible on a filled Nav, and accent shapes stay visible on an accent Graphic", () => {
+  const css = renderCatalogCss(THEME_TOKENS);
+  expect(css).toContain(".nav-style-filled .logo-mark>:first-child{fill:var(--primary-foreground)}");
+  expect(css).toContain(".nav-style-filled .logo-plain .logo-icon{stroke:var(--primary-foreground)}");
+  expect(css).toContain(".graphic-accent .tone-accent{fill:var(--primary-foreground);stroke:var(--primary-foreground)}");
+});
+
+test("the prompt offers a picture of the subject before a pattern for art", () => {
+  const prompt = buildCatalogPrompt(THEME_TOKENS);
+  expect(prompt).toContain("PATTERNS, for mood only");
+  expect(prompt).not.toContain("ARTWORK names, for an Image's art and a Hero's imageArt");
 });

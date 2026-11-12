@@ -354,7 +354,7 @@ const components = {
         .join("")}</span>${renderButton(props.action, "primary")}</nav>`
   ),
   Hero: defineComponent(
-    "The opening of a landing, onboarding or pricing screen: a small badge, the level 1 title, a sentence, up to two buttons, and an optional picture described in image, which sits beside the text on the side you choose. imageArt draws that picture as one of the ARTWORK names.",
+    "The opening of a landing, onboarding or pricing screen: a small badge, the level 1 title, a sentence, up to two buttons, and an optional picture described in image, which sits beside the text on the side you choose. imageArt draws that picture as an ICONS name or a PATTERNS name.",
     z.object({
       badge: plainText,
       title: plainText,
@@ -537,7 +537,7 @@ const components = {
     (props) => renderAvatar(props.name, props.detail)
   ),
   Image: defineComponent(
-    "A picture, described in alt. art draws it in the theme's colors: an ICONS name draws that subject large, an ARTWORK name draws a pattern or a scene. Without art it is a placeholder for a photo.",
+    "A picture, described in alt. art draws it in the theme's colors: an ICONS name draws that subject large, a PATTERNS name draws a pattern. Without art it is a placeholder for a photo.",
     z.object({
       alt: plainText,
       ratio: defineOption(readKeys(IMAGE_RATIOS), "wide"),
@@ -1001,6 +1001,11 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     `.logo-letter{fill:${onAccent};font-family:${heading};font-size:20px;font-weight:800}`,
     `.logo-plain .logo-icon{stroke:${accent}}`,
     `.logo-plain .logo-letter{fill:${accent};font-size:30px}`,
+    `.nav-style-filled .logo-mark>:first-child{fill:${onAccent}}`,
+    `.nav-style-filled .logo-icon,.nav-style-filled .logo-letter{stroke:${accent};fill:${accent}}`,
+    `.nav-style-filled .logo-plain .logo-icon{stroke:${onAccent}}`,
+    `.nav-style-filled .logo-plain .logo-letter{fill:${onAccent};stroke:none}`,
+    `.graphic-accent .tone-accent{fill:${onAccent};stroke:${onAccent}}`,
     `.logo-icon{fill:none;stroke:${onAccent};stroke-width:2;stroke-linecap:round;stroke-linejoin:round}`,
     ".logo-text{display:flex;flex-direction:column}",
     `.logo-name{font-family:${heading};font-size:20px;font-weight:700}`,
@@ -1219,7 +1224,8 @@ export const buildCatalogPrompt = (tokens: StyleToken[]) =>
     ].join("\n"),
     [
       `ICONS: ${Object.keys(ICON_SHAPES).join(", ")}.`,
-      `ARTWORK names, for an Image's art and a Hero's imageArt: ${Object.keys(ART_DRAWINGS).join(", ")}.`,
+      "- An Image's art and a Hero's imageArt take an ICONS name, which draws a large picture of that subject. Choose that for the main picture.",
+      `PATTERNS, for mood only, also for art and imageArt: ${Object.keys(ART_DRAWINGS).join(", ")}.`,
       `- A Graphic's shapes: {"shape":"<an ICONS name> | ${Object.keys(DRAWN_SHAPES).join(" | ")}","x":50,"y":50,"size":30,"tone":"${SHAPE_TONES.join(" | ")}","rotate":0}.`,
       "- You make the pictures, and they show what this product is: a bakery gets bread, a bike shop a bike, a podcast a mic. Never pick an icon that has nothing to do with the subject.",
       "- Give the brand a logo with such an icon: on the Nav, or as a Logo. Give each Feature its own fitting icon. Use an icon name as an Image's art or a Hero's imageArt for a picture of the subject, and compose a Graphic from icons for a scene. Patterns and geometric shapes are for mood, and photo only for a real product photo.",

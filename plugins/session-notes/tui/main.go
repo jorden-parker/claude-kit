@@ -18,7 +18,7 @@ func main() {
 		fmt.Println("No session notes yet.")
 		return
 	}
-	if _, err := tea.NewProgram(newBrowser(store), tea.WithAltScreen()).Run(); err != nil {
+	if _, err := tea.NewProgram(newBrowser(store), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

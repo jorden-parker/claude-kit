@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,4 +253,51 @@ func TestDeletingTheLastNoteRemovesTheSession(t *testing.T) {
 ]}`)
 	pressKeys(openBrowser(t, storePath), "j", "d", "y")
 	expectStrings(t, "sessions", []string{"kept"}, storedSessionIds(t, storePath))
+}
+
+func TestFullViewScrollsToTheEndOfALongNote(t *testing.T) {
+	bullets := []string{"## Done"}
+	for i := 1; i <= 60; i++ {
+		bullets = append(bullets, fmt.Sprintf("- Finished task number %d with a long explanation of what changed and why it was decided", i))
+	}
+	encodedNote, _ := json.Marshal(strings.Join(bullets, "\n"))
+	storePath := writeStore(t, `{"notes": [{"sessionId": "long", "startedAt": "2026-11-12T09:30:00.000Z", "cwd": "/repo", "notes": [`+string(encodedNote)+`]}]}`)
+	current, _ := pressKeys(openBrowser(t, storePath), "enter")
+	for range 300 {
+		current, _ = pressKeys(current, "down")
+	}
+	if !strings.Contains(current.View(), "number 60 ") || !strings.Contains(current.View(), "end of session") {
+		t.Errorf("expected the last bullet at the bottom, got:\n%s", current.View())
+	}
+	if lines := strings.Count(current.View(), "\n") + 1; lines > 24 {
+		t.Errorf("expected the view to fit 24 rows, got %d", lines)
+	}
+}
+
+func openLongSession(t *testing.T) browser {
+	t.Helper()
+	bullets := []string{"## Done"}
+	for i := 1; i <= 60; i++ {
+		bullets = append(bullets, fmt.Sprintf("- Finished task number %d", i))
+	}
+	encodedNote, _ := json.Marshal(strings.Join(bullets, "\n"))
+	current, _ := pressKeys(openBrowser(t, writeStore(t, `{"notes": [{"sessionId": "long", "notes": [`+string(encodedNote)+`]}]}`)), "enter")
+	return current
+}
+
+func TestFullViewSaysWhenMoreIsBelow(t *testing.T) {
+	if view := openLongSession(t).View(); !strings.Contains(view, "more below") {
+		t.Errorf("expected a more-below hint, got:\n%s", view)
+	}
+}
+
+func TestMouseWheelScrollsTheFullView(t *testing.T) {
+	current := openLongSession(t)
+	for range 30 {
+		updated, _ := current.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		current = updated.(browser)
+	}
+	if !strings.Contains(current.View(), "number 60") {
+		t.Errorf("expected the wheel to reach the last bullet, got:\n%s", current.View())
+	}
 }

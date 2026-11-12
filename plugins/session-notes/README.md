@@ -39,7 +39,7 @@ Limits keep the store small: the latest 100 sessions with notes, 100 notes per s
 Run `session-notes` with no arguments to browse every session in a full-screen list, each with the first line of its notes indented under it; `enter` shows the notes in full, formatted as in the pane. The list is a small Go program built with Charm's Bubble Tea; the first run builds it, so it needs Go (`brew install go`) once.
 
 - `↑`/`↓` (or `j`/`k`) move the selection
-- `enter` (or `v`) shows the whole session; `esc` or `q` goes back to the list, as the footer says
+- `enter` (or `v`) shows the whole session; scroll it with `↑`/`↓`, `space`/`pgdn` or the mouse wheel, and the footer says when more is below; `esc` or `q` goes back to the list. Hold `option` (or `shift`) to select text with the mouse
 - `e` on a note opens it in `$VISUAL` or `$EDITOR` (default `vi`); saving it empty leaves the note as it was
 - `d` deletes the selected note, or the whole session, after you press `y`
 - `/` filters the list

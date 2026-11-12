@@ -32,7 +32,7 @@ var (
 	deleteKey  = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete"))
 	confirmKey = key.NewBinding(key.WithKeys("y", "Y"))
 	backKey    = key.NewBinding(key.WithKeys("esc", "q", "backspace", "left"), key.WithHelp("esc/q", "back to list"))
-	scrollKey  = key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "scroll"))
+	scrollKey  = key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓/wheel", "scroll"))
 
 	titleStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 	sessionRowStyle   = lipgloss.NewStyle().Bold(true)
@@ -196,6 +196,12 @@ func (current browser) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return current, nil
 	case editorClosedMessage:
 		return current.saveEditedNote(message), nil
+	case tea.MouseMsg:
+		if current.screen == sessionScreen {
+			var command tea.Cmd
+			current.sessionView, command = current.sessionView.Update(message)
+			return current, command
+		}
 	case tea.KeyMsg:
 		switch current.screen {
 		case sessionScreen:
@@ -318,10 +324,20 @@ func (current browser) refreshRows() browser {
 	return current
 }
 
+func (current browser) scrollHint() string {
+	switch {
+	case current.sessionView.AtTop() && current.sessionView.AtBottom():
+		return ""
+	case current.sessionView.AtBottom():
+		return "  ·  end of session"
+	}
+	return fmt.Sprintf("  ·  ↓ more below (%d%%)", int(current.sessionView.ScrollPercent()*100))
+}
+
 func (current browser) View() string {
 	if current.screen == sessionScreen {
 		header := titleStyle.Render(fmt.Sprintf("Session %d", current.viewedIndex+1))
-		footer := current.helpView.ShortHelpView([]key.Binding{scrollKey, backKey})
+		footer := current.helpView.ShortHelpView([]key.Binding{scrollKey, backKey}) + statusStyle.Render(current.scrollHint())
 		return lipgloss.JoinVertical(lipgloss.Left, header, current.sessionView.View(), footer)
 	}
 	bottomLine := statusStyle.Render(current.status)

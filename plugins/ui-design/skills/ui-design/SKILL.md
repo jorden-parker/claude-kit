@@ -149,6 +149,17 @@ The variants come from the `ui-ux-pro-max` skill. Before writing any variant, ru
 - Do not print its output in the session. Stay quiet still holds.
 - If the skill is not installed, carry on without it.
 
+### Web Interface Guidelines
+
+The `web-design-guidelines` skill holds the Web Interface Guidelines: rules for focus, forms, motion, typography, touch targets, dark mode, performance and copy. Run it once with the `Skill` tool, before writing any variant, and keep its rules for this design.
+
+- Every variant follows those rules, as far as a static mockup can show them.
+- Where a rule and the theme disagree, the theme wins, and the rule goes in `rationale`.
+- Do not print its output in the session. Stay quiet still holds.
+- If the skill is not installed, carry on without it.
+
+Apply and fix use it too, to review the files they changed, and audit uses it for findings.
+
 ### Different colors and fonts
 
 A variant may give the theme's own color and font tokens new values, through `restyledTokens`. Use it when another palette or font pairing makes that variant look better. At least one variant keeps the theme as it is, so the user can compare.
@@ -221,6 +232,7 @@ The audit reports. It fixes nothing.
 4. Report as `hardcoded` findings only what that scan cannot see: the `font:` shorthand, a bare number in a style object such as `padding: 16`, and a declaration split over several lines.
 5. Find the components that share a purpose, as "Same-purpose components" below says.
 6. Read the files and write the findings that need judgment, as "Findings" below says.
+7. Review `files` with the `web-design-guidelines` skill. Turn each rule it reports into a finding: `accessibility` for focus, labels, contrast, motion and touch targets, `typography` for type and copy, `components` for the rest. Skip what another finding already covers. If the skill is not installed, skip this step.
 
 ### Same-purpose components
 
@@ -399,8 +411,9 @@ Apply builds one variant in the project's real code. This mode is not quiet.
 6. `new`: put the files where the project puts such files, named the way it names them.
 7. Add a token to the theme's source only when the variant lists it in `newTokens`. Change a token's value in the theme's source only when the variant lists it in `restyledTokens`, at the line its `source` cites. Add no other token and no raw value.
 8. Follow every hook the project has installed. Where a test must come first, write it first.
-9. Run the project's type check and tests.
-10. End with what to check in the browser: the route, the states, dark mode and the 390px width.
+9. Review the files you changed with the `web-design-guidelines` skill, and fix what it reports in them. If the skill is not installed, skip this step.
+10. Run the project's type check and tests.
+11. End with what to check in the browser: the route, the states, dark mode and the 390px width.
 
 ## 8. Fix
 
@@ -412,5 +425,6 @@ Fix changes the project's code for numbered findings of the newest audit. Like a
 4. Fix each number in turn, in the order given. Use the project's own tokens and components, as section 7 step 4 says. Add no token to the theme. A finding that needs a value no token holds is left as it is, and the reply says why.
 5. A finding is fixed at its `file` and `line`. A theme finding, such as duplicate tokens or a missing dark value, is fixed where the token is declared. Read the code first: the finding's `fix` is a suggestion.
 6. A component group is fixed by migrating its usages to the `recommended` member. First add what the group's `reasoning` says that member lacks, then move each other member's usages to it. Delete a member only when nothing imports it any more.
-7. Follow every hook the project has installed. Where a test must come first, write it first. Run the project's type check and tests.
-8. End with one line per number: what changed and in which files, or why it was left. Then what to check in the browser. Last, suggest running `/ui-design audit` again to confirm the findings are gone.
+7. Review the files you changed with the `web-design-guidelines` skill, and fix what it reports in them. If the skill is not installed, skip this step.
+8. Follow every hook the project has installed. Where a test must come first, write it first. Run the project's type check and tests.
+9. End with one line per number: what changed and in which files, or why it was left. Then what to check in the browser. Last, suggest running `/ui-design audit` again to confirm the findings are gone.

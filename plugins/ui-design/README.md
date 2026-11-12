@@ -18,6 +18,8 @@ The plugin registers the bare `/ui-design` command, which runs the skill. Plugin
 
 `new` and `redesign` ask the `ui-ux-pro-max` skill for one design direction per variant, then open every variant side by side on one page. A variant may also try other colors and fonts when they look better. It does this by giving the theme's color and font tokens new values inside its own frame, through `restyledTokens`, and `apply` writes them into the theme. Without `ui-ux-pro-max` installed, Claude writes the variants on its own.
 
+Every mode follows the Web Interface Guidelines from the `web-design-guidelines` skill. `new` and `redesign` write the variants to its rules. `audit` turns what it reports into findings. `apply` and `fix` review the files they changed with it, and fix what it reports. Without the skill installed, Claude carries on without it. Install it with `npx skills add vercel-labs/agent-skills --skill web-design-guidelines`.
+
 In `new`, `redesign` and `audit` the session stays quiet. Claude prints no theme, variant or finding: the result is on the page, and the last line in the session says the page opened.
 
 `redesign` then asks which variant to build, with a `Not yet` option. Picking a letter is the go-ahead: Claude builds it as `/ui-design apply` does. Until then, no project file changes. Only `.claude/ui-design/` is written, to hold the page, its `.json` and the theme.

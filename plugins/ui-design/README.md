@@ -59,6 +59,7 @@ With almost no theme to find, Claude stops and asks before it proposes one.
 
 - One tab per variant, A to D. Two variants by default.
 - Each variant renders in a browser-style window with its own address, such as `variant-a.preview`, on a dotted stage.
+- The handle under each window sets the preview height for every variant at once. Drag it, use the arrow keys, Home and End, or double-click it to reset. A badge shows the height while you drag.
 - The hero counts the variants, and a footer signs the page off. Motion stays off under `prefers-reduced-motion`.
 - Each variant renders in its own sandboxed frame, with the theme injected as CSS variables. A variant's CSS only uses `var(--token)`.
 - **Desktop** and **Mobile** switch the frame's width. **Dark** appears when the theme has dark values.

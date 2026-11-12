@@ -1,4 +1,4 @@
-import { PAGE_SCRIPT } from "./page-script";
+import { PAGE_SCRIPT, STAGE_HEIGHT } from "./page-script";
 import { PAGE_STYLE } from "./page-style";
 import {
   TOKEN_KINDS,
@@ -120,10 +120,12 @@ const renderPanel =
     return `<section role="tabpanel" id="panel-${slug}" aria-labelledby="tab-${slug}"${variantIndex ? " hidden" : ""}>
 <div class="variant-head"><h2>${letter} · ${name}</h2><div class="apply"><code id="command-${slug}">/ui-design apply ${designName ? `${escapeHtml(designName)} ` : ""}${letter}</code><button type="button" class="button primary" data-copies="command-${slug}">Use this</button></div></div>
 <p class="muted">${escapeHtml(variant.rationale)}</p>
-<div class="window"><div class="window-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="address">variant-${slug}.preview</span></div><div class="stage"><iframe sandbox="" title="Variant ${letter}: ${name}" srcdoc="${escapeHtml(renderVariantDocument(theme, variant))}"></iframe></div></div>
+<div class="window"><div class="window-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="address">variant-${slug}.preview</span></div><div class="stage"><iframe sandbox="" title="Variant ${letter}: ${name}" srcdoc="${escapeHtml(renderVariantDocument(theme, variant))}"></iframe></div>${STAGE_RESIZER}</div>
 <div class="notes">${redesignNotes}${renderTokenTable("Restyled colors and fonts", variant.restyledTokens)}${renderTokenTable("Proposed additions", readProposedTokens(variant))}</div>
 </section>`;
   };
+
+const STAGE_RESIZER = `<div class="resizer" data-resizer role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Preview height" aria-valuemin="${STAGE_HEIGHT.min}" aria-valuemax="${STAGE_HEIGHT.max}" aria-valuenow="${STAGE_HEIGHT.initial}" title="Drag to resize. Double-click to reset."><span class="grip"></span></div>`;
 
 const SHAPES_MARK = `<svg viewBox="0 0 54 16" width="54" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><rect x="20.5" y="1.5" width="13" height="13" rx="2"/><path d="M46 1.75 52.5 14.25h-13z" stroke-linejoin="round"/></svg>`;
 

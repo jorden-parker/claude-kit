@@ -1,3 +1,5 @@
+export const STAGE_HEIGHT = { min: 240, max: 1600, initial: 640, step: 40 };
+
 export const PAGE_SCRIPT = String.raw`
 (function(){
   function listAll(selector){ return Array.prototype.slice.call(document.querySelectorAll(selector)); }
@@ -43,6 +45,45 @@ export const PAGE_SCRIPT = String.raw`
     darkToggle.setAttribute("aria-pressed", String(isDark));
     listAll("iframe").forEach(function(frame){
       frame.srcdoc = frame.srcdoc.replace(readThemeRoot(!isDark), readThemeRoot(isDark));
+    });
+  });
+
+  var STAGE_HEIGHT = ${JSON.stringify(STAGE_HEIGHT)};
+  var resizers = listAll("[data-resizer]");
+  function readStageHeight(resizer){ return Number(resizer.getAttribute("aria-valuenow")); }
+  function setStageHeight(requestedHeight){
+    var height = Math.round(Math.min(STAGE_HEIGHT.max, Math.max(STAGE_HEIGHT.min, requestedHeight)));
+    var edge = height === STAGE_HEIGHT.min ? "min" : height === STAGE_HEIGHT.max ? "max" : "";
+    document.body.style.setProperty("--stage-height", height + "px");
+    resizers.forEach(function(resizer){
+      resizer.setAttribute("aria-valuenow", String(height));
+      resizer.dataset.edge = edge;
+    });
+  }
+  resizers.forEach(function(resizer){
+    var dragStart = null;
+    function stopDragging(){
+      dragStart = null;
+      delete document.body.dataset.resizing;
+    }
+    resizer.addEventListener("pointerdown", function(event){
+      event.preventDefault();
+      dragStart = { pointerY: event.clientY, height: readStageHeight(resizer) };
+      if (resizer.setPointerCapture) resizer.setPointerCapture(event.pointerId);
+      document.body.dataset.resizing = "true";
+    });
+    resizer.addEventListener("pointermove", function(event){
+      if (dragStart) setStageHeight(dragStart.height + event.clientY - dragStart.pointerY);
+    });
+    resizer.addEventListener("pointerup", stopDragging);
+    resizer.addEventListener("pointercancel", stopDragging);
+    resizer.addEventListener("dblclick", function(){ setStageHeight(STAGE_HEIGHT.initial); });
+    resizer.addEventListener("keydown", function(event){
+      var height = readStageHeight(resizer);
+      var targetHeightByKey = { ArrowDown: height + STAGE_HEIGHT.step, ArrowUp: height - STAGE_HEIGHT.step, Home: STAGE_HEIGHT.min, End: STAGE_HEIGHT.max };
+      if (!Object.prototype.hasOwnProperty.call(targetHeightByKey, event.key)) return;
+      event.preventDefault();
+      setStageHeight(targetHeightByKey[event.key]);
     });
   });
 

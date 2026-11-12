@@ -345,3 +345,13 @@ test("the hero counts the variants and the page signs off in the footer", () => 
     renderDesignPage({ ...REDESIGN, variants: [FIRST_VARIANT] })
   ).toContain("1 variant, freshly mocked.");
 });
+
+test("each stage has a keyboard-reachable resize handle instead of the native grip", () => {
+  const pageHtml = renderDesignPage(REDESIGN);
+
+  expect(pageHtml).toContain(
+    '</iframe></div><div class="resizer" data-resizer role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Preview height" aria-valuemin="240" aria-valuemax="1600" aria-valuenow="640" title="Drag to resize. Double-click to reset."><span class="grip"></span></div></div>'
+  );
+  expect(countOccurrences(pageHtml, `class="resizer"`)).toBe(2);
+  expect(pageHtml).not.toContain("resize:vertical");
+});

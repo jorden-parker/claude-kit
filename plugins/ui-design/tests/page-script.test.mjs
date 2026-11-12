@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PAGE_SCRIPT } from "../hooks/page-script.ts";
 
-const dispatch = (element, type, key = "") => {
+const dispatch = (element, type, key = "", pointer = {}) => {
   const event = {
     key,
+    ...pointer,
     defaultPrevented: false,
     preventDefault: () => {
       event.defaultPrevented = true;
@@ -52,6 +53,16 @@ const createElement = (tagName, attributes = {}, properties = {}) => {
     attributes: { ...attributes },
     listeners: {},
     focused: false,
+    capturedPointerId: undefined,
+    style: {
+      properties: {},
+      setProperty: (name, value) => {
+        element.style.properties[name] = value;
+      },
+    },
+    setPointerCapture: (pointerId) => {
+      element.capturedPointerId = pointerId;
+    },
     getAttribute: (name) => element.attributes[name] ?? null,
     setAttribute: (name, value) => {
       element.attributes[name] = value;
@@ -143,6 +154,14 @@ const buildPage = (clipboard) => {
   const copyButton = createElement("button", { "data-copies": "command-a" });
   const status = createElement("p", { id: "copy-status" });
   const body = createElement("body", { "data-frame-width": "desktop" });
+  const resizerA = createElement("div", {
+    "data-resizer": "",
+    "aria-valuenow": "640",
+  });
+  const resizerB = createElement("div", {
+    "data-resizer": "",
+    "aria-valuenow": "640",
+  });
 
   const elements = [
     tabA,
@@ -158,6 +177,8 @@ const buildPage = (clipboard) => {
     command,
     copyButton,
     status,
+    resizerA,
+    resizerB,
   ];
   const selection = {
     ranges: [],
@@ -208,6 +229,8 @@ const buildPage = (clipboard) => {
     status,
     body,
     selection,
+    resizerA,
+    resizerB,
   };
 };
 
@@ -347,4 +370,77 @@ test("without a clipboard API, the command is selected at once", () => {
     page.status.textContent,
     "Could not copy. The command is selected: press Cmd/Ctrl+C."
   );
+});
+
+const drag = (resizer, fromY, toY) => {
+  dispatch(resizer, "pointerdown", "", { clientY: fromY, pointerId: 7 });
+  dispatch(resizer, "pointermove", "", { clientY: toY, pointerId: 7 });
+};
+
+const readStageHeight = (page) => page.body.style.properties["--stage-height"];
+
+test("dragging a resizer sets every stage's height and keeps the pointer", () => {
+  const page = buildPage();
+
+  drag(page.resizerA, 500, 580);
+
+  assert.equal(page.resizerA.capturedPointerId, 7);
+  assert.equal(page.body.dataset.resizing, "true");
+  assert.equal(readStageHeight(page), "720px");
+  assert.equal(page.resizerA.getAttribute("aria-valuenow"), "720");
+  assert.equal(page.resizerB.getAttribute("aria-valuenow"), "720");
+
+  dispatch(page.resizerA, "pointerup", "", { clientY: 580, pointerId: 7 });
+  dispatch(page.resizerA, "pointermove", "", { clientY: 900, pointerId: 7 });
+
+  assert.equal(page.body.dataset.resizing, undefined);
+  assert.equal(readStageHeight(page), "720px");
+});
+
+test("the height stops at its floor and ceiling and marks the edge", () => {
+  const page = buildPage();
+
+  drag(page.resizerA, 500, -2000);
+
+  assert.equal(readStageHeight(page), "240px");
+  assert.equal(page.resizerA.dataset.edge, "min");
+
+  dispatch(page.resizerA, "pointermove", "", { clientY: 5000, pointerId: 7 });
+
+  assert.equal(readStageHeight(page), "1600px");
+  assert.equal(page.resizerB.dataset.edge, "max");
+
+  dispatch(page.resizerA, "pointermove", "", { clientY: 600, pointerId: 7 });
+
+  assert.equal(page.resizerA.dataset.edge, "");
+});
+
+test("arrow keys, Home and End resize from the keyboard", () => {
+  const page = buildPage();
+
+  const downEvent = pressKey(page.resizerA, "ArrowDown");
+  assert.equal(downEvent.defaultPrevented, true);
+  assert.equal(readStageHeight(page), "680px");
+
+  pressKey(page.resizerA, "ArrowUp");
+  pressKey(page.resizerA, "ArrowUp");
+  assert.equal(readStageHeight(page), "600px");
+
+  pressKey(page.resizerA, "End");
+  assert.equal(readStageHeight(page), "1600px");
+
+  pressKey(page.resizerA, "Home");
+  assert.equal(readStageHeight(page), "240px");
+
+  assert.equal(pressKey(page.resizerA, "Tab").defaultPrevented, false);
+});
+
+test("double-clicking a resizer puts the height back", () => {
+  const page = buildPage();
+
+  pressKey(page.resizerA, "End");
+  dispatch(page.resizerA, "dblclick");
+
+  assert.equal(readStageHeight(page), "640px");
+  assert.equal(page.resizerB.getAttribute("aria-valuenow"), "640");
 });

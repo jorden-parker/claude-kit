@@ -12,6 +12,18 @@ mkdir -p "$repository/.claude" "$repository/src" "$TMPDIR"
 printf '{"testCommand": "pytest"}\n' > "$repository/.claude/tdd.json"
 printf 'class Account:\n    pass\n' > "$repository/src/account.py"
 
+record_qwen_failed_test_run() {
+  local session_id="$1"
+  printf '{"hook_event_name":"PostToolUseFailure","session_id":"%s","tool_name":"run_shell_command","tool_input":{"command":"pytest"},"error":"Command exited with code 1","is_interrupt":false}' \
+    "$session_id" | "$hook_directory/tdd-record-test-run.sh"
+}
+
+record_qwen_passed_test_run() {
+  local session_id="$1"
+  printf '{"hook_event_name":"PostToolUse","session_id":"%s","tool_name":"run_shell_command","tool_input":{"command":"pytest"},"tool_response":{"llmContent":"1 passed","returnDisplay":"1 passed"}}' \
+    "$session_id" | "$hook_directory/tdd-record-test-run.sh"
+}
+
 run_hook() {
   local session_id="$1" tool_name="$2" file_path="$3"
   printf '{"session_id":"%s","tool_name":"%s","cwd":"%s","tool_input":{"file_path":"%s"}}' \
@@ -76,6 +88,14 @@ fi
 record_test_run session-green 0
 run_hook session-green Write "$repository/src/ledger.py"
 expect_exit "blocks a new implementation file after only a passing run" 2 $?
+
+record_qwen_failed_test_run session-qwen-red
+run_hook session-qwen-red Write "$repository/src/ledger.py"
+expect_exit "Qwen Code: allows a new implementation file after a failed shell test run" 0 $?
+
+record_qwen_passed_test_run session-qwen-green
+run_hook session-qwen-green Write "$repository/src/ledger.py"
+expect_exit "Qwen Code: blocks a new implementation file after only a passing shell test run" 2 $?
 
 rm -rf "$fixture_directory"
 [ "$failures" -eq 0 ] || { echo "$failures failure(s)"; exit 1; }

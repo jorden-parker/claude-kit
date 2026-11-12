@@ -5,15 +5,22 @@ paths_edited_this_turn() {
   [ -f "$transcript_path" ] || return 0
   jq -r '
     def is_user_prompt:
-      .type == "user"
-      and (.isMeta != true)
-      and ((.message.content | type) == "string"
-           or ((.message.content | type) == "array"
-               and all(.message.content[]; .type != "tool_result")));
+      (.type == "user"
+       and (.isMeta != true)
+       and ((.message.content | type) == "string"
+            or ((.message.content | type) == "array"
+                and all(.message.content[]; .type != "tool_result"))))
+      or (.type == "user" and .provenance == "real_user");
+    def tool_calls:
+      if (.message.content | type) == "array" then
+        [.message.content[] | select(.type == "tool_use") | {name, input}]
+      elif (.message.parts | type) == "array" then
+        [.message.parts[] | select(.functionCall) | {name: .functionCall.name, input: .functionCall.args}]
+      else [] end;
     if is_user_prompt then "prompt"
-    elif .type == "assistant" and (.message.content | type) == "array" then
-      .message.content[]
-      | select(.type == "tool_use" and (.name | IN("Edit", "Write", "NotebookEdit")))
+    elif .type == "assistant" then
+      tool_calls[]
+      | select(.name | IN("Edit", "Write", "NotebookEdit", "edit", "write_file", "notebook_edit"))
       | "edit\t" + (.input.file_path // .input.notebook_path // "")
     elif .type == "user" then
       (.toolUseResult | objects | .bashEditDiff | objects | .files // [])[]

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
 
 hook_directory="$(cd "$(dirname "$0")/../hooks" && pwd)"
 fixture_directory="$(mktemp -d)"
@@ -80,6 +81,18 @@ expect_stderr_omits() {
   fi
 }
 
+qwen_prompt_line() {
+  printf '{"type":"user","uuid":"%s","provenance":"real_user","message":{"role":"user","parts":[{"text":"%s"}]}}' "$1" "$2"
+}
+
+qwen_call_line() {
+  printf '{"type":"assistant","uuid":"%s","provenance":"assistant_output","message":{"role":"model","parts":[{"functionCall":{"id":"%s","name":"%s","args":{"file_path":"%s","old_string":"1","new_string":"2"}}}]}}' "$1" "$1" "$2" "$3"
+}
+
+qwen_tool_result_line() {
+  printf '{"type":"tool_result","uuid":"%s","provenance":"tool_result","message":{"role":"user","parts":[{"functionResponse":{"id":"%s","name":"edit","response":{"output":"ok"}}}]}}' "$1" "$1"
+}
+
 no_edit_transcript="$fixture_directory/no-edit.jsonl"
 write_transcript "$no_edit_transcript" "$(user_prompt_line u1 'what does app.py do')"
 
@@ -113,6 +126,24 @@ expect_exit "green gate ignores edits from earlier turns" 0 "$status"
 
 run_hook tdd-green-gate.sh "$edit_transcript" tdd-edit; status=$?
 expect_exit "green gate runs failing tests after a turn that edited source" 2 "$status"
+
+qwen_edit_transcript="$fixture_directory/qwen-edit.jsonl"
+write_transcript "$qwen_edit_transcript" \
+  "$(qwen_prompt_line u1 'change app.py')" \
+  "$(qwen_call_line a1 edit "$repository/app.py")" \
+  "$(qwen_tool_result_line r1)"
+
+qwen_earlier_turn_transcript="$fixture_directory/qwen-earlier-turn.jsonl"
+write_transcript "$qwen_earlier_turn_transcript" \
+  "$(qwen_prompt_line u1 'change app.py')" \
+  "$(qwen_call_line a1 edit "$repository/app.py")" \
+  "$(qwen_prompt_line u2 'thanks, what next')"
+
+run_hook tdd-green-gate.sh "$qwen_earlier_turn_transcript" tdd-qwen-earlier-turn; status=$?
+expect_exit "green gate ignores Qwen Code edits from earlier turns" 0 "$status"
+
+run_hook tdd-green-gate.sh "$qwen_edit_transcript" tdd-qwen-edit; status=$?
+expect_exit "green gate runs failing tests after a Qwen Code edit" 2 "$status"
 
 rm -rf "$fixture_directory"
 if [ "$failures" -gt 0 ]; then

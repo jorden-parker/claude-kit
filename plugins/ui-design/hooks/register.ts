@@ -59,6 +59,8 @@ const QUALIFIED_THEME_TOOL_NAME = `mcp__ui-design__${THEME_TOOL_NAME}`;
 const QUALIFIED_DESIGN_TOOL_NAME = `mcp__ui-design__${DESIGN_TOOL_NAME}`;
 const QUALIFIED_AUDIT_TOOL_NAME = `mcp__ui-design__${AUDIT_TOOL_NAME}`;
 const DESIGN_MODES: readonly DesignMode[] = ["redesign", "new"];
+const DESIGN_COMMAND = "ui-design";
+const DESIGN_SKILL = "ui-design:ui-design";
 const DESIGN_COMMAND_PREFIXES = ["/ui-design ", "/ui-design:ui-design "];
 const DESIGN_MODE_SUGGESTIONS = [
   {
@@ -707,8 +709,18 @@ const describeFailure = (failedAction: string, error: unknown) => ({
   deny: `Could not ${failedAction}: ${describeError(error)}`,
 });
 
+const buildSkillPrompt = (commandArguments: string) =>
+  `Run the ${DESIGN_SKILL} skill with the Skill tool, passing these arguments as they stand: ${commandArguments}`;
+
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
+    await $.command.register({
+      name: DESIGN_COMMAND,
+      description:
+        "Design UI as themed mockups in the browser, or audit the theme and components",
+      argumentHint:
+        "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors>",
+    });
     await $.tool.register({
       name: THEME_TOOL_NAME,
       description:
@@ -731,6 +743,15 @@ export const register: Register = (on) => {
       isDeferred: false,
     });
     return next(e);
+  });
+
+  on("command.run", { command: DESIGN_COMMAND }, async ($, e) => {
+    const commandArguments = e.args.trim();
+    $.clock.after(
+      0,
+      () => void $.prompt.submit({ text: buildSkillPrompt(commandArguments) })
+    );
+    return { text: "Starting the ui-design skill…" };
   });
 
   on("prompt.autocomplete", async (_, e, next) => {

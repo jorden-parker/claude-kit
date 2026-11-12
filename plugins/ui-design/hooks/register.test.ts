@@ -3,7 +3,7 @@ import type {
   PromptAutocompleteInput,
   PromptAutocompleteResult,
 } from "claude-code";
-import { expect, test, type Engine } from "claude-code/testing";
+import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const THEME_TOOL = "mcp__ui-design__save_design_theme";
 const DESIGN_TOOL = "mcp__ui-design__render_design";
@@ -168,10 +168,39 @@ const readSavedJson = (writes: FileWrite[], fileEnding: string) =>
     writes.find((write) => write.path.endsWith(fileEnding))?.text ?? "null"
   ) as Record<string, unknown>;
 
+const buildDesignCommand = (args: string) => ({
+  command: "ui-design",
+  args,
+  origin: { kind: "composer" as const },
+  presentation: { isFullscreen: false, columns: 80 },
+});
+
+const recordSubmittedPrompts = (on: On) => {
+  const clock = mock.clock(on, { now: NOVEMBER_TWELFTH_NOON });
+  const submittedPrompts: string[] = [];
+  on("prompt.submit", (_, e) => {
+    submittedPrompts.push(e.text);
+    return { text: e.text };
+  });
+  return { clock, submittedPrompts };
+};
+
+test("/ui-design runs the ui-design skill with its arguments", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+
+  const reply = await $.command.run(buildDesignCommand("new a pricing page"));
+  await clock.settle();
+
+  expect(reply.text).toContain("ui-design");
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain("ui-design:ui-design");
+  expect(submittedPrompts[0]).toContain("new a pricing page");
+});
+
 const readPage = (writes: FileWrite[]) =>
   writes.find((write) => write.path.endsWith(".html"))?.text ?? "";
 
-test("session start registers the three tools and no command, since the engine serves the skill as a command", async ($, on) => {
+test("session start registers the bare /ui-design command and the three tools", async ($, on) => {
   const commandNames: string[] = [];
   const tools: { name: string; isDeferred?: unknown }[] = [];
   on("command.register", (_, e) => {
@@ -190,7 +219,7 @@ test("session start registers the three tools and no command, since the engine s
     isInteractive: true,
   });
 
-  expect(commandNames).toEqual([]);
+  expect(commandNames).toEqual(["ui-design"]);
   expect(tools).toEqual([
     { name: "save_design_theme", isDeferred: false },
     { name: "render_design", isDeferred: false },

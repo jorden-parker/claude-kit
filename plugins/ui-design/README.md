@@ -14,7 +14,9 @@ With no mode word, a target that exists in the project means `redesign`, and any
 
 Plain words work too: "redesign the settings page", "mock up a pricing page", "audit the design system".
 
-The menu lists the skill by its full name, `/ui-design:ui-design`. The plugin registers no command of its own: the engine serves the skill as a command.
+The plugin registers the bare `/ui-design` command, which runs the skill. Plugin skills are always namespaced as `/<plugin>:<skill>`, so the skill itself is hidden from the menu with `user-invocable: false`; Claude can still pick it from plain words.
+
+`new` and `redesign` ask the `ui-ux-pro-max` skill for one design direction per variant, then open every variant side by side on one page. Without `ui-ux-pro-max` installed, Claude writes the variants on its own.
 
 In `new`, `redesign` and `audit` the session stays quiet. Claude prints no theme, variant or finding: the result is on the page, and the last line in the session says the page opened.
 

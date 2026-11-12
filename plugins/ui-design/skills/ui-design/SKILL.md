@@ -1,6 +1,7 @@
 ---
 name: ui-design
 description: Design UI as themed mockups in the browser, built from the project's own colors, type, spacing and components, or audit the project's theme and components for consistency. Use whenever the user asks to design, mock up or sketch a new screen, page or component, to redesign, restyle or rethink existing UI, to audit or check the theme, design system, design tokens, hardcoded colors, typography or component consistency, or to apply, build or implement a design variant, or to fix audit findings. Changes no project code until the user picks a variant with apply, answers the go-ahead question after redesign, or names findings with fix.
+user-invocable: false
 argument-hint: "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors>"
 ---
 
@@ -121,7 +122,7 @@ Fewer than about five tokens, declared and inferred together, is not a theme.
 1. Resolve the target to a file. A route resolves to its page file, a component name to its definition. Ask, with `AskUserQuestion`, only when the words fit several files.
 2. Read the target, the components it renders, and its callers. Find every state it has: empty, loading, error, disabled, signed out.
 3. These are fixed: the content, the data, the behavior, the props and the accessibility. A redesign changes layout, hierarchy, grouping, density and emphasis.
-4. Write two variants. Write more, up to four, only when the notes ask. Variants differ in structure, not just in color.
+4. Get one direction per variant from `ui-ux-pro-max`, as "Directions from ui-ux-pro-max" in section 4 says. Write two variants. Write more, up to four, only when the notes ask. Variants differ in structure, not just in color.
 5. Draw the project's components the way they look: read the ones the mockup shows, from the paths in the theme's `components`.
 6. Fill `kept` and `changed` for each variant, honestly. `changed` needs at least one entry. If something from step 3 had to change, it goes in `changed`, with the reason.
 
@@ -131,12 +132,23 @@ Fewer than about five tokens, declared and inferred together, is not a theme.
 
 1. A new design needs a purpose and its content: what the screen is for, and what it shows or collects. When either is missing, ask one question with `AskUserQuestion`, then carry on.
 2. Read the nearest similar screens, for layout, density and tone. Read the components the mockup will reuse, from the paths in the theme's `components`.
-3. Write two variants. Write more, up to four, only when the brief asks. Variants differ in structure, not just in color.
+3. Get one direction per variant from `ui-ux-pro-max`, as "Directions from ui-ux-pro-max" in section 4 says. Write two variants. Write more, up to four, only when the brief asks. Variants differ in structure, not just in color.
 4. Leave `kept` and `changed` out.
 
 `subject` is the brief, in one line.
 
 ## 4. Mockup rules
+
+### Directions from ui-ux-pro-max
+
+The variants come from the `ui-ux-pro-max` skill. Before writing any variant, run it once with the `Skill` tool. Give it the product type, the subject, the stack and the theme's look, and ask for as many distinct design directions as there are variants: a style, a layout pattern and the UX rules that apply.
+
+- Each variant follows one direction. Name the variant after its direction and say in `rationale` what the direction is good at.
+- Take style, layout, hierarchy, density and UX rules from it. Colors and fonts still come from the theme: a palette or font pairing it suggests is a hint, and a value the theme lacks goes in `newTokens`, within its limit.
+- Do not print its output in the session. Stay quiet still holds.
+- If the skill is not installed, carry on without it.
+
+### Rules for every variant
 
 For every variant, in both modes:
 

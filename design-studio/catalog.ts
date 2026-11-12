@@ -8,13 +8,49 @@ export type StyleToken = { name: string; kind: string; value: string };
 type Element = { type: string; props?: unknown; children?: unknown };
 export type Spec = { root?: string; elements?: Record<string, Element> };
 
-const GAP_SIZES = { sm: "8px", md: "16px", lg: "32px" };
+const GAP_SIZES = { sm: "8px", md: "16px", lg: "32px", xl: "56px" };
 const TEXT_SIZES = { sm: "14px", md: "16px", lg: "20px" };
 const ROW_ALIGNS = { start: "flex-start", center: "center", end: "flex-end", between: "space-between" };
 const IMAGE_RATIOS = { square: "1 / 1", wide: "16 / 9", tall: "3 / 4" };
 const PAGE_WIDTHS = { wide: "1120px", narrow: "480px" };
 const COLUMN_COUNTS = ["1", "2", "3", "4"];
 const MIN_SHOWN_ELEMENTS = 4;
+const LOOK_ORDER = ["sharp", "bold", "editorial", "soft", "clean"] as const;
+export type Look = (typeof LOOK_ORDER)[number];
+const DISTINCTIVE_STYLES: [Look, RegExp][] = [
+  ["sharp", /brutal|raw|mono|terminal|retro|pixel|industrial/i],
+  ["bold", /vibrant|block|playful|energetic|gradient|neon|maximal|colorful/i],
+  ["editorial", /editorial|magazine|luxury|elegant|serif|classic|premium|refined/i],
+  ["soft", /soft|neumorph|glass|friendly|organic|rounded|pastel|clay/i],
+];
+const HEADING_FONTS: Record<string, string> = {
+  serif: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
+  mono: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+  rounded: 'ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif',
+};
+const HEADING_FONT_BY_LOOK: Record<string, string> = { sharp: "mono", editorial: "serif", soft: "rounded" };
+const HEADING_TOKEN_NAMES = ["font-heading", "font-display", "heading"];
+const CORNER_RADII = { square: "0", rounded: "12px", pill: "999px" };
+const PAGE_SPACINGS = { compact: "24px", normal: "40px", airy: "72px" };
+const SPLIT_RATIOS = { equal: "1fr 1fr", "wide-left": "2fr 1fr", "wide-right": "1fr 2fr" };
+const CROSS_ALIGNS = { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch" };
+const MAX_WIDTHS = { sm: "360px", md: "560px", lg: "760px" };
+const SPAN_COUNTS = ["2", "3", "4"];
+const ICON_SHAPES: Record<string, string> = {
+  check: '<path d="M5 12l5 5 9-10"/>',
+  star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  shield: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  leaf: '<path d="M5 19c0-8 5-14 15-14 0 10-6 15-14 15zM5 19l8-8"/>',
+  map: '<path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+  bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/>',
+  gift: '<rect x="3" y="9" width="18" height="12"/><path d="M12 9v12M3 13h18M12 9c-2-4-7-3-5 0zM12 9c2-4 7-3 5 0z"/>',
+};
+const TRUTH_BY_WORD: Record<string, boolean> = { true: true, false: false };
 const IMAGE_ICON =
   '<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>';
 
@@ -33,6 +69,52 @@ const defineComponent = (
   props: z.ZodObject,
   render: (props: any, children: string) => string
 ) => ({ description, props, render });
+
+const defineContainer = (
+  description: string,
+  props: z.ZodObject,
+  render: (props: any, children: string) => string
+) => defineComponent(description, props, (givenProps, children) => (children ? render(givenProps, children) : ""));
+
+const renderButton = (label: string, tone: string) =>
+  label ? `<button type="button" class="button button-${tone}">${escapeHtml(label)}</button>` : "";
+
+const renderBadge = (text: string, tone: string) =>
+  text ? `<span class="badge badge-${tone}">${escapeHtml(text)}</span>` : "";
+
+const renderListItem = (text: string, detail: string) =>
+  `<li class="list-item"><span>${escapeHtml(text)}</span><span class="list-detail">${escapeHtml(detail)}</span></li>`;
+
+const placementProps = z.object({
+  span: z.enum(SPAN_COUNTS as [string, ...string[]]).optional(),
+  rowSpan: z.enum(SPAN_COUNTS as [string, ...string[]]).optional(),
+  place: z.enum(readKeys(CROSS_ALIGNS)).optional(),
+  textAlign: z.enum(["left", "center", "right"]).optional(),
+  maxWidth: z.enum(readKeys(MAX_WIDTHS)).optional(),
+});
+
+const PLACEMENT_CLASS_STEMS: Record<string, string> = {
+  span: "span",
+  rowSpan: "row-span",
+  place: "place",
+  textAlign: "text-align",
+  maxWidth: "max-width",
+};
+
+const renderImage = (alt: string, ratio: string) =>
+  `<div class="image ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}">${IMAGE_ICON}<span>${escapeHtml(alt)}</span></div>`;
+
+const renderIcon = (icon: string) =>
+  `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_SHAPES[icon]}</svg>`;
+
+const renderHeading = (text: string, level: string) =>
+  text ? `<h${level} class="heading heading-${level}">${escapeHtml(text)}</h${level}>` : "";
+
+const renderText = (text: string, toneAndSize: string) =>
+  text ? `<p class="text ${toneAndSize}">${escapeHtml(text)}</p>` : "";
+
+const renderAvatar = (name: string, detail: string) =>
+  `<div class="avatar"><span class="avatar-mark" aria-hidden="true">${escapeHtml(renderInitials(name))}</span><span class="avatar-text"><span class="avatar-name">${escapeHtml(name)}</span><span class="avatar-detail">${escapeHtml(detail)}</span></span></div>`;
 
 const renderInitials = (name: string) =>
   name
@@ -57,34 +139,85 @@ const renderCells = (cells: string[], tag: string) =>
 
 const components = {
   Page: defineComponent(
-    "The whole screen and the root of every spec. Use width narrow for a single form such as a login.",
-    z.object({ width: defineOption(readKeys(PAGE_WIDTHS), "wide") }),
-    (props, children) => `<main class="page"><div class="page-inner page-${props.width}">${children}</div></main>`
+    "The whole screen and the root of every spec. Use width narrow for a single form such as a login. look, headingFont, corners and spacing set the style of the whole design: you choose them.",
+    z.object({
+      width: defineOption(readKeys(PAGE_WIDTHS), "wide"),
+      look: z.enum(LOOK_ORDER).optional(),
+      headingFont: z.enum(["sans", ...Object.keys(HEADING_FONTS)] as [string, ...string[]]).optional(),
+      corners: z.enum(readKeys(CORNER_RADII)).optional(),
+      spacing: defineOption(readKeys(PAGE_SPACINGS), "normal"),
+    }),
+    (props, children) =>
+      `<main class="page"><div class="page-inner page-${props.width} spacing-${props.spacing}">${children}</div></main>`
   ),
   Nav: defineComponent(
-    "The top bar: a brand, links, and one optional action button. The first child of the Page.",
-    z.object({ brand: plainText, items: textList, action: plainText }),
+    "The top bar: a brand, links, and one optional action button. The first child of the Page. Layout centered puts the brand in the middle.",
+    z.object({ brand: plainText, items: textList, action: plainText, layout: defineOption(["spread", "centered"], "spread") }),
     (props) =>
-      `<nav class="nav"><span class="nav-brand">${escapeHtml(props.brand)}</span><span class="nav-links">${props.items
+      `<nav class="nav nav-${props.layout}"><span class="nav-brand">${escapeHtml(props.brand)}</span><span class="nav-links">${props.items
         .map((link: string) => `<a href="#">${escapeHtml(link)}</a>`)
-        .join("")}</span>${props.action ? `<button type="button" class="button button-primary">${escapeHtml(props.action)}</button>` : ""}</nav>`
+        .join("")}</span>${renderButton(props.action, "primary")}</nav>`
   ),
-  Stack: defineComponent(
-    "Children in one column. Use align center for a hero.",
-    z.object({ gap, align: defineOption(["stretch", "center"], "stretch") }),
+  Hero: defineComponent(
+    "The opening of a landing, onboarding or pricing screen: a small badge, the level 1 title, a sentence, up to two buttons, and an optional picture described in image, which sits beside the text on the side you choose.",
+    z.object({
+      badge: plainText,
+      title: plainText,
+      text: plainText,
+      primaryAction: plainText,
+      secondaryAction: plainText,
+      align: defineOption(["center", "start"], "center"),
+      image: plainText,
+      imageSide: defineOption(["right", "left"], "right"),
+    }),
+    (props) => {
+      const copy = `${renderBadge(props.badge, "neutral")}<h1 class="heading heading-1">${escapeHtml(props.title)}</h1>${renderText(props.text, "text-muted text-lg")}<div class="row gap-sm items-center">${renderButton(props.primaryAction, "primary")}${renderButton(props.secondaryAction, "secondary")}</div>`;
+      return props.image
+        ? `<header class="hero hero-split hero-image-${props.imageSide}"><div class="hero-copy">${copy}</div>${renderImage(props.image, "wide")}</header>`
+        : `<header class="hero hero-${props.align}">${copy}</header>`;
+    }
+  ),
+  Section: defineComponent(
+    "A band of the screen with its own title, sentence and children. Tone muted or accent gives it a full-width background, which breaks up a long screen.",
+    z.object({
+      title: plainText,
+      text: plainText,
+      tone: defineOption(["plain", "muted", "accent"], "plain"),
+      align: defineOption(["start", "center"], "start"),
+    }),
+    (props, children) =>
+      `<section class="section section-${props.tone} section-${props.align}">${renderHeading(props.title, "2")}${renderText(props.text, "text-muted text-lg")}${children}</section>`
+  ),
+  Split: defineContainer(
+    "Two columns side by side: exactly two children, such as text beside a picture, or an order beside a form. Put several things in one column with a Stack. Reverse swaps the sides.",
+    z.object({
+      ratio: defineOption(readKeys(SPLIT_RATIOS), "equal"),
+      align: defineOption(["start", "center", "stretch"], "start"),
+      reverse: z.boolean().default(false),
+    }),
+    (props, children) =>
+      `<div class="split split-${props.ratio} items-${props.align}${props.reverse ? " split-reverse" : ""}">${children}</div>`
+  ),
+  Stack: defineContainer(
+    "Children in one column. Align places them across the column.",
+    z.object({ gap, align: defineOption(["stretch", "start", "center", "end"], "stretch") }),
     (props, children) => `<div class="stack gap-${props.gap} align-${props.align}">${children}</div>`
   ),
-  Row: defineComponent(
+  Row: defineContainer(
     "Children side by side, wrapping when narrow. Use it for buttons, badges, or a title with an action.",
-    z.object({ gap, align: defineOption(readKeys(ROW_ALIGNS), "start") }),
-    (props, children) => `<div class="row gap-${props.gap} justify-${props.align}">${children}</div>`
+    z.object({
+      gap,
+      align: defineOption(readKeys(ROW_ALIGNS), "start"),
+      vertical: defineOption(["start", "center", "end"], "center"),
+    }),
+    (props, children) => `<div class="row gap-${props.gap} justify-${props.align} items-${props.vertical}">${children}</div>`
   ),
-  Grid: defineComponent(
+  Grid: defineContainer(
     "Children in equal columns. Use it for cards or stats that sit side by side.",
-    z.object({ gap, columns: defineOption(COLUMN_COUNTS, "3") }),
-    (props, children) => `<div class="grid gap-${props.gap} cols-${props.columns}">${children}</div>`
+    z.object({ gap, columns: defineOption(COLUMN_COUNTS, "3"), align: defineOption(["stretch", "start", "center"], "stretch") }),
+    (props, children) => `<div class="grid gap-${props.gap} cols-${props.columns} items-${props.align}">${children}</div>`
   ),
-  Card: defineComponent(
+  Card: defineContainer(
     "A box that groups related content. Tone accent marks the one card to notice.",
     z.object({ tone: defineOption(["plain", "muted", "accent"], "plain") }),
     (props, children) => `<section class="card card-${props.tone}">${children}</section>`
@@ -106,7 +239,7 @@ const components = {
   Button: defineComponent(
     "A button. One primary button per group.",
     z.object({ label: plainText, tone: defineOption(["primary", "secondary", "ghost"], "secondary") }),
-    (props) => `<button type="button" class="button button-${props.tone}">${escapeHtml(props.label)}</button>`
+    (props) => renderButton(props.label || "Continue", props.tone)
   ),
   Input: defineComponent(
     "A labelled text field.",
@@ -133,9 +266,9 @@ const components = {
   Badge: defineComponent(
     "A small label, such as a status or Most popular.",
     z.object({ text: plainText, tone: defineOption(["neutral", "accent"], "neutral") }),
-    (props) => `<span class="badge badge-${props.tone}">${escapeHtml(props.text)}</span>`
+    (props) => renderBadge(props.text, props.tone)
   ),
-  List: defineComponent(
+  List: defineContainer(
     "A list of ListItem children. Marker check suits the features of a plan.",
     z.object({ marker: defineOption(["none", "check"], "none") }),
     (props, children) => `<ul class="list list-${props.marker}">${children}</ul>`
@@ -143,8 +276,23 @@ const components = {
   ListItem: defineComponent(
     "One row of a List: a text, and an optional detail shown at the end of the row.",
     z.object({ text: plainText, detail: plainText }),
+    (props) => renderListItem(props.text, props.detail)
+  ),
+  Plan: defineComponent(
+    "One plan of a pricing screen. Each plan has its own features. Give a badge such as Most popular to the one recommended plan only.",
+    z.object({
+      name: plainText,
+      price: plainText,
+      period: plainText,
+      description: plainText,
+      features: textList,
+      action: plainText,
+      badge: plainText,
+    }),
     (props) =>
-      `<li class="list-item"><span>${escapeHtml(props.text)}</span><span class="list-detail">${escapeHtml(props.detail)}</span></li>`
+      `<section class="card plan card-${props.badge ? "accent" : "plain"}"><div class="row gap-sm justify-between items-center"><h3 class="heading heading-3">${escapeHtml(props.name)}</h3>${renderBadge(props.badge, "accent")}</div><p class="plan-cost"><strong class="plan-price">${escapeHtml(props.price)}</strong> <span class="plan-period">${escapeHtml(props.period)}</span></p><p class="text text-muted text-sm">${escapeHtml(props.description)}</p><ul class="list list-check">${props.features
+        .map((feature: string) => renderListItem(feature, ""))
+        .join("")}</ul>${renderButton(props.action, props.badge ? "primary" : "secondary")}</section>`
   ),
   Stat: defineComponent(
     "A key number with its label and a short detail such as a change.",
@@ -169,14 +317,45 @@ const components = {
   Avatar: defineComponent(
     "A person, shown as their initials beside their name.",
     z.object({ name: plainText, detail: plainText }),
-    (props) =>
-      `<div class="avatar"><span class="avatar-mark" aria-hidden="true">${escapeHtml(renderInitials(props.name))}</span><span class="avatar-text"><span class="avatar-name">${escapeHtml(props.name)}</span><span class="avatar-detail">${escapeHtml(props.detail)}</span></span></div>`
+    (props) => renderAvatar(props.name, props.detail)
   ),
   Image: defineComponent(
     "A picture placeholder with a description of the picture.",
     z.object({ alt: plainText, ratio: defineOption(readKeys(IMAGE_RATIOS), "wide") }),
+    (props) => renderImage(props.alt, props.ratio)
+  ),
+  Feature: defineComponent(
+    "One benefit or fact: an icon, a short title and a sentence. Several sit in a Grid.",
+    z.object({ icon: defineOption(Object.keys(ICON_SHAPES), "check"), title: plainText, text: plainText }),
     (props) =>
-      `<div class="image ratio-${props.ratio}" role="img" aria-label="${escapeHtml(props.alt)}">${IMAGE_ICON}<span>${escapeHtml(props.alt)}</span></div>`
+      `<div class="feature"><span class="feature-icon">${renderIcon(props.icon)}</span>${renderHeading(props.title, "3")}${renderText(props.text, "text-muted text-md")}</div>`
+  ),
+  Steps: defineContainer(
+    "A numbered sequence of Step children, such as how it works.",
+    z.object({}),
+    (_props, children) => `<ol class="steps">${children}</ol>`
+  ),
+  Step: defineComponent(
+    "One step of Steps: a title and a sentence. The number is added for you.",
+    z.object({ title: plainText, text: plainText }),
+    (props) => `<li class="step">${renderHeading(props.title, "3")}${renderText(props.text, "text-muted text-md")}</li>`
+  ),
+  Quote: defineComponent(
+    "What a customer said, with their name and role.",
+    z.object({ text: plainText, name: plainText, role: plainText }),
+    (props) =>
+      `<blockquote class="quote"><p>${escapeHtml(props.text)}</p><footer>${renderAvatar(props.name, props.role)}</footer></blockquote>`
+  ),
+  Banner: defineComponent(
+    "A wide closing call to action: a title, a sentence and one button.",
+    z.object({ title: plainText, text: plainText, action: plainText, tone: defineOption(["accent", "muted"], "accent") }),
+    (props) =>
+      `<aside class="banner banner-${props.tone}"><div class="banner-copy">${renderHeading(props.title, "2")}${renderText(props.text, "text-md")}</div>${renderButton(props.action, "primary")}</aside>`
+  ),
+  Spacer: defineComponent(
+    "Empty space, to push things apart.",
+    z.object({ size: defineOption(readKeys(GAP_SIZES), "lg") }),
+    (props) => `<div class="spacer spacer-${props.size}" aria-hidden="true"></div>`
   ),
   Divider: defineComponent("A thin rule between parts of a screen.", z.object({}), () => '<hr class="divider">'),
 };
@@ -205,13 +384,19 @@ const readEntry = <Value>(entries: Record<string, Value> | undefined, key: strin
 const readGivenProps = ({ type, children, props, ...looseProps }: Element & Record<string, unknown>) =>
   (props && typeof props === "object" ? props : looseProps) as Record<string, unknown>;
 
+const listReadings = (givenValue: unknown) => [
+  givenValue,
+  typeof givenValue === "number" ? String(givenValue) : TRUTH_BY_WORD[String(givenValue)],
+];
+
 const readProps = (propsShape: z.ZodObject, element: Element) => {
   const givenProps = readGivenProps(element);
   return Object.fromEntries(
     Object.entries(propsShape.shape).map(([propName, field]) => {
-      const givenValue = givenProps[propName];
-      const parsed = (field as z.ZodType).safeParse(typeof givenValue === "number" ? String(givenValue) : givenValue);
-      return [propName, parsed.success ? parsed.data : (field as z.ZodType).parse(undefined)];
+      const reading = listReadings(givenProps[propName])
+        .map((givenValue) => (field as z.ZodType).safeParse(givenValue))
+        .find((parsed) => parsed.success);
+      return [propName, reading ? reading.data : (field as z.ZodType).parse(undefined)];
     })
   );
 };
@@ -220,6 +405,14 @@ const readChildKeys = (element: Element) =>
   (Array.isArray(element.children) ? element.children.flat(Infinity) : []).filter(
     (childKey): childKey is string => typeof childKey === "string"
   );
+
+const placeElement = (html: string, element: Element) => {
+  const placementClasses = Object.entries(readProps(placementProps, element))
+    .filter(([, chosen]) => chosen)
+    .map(([propName, chosen]) => `${PLACEMENT_CLASS_STEMS[propName]}-${chosen}`)
+    .join(" ");
+  return placementClasses ? html.replace('class="', `class="${placementClasses} `) : html;
+};
 
 const readShownElement = (spec: Spec, key: string, ancestorKeys: string[]) => {
   const element = readEntry(spec.elements, key);
@@ -242,19 +435,53 @@ const renderElement = (spec: Spec, key: string, ancestorKeys: string[]): string 
     .map((childKey) => renderElement(spec, childKey, [...ancestorKeys, key]))
     .join("");
   const definition = readEntry(components, element.type);
-  return definition ? definition.render(readProps(definition.props, element), children) : children;
+  if (!definition) return children;
+  return placeElement(definition.render(readProps(definition.props, element), children), element);
 };
 
-export const renderSpecToHtml = (spec: Spec) => {
-  const rootElement = typeof spec.root === "string" ? readEntry(spec.elements, spec.root) : undefined;
+const readRootElement = (spec: Spec) =>
+  typeof spec.root === "string" ? readEntry(spec.elements, spec.root) : undefined;
+
+const readPageStyle = (spec: Spec, fallbackLook: Look) => {
+  const rootElement = readRootElement(spec);
+  const chosen = rootElement?.type === "Page" ? readProps(components.Page.props, rootElement) : {};
+  const look: Look = chosen.look ?? fallbackLook;
+  return {
+    look,
+    headingFont: (chosen.headingFont ?? HEADING_FONT_BY_LOOK[look]) as string | undefined,
+    cornersClass: chosen.corners ? ` corners-${chosen.corners}` : "",
+  };
+};
+
+export const renderSpecToHtml = (spec: Spec, fallbackLook: Look = "clean") => {
+  const rootElement = readRootElement(spec);
   if (!rootElement) return "";
   const html = renderElement(spec, spec.root!, []);
-  return rootElement.type === "Page" ? html : components.Page.render(readProps(components.Page.props, rootElement), html);
+  const pageHtml =
+    rootElement.type === "Page" ? html : components.Page.render(readProps(components.Page.props, rootElement), html);
+  const { look, cornersClass } = readPageStyle(spec, fallbackLook);
+  return pageHtml.replace('class="page"', `class="page look-${look}${cornersClass}"`);
+};
+
+const sumCharacterCodes = (text: string) =>
+  [...text].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+
+export const pickLook = (styleText: string, brief: string, variantIndex: number): Look => {
+  const distinctiveLook = DISTINCTIVE_STYLES.find(([, keywords]) => keywords.test(styleText))?.[0];
+  const firstIndex = distinctiveLook ? LOOK_ORDER.indexOf(distinctiveLook) : sumCharacterCodes(brief);
+  return LOOK_ORDER[(firstIndex + variantIndex) % LOOK_ORDER.length]!;
+};
+
+export const listStyleTokens = (spec: Spec, fallbackLook: Look, tokens: StyleToken[]) => {
+  const headingToken = tokens.find(
+    (token) => token.kind === "font" && HEADING_TOKEN_NAMES.includes(readTokenVariable(token.name).slice(2))
+  );
+  const headingFont = HEADING_FONTS[readPageStyle(spec, fallbackLook).headingFont ?? ""];
+  return headingToken && headingFont ? [{ name: headingToken.name, value: headingFont }] : [];
 };
 
 export const findSpecProblems = (spec: Spec): string[] => {
-  const rootElement = typeof spec.root === "string" ? readEntry(spec.elements, spec.root) : undefined;
-  if (!rootElement) {
+  if (!readRootElement(spec)) {
     return [
       'the spec has no root element. Start with {"op":"add","path":"/root","value":"page"} and add a line for /elements/page.',
     ];
@@ -276,6 +503,55 @@ const pickVariable = (tokens: StyleToken[], kind: string, names: string[], fallb
   return matches[0] ? `var(${readTokenVariable(matches[0].name)})` : fallback;
 };
 
+const renderLookCss = ({ ink, accent, onAccent, muted }: Record<string, string>) => [
+  `.look-bold .hero{padding:72px 40px;border-radius:28px;background:${accent};color:${onAccent}}`,
+  ".look-bold .hero .text-muted,.look-bold .card-accent .text-muted,.look-bold .card-accent .plan-period{color:inherit;opacity:0.85}",
+  `.look-bold .hero .button-primary,.look-bold .card-accent .button-primary,.look-bold .card-accent .badge-accent{border-color:${onAccent};background:${onAccent};color:${accent}}`,
+  ".look-bold .hero .button-secondary,.look-bold .hero .badge{border-color:currentColor;background:transparent;color:inherit}",
+  ".look-bold .heading-1{font-size:60px;font-weight:800}",
+  ".look-bold .button{border-radius:999px}",
+  `.look-bold .card,.look-bold .stat{border-color:transparent;background:${muted}}`,
+  `.look-bold .card-accent{outline:0;background:${accent};color:${onAccent}}`,
+  ".look-bold .card-accent .list-item::before{color:inherit}",
+  `.look-bold .stat-value{color:${accent}}`,
+  `.look-bold .feature-icon{border-radius:999px;background:${accent};color:${onAccent}}`,
+  ".look-bold .nav{border-bottom:0}",
+  ".look-sharp .card,.look-sharp .stat,.look-sharp .button,.look-sharp .input,.look-sharp .badge,.look-sharp .image,.look-sharp .chart-bar,.look-sharp .toggle-input,.look-sharp .toggle-input::before,.look-sharp .banner,.look-sharp .feature-icon,.look-sharp .step::before{border-radius:0}",
+  `.look-sharp .card,.look-sharp .stat,.look-sharp .banner{border:2px solid ${ink};box-shadow:6px 6px 0 ${ink}}`,
+  `.look-sharp .card-accent{outline:0;box-shadow:6px 6px 0 ${accent}}`,
+  ".look-sharp .card .stat{border:0;box-shadow:none}",
+  `.look-sharp .button,.look-sharp .input,.look-sharp .badge,.look-sharp .feature-icon{border:2px solid ${ink}}`,
+  ".look-sharp .button,.look-sharp .badge,.look-sharp .heading{text-transform:uppercase}",
+  ".look-sharp .button{font-size:14px;letter-spacing:0.04em}",
+  `.look-sharp .button-primary{box-shadow:4px 4px 0 ${ink}}`,
+  ".look-sharp .button-ghost{border-color:transparent}",
+  ".look-sharp .heading{letter-spacing:-0.01em}",
+  ".look-sharp .heading-1{font-size:48px}",
+  `.look-sharp .nav{border-bottom:2px solid ${ink}}`,
+  `.look-sharp .hero{padding:56px 0 32px;border-bottom:2px solid ${ink}}`,
+  ".look-editorial .heading{font-weight:500;letter-spacing:-0.01em}",
+  ".look-editorial .heading-1{font-size:64px;line-height:1.05}",
+  ".look-editorial .text-lg{font-size:22px}",
+  ".look-editorial .nav-brand{font-size:22px}",
+  `.look-editorial .hero{padding:72px 0 40px;border-bottom:1px solid ${ink}}`,
+  `.look-editorial .card,.look-editorial .stat{padding:24px 0 0;border:0;border-top:1px solid ${ink};border-radius:0;background:transparent}`,
+  `.look-editorial .card-accent{outline:0;border-top:3px solid ${accent}}`,
+  `.look-editorial .card-muted{padding:24px;border-top:0;background:${muted}}`,
+  ".look-editorial .card .stat{padding:0;border-top:0}",
+  ".look-editorial .button,.look-editorial .banner{border-radius:0}",
+  ".look-editorial .feature-icon{width:auto;height:auto;background:transparent}",
+  ".look-editorial .quote p{font-size:30px}",
+  `.look-soft .card,.look-soft .stat{border-color:transparent;border-radius:24px;box-shadow:0 12px 32px color-mix(in srgb,${ink} 9%,transparent)}`,
+  `.look-soft .card-accent{outline:2px solid ${accent}}`,
+  ".look-soft .card-muted,.look-soft .card .stat{box-shadow:none}",
+  ".look-soft .button,.look-soft .input,.look-soft .badge,.look-soft .feature-icon{border-radius:999px}",
+  ".look-soft .input{padding-inline:18px}",
+  ".look-soft .image,.look-soft .banner{border-radius:24px}",
+  `.look-soft .hero .badge{border-color:transparent;background:${muted}}`,
+  ".look-soft .nav{border-bottom:0}",
+  ".look-soft .chart-bar{border-radius:999px 999px 0 0}",
+];
+
 export const renderCatalogCss = (tokens: StyleToken[]) => {
   const surface = pickVariable(tokens, "color", ["background", "surface", "canvas", "paper"], "transparent");
   const ink = pickVariable(tokens, "color", ["foreground", "text", "ink", "on-background"], "currentColor");
@@ -296,22 +572,79 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
   const heading = pickVariable(tokens, "font", ["font-heading", "font-display", "heading"], body);
   const radius = pickVariable(tokens, "radius", ["radius", "radius-md", "rounded"], "0");
   return [
-    `.page{box-sizing:border-box;min-height:100vh;padding:0 24px 64px;background:${surface};color:${ink};font-family:${body};font-size:16px;line-height:1.5}`,
+    `.page{box-sizing:border-box;overflow-x:clip;min-height:100vh;padding:0 24px 64px;background:${surface};color:${ink};font-family:${body};font-size:16px;line-height:1.5}`,
     ".page *{box-sizing:border-box}",
-    ".page-inner{display:flex;flex-direction:column;gap:40px;margin:0 auto;padding-top:24px}",
+    ".page-inner{display:flex;flex-direction:column;margin:0 auto;padding-top:24px}",
+    ...Object.entries(PAGE_SPACINGS).map(([name, size]) => `.spacing-${name}{gap:${size}}`),
     ...Object.entries(PAGE_WIDTHS).map(([name, width]) => `.page-${name}{max-width:${width}}`),
     ".page-narrow{padding-top:64px}",
     ".stack{display:flex;flex-direction:column;min-width:0}",
     ".align-center{align-items:center;text-align:center}",
-    ".row{display:flex;flex-wrap:wrap;align-items:center}",
+    ".align-start{align-items:flex-start}",
+    ".align-end{align-items:flex-end;text-align:right}",
+    ...Object.entries(CROSS_ALIGNS).flatMap(([name, value]) => [
+      `.items-${name}{align-items:${value}}`,
+      `.place-${name}{align-self:${value};justify-self:${name}}`,
+    ]),
+    ...SPAN_COUNTS.flatMap((count) => [`.span-${count}{grid-column:span ${count}}`, `.row-span-${count}{grid-row:span ${count}}`]),
+    ...["left", "center", "right"].map((side) => `.text-align-${side}{text-align:${side}}`),
+    ...Object.entries(MAX_WIDTHS).map(([name, width]) => `.max-width-${name}{width:100%;max-width:${width}}`),
+    ...Object.entries(GAP_SIZES).map(([name, size]) => `.spacer-${name}{flex:none;height:${size}}`),
+    ".hero{display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 0 8px;text-align:center}",
+    ".hero .row{justify-content:center}",
+    ".hero .row:empty{display:none}",
+    ".hero-start{align-items:flex-start;text-align:left}",
+    ".hero-start .row{justify-content:flex-start}",
+    ".hero-split{flex-direction:row;gap:48px;text-align:left}",
+    ".hero-image-left{flex-direction:row-reverse}",
+    ".hero-split>*{flex:1 1 0;min-width:0}",
+    ".hero-copy{display:flex;flex-direction:column;align-items:flex-start;gap:16px}",
+    ".hero-split .row{justify-content:flex-start}",
+    ".section{display:flex;flex-direction:column;gap:24px}",
+    ".section-muted,.section-accent{margin-inline:calc(50% - 50vw);padding:56px calc(50vw - 50%)}",
+    `.section-muted{background:${muted}}`,
+    `.section-accent{background:${accent};color:${onAccent}}`,
+    ".section-accent>.text-muted{color:inherit;opacity:0.85}",
+    ".section-center>.heading,.section-center>.text{align-self:center;text-align:center}",
+    ".split{display:grid;gap:32px}",
+    ...Object.entries(SPLIT_RATIOS).map(([name, columns]) => `.split-${name}{grid-template-columns:${columns}}`),
+    ".split>*{min-width:0}",
+    ".split-reverse>:first-child{order:2}",
+    ".feature{display:flex;flex-direction:column;align-items:flex-start;gap:10px}",
+    `.feature-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:${radius};background:${muted};color:${accent}}`,
+    ".steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px;margin:0;padding:0;list-style:none;counter-reset:step}",
+    ".step{display:flex;flex-direction:column;gap:8px;counter-increment:step}",
+    `.step::before{content:counter(step);display:grid;place-items:center;width:36px;height:36px;border-radius:999px;background:${accent};color:${onAccent};font-weight:700}`,
+    `.quote{display:flex;flex-direction:column;gap:20px;margin:0;padding-left:24px;border-left:3px solid ${accent}}`,
+    `.quote p{margin:0;font-family:${heading};font-size:24px;line-height:1.35;text-wrap:balance}`,
+    ".quote footer{margin:0}",
+    `.banner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px;padding:40px;border-radius:${radius}}`,
+    ".banner-copy{display:flex;flex-direction:column;gap:8px;min-width:0}",
+    `.banner-accent{background:${accent};color:${onAccent}}`,
+    `.banner-accent .button-primary{border-color:${onAccent};background:${onAccent};color:${accent}}`,
+    `.banner-muted{background:${muted}}`,
+    ".banner .button{align-self:center}",
+    ".nav-centered{justify-content:center}",
+    ".nav-centered .nav-links{margin-left:0}",
+    ".row{display:flex;flex-wrap:wrap}",
     ".row>.card,.row>.stat,.row>.field{flex:1 1 220px}",
-    ".grid{display:grid;align-items:stretch}",
+    ".grid{display:grid}",
     ...Object.entries(GAP_SIZES).map(([name, size]) => `.gap-${name}{gap:${size}}`),
     ...Object.entries(ROW_ALIGNS).map(([name, value]) => `.justify-${name}{justify-content:${value}}`),
     ...COLUMN_COUNTS.map((count) => `.cols-${count}{grid-template-columns:repeat(${count},minmax(0,1fr))}`),
     `.card{display:flex;flex-direction:column;gap:16px;min-width:0;padding:24px;border:1px solid ${border};border-radius:${radius};background:${card};color:${cardInk}}`,
     `.card-muted{border-color:transparent;background:${muted}}`,
     `.card-accent{border-color:${accent};outline:1px solid ${accent}}`,
+    ".page-inner:has(.field,.toggle):not(:has(.table,.chart,.stat,.plan,.grid,.split,.section))>:not(.nav){width:100%;max-width:610px;margin-inline:auto}",
+    ".field,.toggle,.field~.button,.toggle~.button{width:100%;max-width:560px}",
+    ".grid>.field,.row>.field{max-width:none}",
+    ".row:has(>.field){align-items:flex-end}",
+    ".card+.divider,.divider:has(+.card){display:none}",
+    ".plan-cost{margin:0}",
+    `.plan-price{font-family:${heading};font-size:40px;line-height:1;letter-spacing:-0.02em}`,
+    `.plan-period{font-size:14px;${quietStyle}}`,
+    ".plan .list{flex:1}",
+    ".plan .button{align-self:stretch}",
     `.heading{margin:0;line-height:1.15;letter-spacing:-0.02em;text-wrap:balance;color:inherit;font-family:${heading};font-weight:700}`,
     ".heading-1{font-size:44px}",
     ".heading-2{font-size:26px}",
@@ -323,7 +656,7 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     `.button-primary{border-color:${accent};background:${accent};color:${onAccent}}`,
     ".button-ghost{border-color:transparent;background:transparent;color:inherit}",
     ".align-center>.button{align-self:center}",
-    ".field~.button,.toggle~.button{align-self:stretch}",
+    ".row>.field~.button{width:auto}",
     `.button:focus-visible,.input:focus-visible,.toggle-input:focus-visible,.nav a:focus-visible{outline:2px solid ${accent};outline-offset:2px}`,
     `.field{display:flex;flex-direction:column;gap:6px;text-align:left;font-family:${body}}`,
     ".field-label{font-size:14px;font-weight:600}",
@@ -332,7 +665,10 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     ".toggle-text{display:flex;flex-direction:column}",
     ".toggle-label{font-weight:600}",
     `.toggle-detail,.list-detail,.avatar-detail,.stat-label,.stat-detail,.chart-labels{font-size:14px;${quietStyle}}`,
-    `.toggle-input{width:20px;height:20px;margin:0;accent-color:${accent}}`,
+    `.toggle-input{appearance:none;position:relative;flex:none;width:44px;height:26px;margin:0;border:1px solid ${border};border-radius:999px;background:${muted};cursor:pointer}`,
+    `.toggle-input::before{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:${ink};opacity:0.5}`,
+    `.toggle-input:checked{border-color:${accent};background:${accent}}`,
+    `.toggle-input:checked::before{left:21px;background:${onAccent};opacity:1}`,
     `.badge{display:inline-block;align-self:flex-start;padding:2px 10px;border:1px solid ${border};border-radius:999px;font-size:12px;font-weight:600}`,
     ".align-center>.badge{align-self:center}",
     `.badge-accent{border-color:${accent};background:${accent};color:${onAccent}}`,
@@ -340,16 +676,17 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     `.list-item{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid ${border}}`,
     ".list-item:first-child{border-top:0}",
     ".list-check .list-item{justify-content:flex-start;gap:10px;padding:6px 0;border-top:0}",
+    ".list-check .list-detail{margin-left:auto}",
     `.list-check .list-item::before{content:"\\2713";font-weight:700;color:${accent}}`,
     `.stat{display:flex;flex-direction:column;gap:4px;min-width:0;padding:20px;border:1px solid ${border};border-radius:${radius};background:${card};color:${cardInk}}`,
     ".card .stat{padding:0;border:0}",
     `.stat-value{font-family:${heading};font-size:32px;line-height:1.1;letter-spacing:-0.02em}`,
     ".chart{display:flex;flex-direction:column;gap:12px;margin:0}",
     ".chart-title{font-weight:600}",
-    `.chart-bars{display:flex;align-items:flex-end;gap:8px;height:180px;border-bottom:1px solid ${border}}`,
-    `.chart-bar{flex:1;border-radius:${radius} ${radius} 0 0;background:${accent}}`,
-    ".chart-labels{display:flex;gap:8px;text-align:center}",
-    ".chart-labels span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}",
+    `.chart-bars{display:flex;align-items:flex-end;justify-content:space-around;gap:8px;height:180px;border-bottom:1px solid ${border}}`,
+    `.chart-bar{flex:0 1 64px;border-radius:${radius} ${radius} 0 0;background:${accent}}`,
+    ".chart-labels{display:flex;justify-content:space-around;gap:8px;text-align:center}",
+    ".chart-labels span{flex:0 1 64px;min-width:0;overflow:hidden;text-overflow:ellipsis}",
     ".table-scroll{overflow-x:auto}",
     ".table{width:100%;border-collapse:collapse;font-size:14px;text-align:left}",
     `.table th,.table td{padding:12px 16px 12px 0;border-bottom:1px solid ${border}}`,
@@ -365,9 +702,18 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     ".nav-links{display:flex;flex-wrap:wrap;gap:24px;margin-left:auto;font-size:14px}",
     ".nav a{color:inherit;text-decoration:none}",
     ".nav .button{min-height:36px;padding:6px 14px}",
-    `.image{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;max-height:360px;padding:16px;border-radius:${radius};background:${muted};font-size:14px;text-align:center;${quietStyle}}`,
+    `.image{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;max-height:240px;padding:16px;border-radius:${radius};background:linear-gradient(135deg,${muted},color-mix(in srgb,${accent} 24%,${muted}));font-size:14px;text-align:center;${quietStyle}}`,
     ...Object.entries(IMAGE_RATIOS).map(([name, ratio]) => `.ratio-${name}{aspect-ratio:${ratio}}`),
-    "@media (max-width:760px){.cols-2,.cols-3,.cols-4{grid-template-columns:minmax(0,1fr)}.page{padding:0 16px 40px}.heading-1{font-size:32px}.nav-links{margin-left:0}}",
+    ".grid .image{aspect-ratio:4 / 3}",
+    ".hero-split .image,.split>.image{max-height:none}",
+    ...renderLookCss({ ink, accent, onAccent, muted }),
+    ...Object.entries(CORNER_RADII).map(
+      ([name, cornerRadius]) =>
+        `.corners-${name} .button,.corners-${name} .input,.corners-${name} .badge{border-radius:${cornerRadius}}`
+    ),
+    ".corners-square .card,.corners-square .stat,.corners-square .image,.corners-square .hero,.corners-square .banner,.corners-square .feature-icon{border-radius:0}",
+    ".corners-rounded .card,.corners-rounded .stat,.corners-rounded .image,.corners-rounded .banner,.corners-pill .card,.corners-pill .stat,.corners-pill .image,.corners-pill .banner{border-radius:20px}",
+    "@media (max-width:760px){.hero-split{flex-direction:column}.split{grid-template-columns:minmax(0,1fr)}.span-2,.span-3,.span-4{grid-column:auto}.cols-2,.cols-3,.cols-4{grid-template-columns:minmax(0,1fr)}.page{padding:0 16px 40px}.heading-1{font-size:32px}.nav-links{margin-left:0}}",
   ].join("\n");
 };
 
@@ -383,7 +729,7 @@ const EXAMPLE_REPLY = [
   "NAME: Order desk",
   "RATIONALE: Puts today's numbers first, then the orders that need a decision.",
   '{"op":"add","path":"/root","value":"page"}',
-  '{"op":"add","path":"/elements/page","value":{"type":"Page","props":{"width":"wide"},"children":["nav","intro","stats","orders-card"]}}',
+  '{"op":"add","path":"/elements/page","value":{"type":"Page","props":{"width":"wide","look":"sharp","headingFont":"mono","corners":"square"},"children":["nav","intro","stats","orders-card"]}}',
   '{"op":"add","path":"/elements/nav","value":{"type":"Nav","props":{"brand":"Spoke & Chain","items":["Orders","Parts","Customers"],"action":"New order"},"children":[]}}',
   '{"op":"add","path":"/elements/intro","value":{"type":"Stack","props":{"gap":"sm"},"children":["title","subtitle"]}}',
   '{"op":"add","path":"/elements/title","value":{"type":"Heading","props":{"text":"Repairs this week","level":"1"},"children":[]}}',
@@ -392,7 +738,7 @@ const EXAMPLE_REPLY = [
   '{"op":"add","path":"/elements/stat-open","value":{"type":"Stat","props":{"label":"Open repairs","value":"14","detail":"2 more than last week"},"children":[]}}',
   '{"op":"add","path":"/elements/stat-ready","value":{"type":"Stat","props":{"label":"Ready for pickup","value":"5","detail":"Oldest since Monday"},"children":[]}}',
   '{"op":"add","path":"/elements/stat-income","value":{"type":"Stat","props":{"label":"Income","value":"$2,480","detail":"Up 12% on last week"},"children":[]}}',
-  '{"op":"add","path":"/elements/orders-card","value":{"type":"Card","props":{"tone":"plain"},"children":["orders-head","orders-table"]}}',
+  '{"op":"add","path":"/elements/orders-card","value":{"type":"Card","props":{"tone":"plain","maxWidth":"lg"},"children":["orders-head","orders-table"]}}',
   '{"op":"add","path":"/elements/orders-head","value":{"type":"Row","props":{"align":"between"},"children":["orders-title","orders-badge"]}}',
   '{"op":"add","path":"/elements/orders-title","value":{"type":"Heading","props":{"text":"Waiting for parts","level":"3"},"children":[]}}',
   '{"op":"add","path":"/elements/orders-badge","value":{"type":"Badge","props":{"text":"3 delayed","tone":"accent"},"children":[]}}',
@@ -400,11 +746,13 @@ const EXAMPLE_REPLY = [
 ].join("\n");
 
 const LAYOUT_ADVICE = [
-  "- Landing or onboarding: Nav, a Stack with align center holding a Heading level 1, a Text of size lg and a Row of Buttons, then a Grid of three Cards.",
+  "- Landing or onboarding: Nav, a Hero, a Grid of Features, a muted Section with Steps or a Quote, and a Banner to close.",
   "- Dashboard: Nav, a title, a Grid of three or four Stats, then a Grid of two Cards holding a Chart and a Table.",
   "- Login, sign-up or any single form: Page with width narrow, one Card holding a Heading, the Inputs and one primary Button.",
+  "- Inbox, admin or any list of records: Nav, a Row with align between holding the Heading level 1 and a Button, then one Card holding a Table or a List with at least five different rows.",
+  "- Checkout: a Heading level 1, then a Split of two Cards: the order as a List with prices in the detail, and the payment form.",
   "- Settings: Page with width wide, one Card per group of settings, each with a Heading level 3 and Toggles, Selects or Inputs.",
-  "- Pricing: a centered title, then a Grid of Cards, one per plan, each with the plan name, the price as a Heading, a List with marker check and a Button. The recommended plan has tone accent and a Badge.",
+  "- Pricing: Nav, a Hero with no actions, then a Grid of Plans. One Plan has a badge.",
 ];
 
 export const buildCatalogPrompt = (tokens: StyleToken[]) =>
@@ -423,18 +771,31 @@ export const buildCatalogPrompt = (tokens: StyleToken[]) =>
       '- The first line is {"op":"add","path":"/root","value":"page"}. Each later line adds one element: {"op":"add","path":"/elements/<key>","value":{"type":...,"props":{...},"children":[...]}}.',
       '- Every element has "type", "props" and "children". Props go inside "props". "children" is a flat list of keys, and every key in it gets its own line.',
       "- Each line is one complete JSON object on one line. Close every brace. No code fence and no comments.",
-      "- Only Page, Stack, Row, Grid, Card and List take children.",
+      "- Only Page, Section, Split, Stack, Row, Grid, Card, List and Steps take children.",
     ].join("\n"),
     [
       "RULES FOR THE DESIGN",
       "- The root is a Page. A Nav, when the screen has one, is its first child.",
-      "- One Heading of level 1. One primary Button per group of buttons.",
+      "- One Hero or one Heading of level 1, never both. One primary Button per group of buttons.",
+      "- An Image is a real picture such as a product photo. A person is an Avatar.",
       "- Put things that belong side by side in a Grid or a Row, not in a long column.",
       "- Write real content for this product: real names, numbers and labels. No lorem ipsum and no placeholders.",
+      "- Things side by side never repeat each other: every card, plan, stat and row has its own title and its own content.",
       "- Between 15 and 40 elements. Fill the screen the brief asks for and nothing else.",
       "- The theme sets every color and font. Never write a color, a font or CSS.",
     ].join("\n"),
-    ["LAYOUTS THAT WORK", ...LAYOUT_ADVICE].join("\n"),
+    [
+      "PLACEMENT. Any element also takes these props, so you decide where things sit:",
+      '- span "2" | "3" | "4" and rowSpan "2" | "3" | "4": how many columns and rows of a Grid it covers. Mix sizes for a bento layout.',
+      '- place "start" | "center" | "end" | "stretch": where it sits inside its parent.',
+      '- textAlign "left" | "center" | "right", and maxWidth "sm" | "md" | "lg" to keep it narrow.',
+    ].join("\n"),
+    [
+      "STYLE. You are the designer. On the Page, choose the look, headingFont, corners and spacing that suit this product and the design direction. Do not always pick the same.",
+      "- look clean: quiet, thin borders. bold: a filled color hero, big type, filled cards. sharp: thick outlines, hard shadows, uppercase. editorial: large type, rules instead of boxes. soft: round, shadowed, friendly.",
+      "- Give the screen rhythm: a Hero with an image on either side, a reversed Split, a Section with a muted or accent tone, a Card that spans two columns, a Quote, a Banner.",
+    ].join("\n"),
+    ["LAYOUTS TO START FROM. Change them when the brief or your own idea calls for it.", ...LAYOUT_ADVICE].join("\n"),
     `TOKENS, an optional last line: TOKENS: [{"name":"<token>","value":"<new value>"}] gives theme tokens new values for this design only. Leave it out unless the brief asks for other colors. The tokens: ${tokens
       .filter((token) => token.kind === "color" || token.kind === "font")
       .map((token) => readTokenVariable(token.name).slice(2))

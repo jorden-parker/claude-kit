@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   buildCatalogPrompt,
+  listStyleTokens,
+  pickLook,
   catalog,
   findSpecProblems,
   renderCatalogCss,
@@ -36,7 +38,7 @@ const RAW_COLOR = /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl|oklch)a?\(/i;
 
 test("renderSpecToHtml renders a full spec as escaped markup", () => {
   const html = renderSpecToHtml(FULL_SPEC);
-  expect(html.startsWith('<main class="page"><div class="page-inner page-wide">')).toBe(true);
+  expect(html.startsWith('<main class="page look-clean"><div class="page-inner page-wide spacing-normal">')).toBe(true);
   expect(html).toContain('<h1 class="heading heading-1">Cook &lt;tonight&gt;</h1>');
   expect(html).toContain('<section class="card card-accent">');
   expect(html).toContain('<strong class="stat-value">42</strong>');
@@ -46,12 +48,12 @@ test("renderSpecToHtml renders partial specs without throwing", () => {
   expect(renderSpecToHtml({})).toBe("");
   expect(renderSpecToHtml({ root: "page" })).toBe("");
   expect(renderSpecToHtml({ root: "page", elements: { page: { type: "Page", children: ["later"] } } })).toBe(
-    '<main class="page"><div class="page-inner page-wide"></div></main>'
+    '<main class="page look-clean"><div class="page-inner page-wide spacing-normal"></div></main>'
   );
   expect(renderSpecToHtml({ root: "constructor", elements: {} })).toBe("");
   expect(renderSpecToHtml({ root: "a", elements: { a: null as never } })).toBe("");
-  expect(renderSpecToHtml({ root: "a", elements: { a: { type: "Stack", children: ["a"] } } })).toContain(
-    '<div class="stack gap-md align-stretch"></div>'
+  expect(renderSpecToHtml({ root: "a", elements: { a: { type: "Stack", children: ["a"] } } })).toBe(
+    '<main class="page look-clean"><div class="page-inner page-wide spacing-normal"></div></main>'
   );
 });
 
@@ -86,7 +88,7 @@ test("renderSpecToHtml flattens nested child lists and shows the children of an 
 test("renderSpecToHtml wraps a root that is not a Page in a page", () => {
   expect(
     renderSpecToHtml({ root: "title", elements: { title: { type: "Heading", props: { text: "Cook" } } } })
-  ).toBe('<main class="page"><div class="page-inner page-wide"><h2 class="heading heading-2">Cook</h2></div></main>');
+  ).toBe('<main class="page look-clean"><div class="page-inner page-wide spacing-normal"><h2 class="heading heading-2">Cook</h2></div></main>');
 });
 
 test("renderSpecToHtml draws a chart as bars sized by their values and a table with its rows", () => {
@@ -141,7 +143,7 @@ test("renderStylesheet puts the theme tokens on :root before the catalog styles"
 });
 
 test("the catalog holds the layout, content and data components", () => {
-  expect(catalog.componentNames).toHaveLength(21);
+  expect(catalog.componentNames).toHaveLength(31);
   expect(catalog.componentNames).toContain("Chart");
 });
 
@@ -153,7 +155,7 @@ test("buildCatalogPrompt lists the components and the reply shape, without json-
   expect(prompt).toContain("primary, primary-foreground");
   expect(prompt).not.toContain("$state");
   expect(prompt).not.toContain("```");
-  expect(prompt.length).toBeLessThan(8000);
+  expect(prompt.length).toBeLessThan(12000);
 });
 
 test("the example spec in the prompt renders with no problems", () => {
@@ -168,4 +170,146 @@ test("renderSpecToHtml reads props a model wrote beside the type", () => {
     elements: { title: { type: "Heading", level: "1", text: "Cook tonight", children: [] } },
   };
   expect(renderSpecToHtml(looseSpec)).toContain('<h1 class="heading heading-1">Cook tonight</h1>');
+});
+
+test("renderSpecToHtml leaves out a container that has nothing to show", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["empty-card", "title"] },
+      "empty-card": { type: "Card", children: ["ghost"] },
+      title: { type: "Heading", props: { text: "Cook" } },
+    },
+  });
+  expect(html).not.toContain("card");
+  expect(html).toContain("Cook");
+});
+
+test("renderSpecToHtml draws a hero with its actions and a plan with its features", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["hero", "plan"] },
+      hero: { type: "Hero", props: { title: "Cook tonight", text: "Dinner in 20 minutes.", primaryAction: "Start" } },
+      plan: {
+        type: "Plan",
+        props: { name: "Team", price: "$12", period: "per seat", features: ["Shared lists"], action: "Choose Team", badge: "Most popular" },
+      },
+    },
+  });
+  expect(html).toContain('<h1 class="heading heading-1">Cook tonight</h1>');
+  expect(html).toContain('<button type="button" class="button button-primary">Start</button>');
+  expect(html).not.toContain("button-secondary");
+  expect(html).toContain('<section class="card plan card-accent">');
+  expect(html).toContain('<span class="badge badge-accent">Most popular</span>');
+  expect(html).toContain('<strong class="plan-price">$12</strong>');
+  expect(html).toContain("<li class=\"list-item\"><span>Shared lists</span>");
+});
+
+test("renderSpecToHtml reads true and false a model wrote as text", () => {
+  const html = renderSpecToHtml({
+    root: "alerts",
+    elements: { alerts: { type: "Toggle", props: { label: "Alerts", checked: "true" } } },
+  });
+  expect(html).toContain(" checked>");
+});
+
+test("renderSpecToHtml marks the page with the look it is given", () => {
+  expect(renderSpecToHtml(FULL_SPEC, "sharp").startsWith('<main class="page look-sharp">')).toBe(true);
+});
+
+test("renderCatalogCss styles every look with the theme's variables only", () => {
+  const css = renderCatalogCss(THEME_TOKENS);
+  for (const look of ["bold", "sharp", "editorial", "soft"]) expect(css).toContain(`.look-${look} `);
+  expect(css).not.toMatch(RAW_COLOR);
+});
+
+test("pickLook follows a distinctive style, spreads plain styles over the looks, and gives each variant its own", () => {
+  expect(pickLook("Brutalism raw, bold borders", "Recipe onboarding", 0)).toBe("sharp");
+  expect(pickLook("Editorial magazine", "Recipe onboarding", 0)).toBe("editorial");
+  const plainLooks = ["Recipe onboarding", "Bank login", "Pricing page", "Team admin", "Dog walking landing", "Checkout"].map(
+    (brief) => pickLook("Minimalism clean", brief, 0)
+  );
+  expect(new Set(plainLooks).size).toBeGreaterThan(2);
+  const variantLooks = [0, 1, 2, 3].map((variantIndex) => pickLook("Minimalism clean", "Recipe onboarding", variantIndex));
+  expect(new Set(variantLooks).size).toBe(4);
+});
+
+test("listStyleTokens restyles the theme's heading font for a look that has its own, and nothing else", () => {
+  expect(listStyleTokens(FULL_SPEC, "editorial", THEME_TOKENS)).toEqual([
+    { name: "font-heading", value: expect.stringContaining("serif") },
+  ]);
+  expect(listStyleTokens(FULL_SPEC, "clean", THEME_TOKENS)).toEqual([]);
+  expect(listStyleTokens(FULL_SPEC, "editorial", [{ name: "primary", kind: "color", value: "#123456" }])).toEqual([]);
+});
+
+test("the look, heading font and corners a model sets on the Page win over the studio's fallback", () => {
+  const styledSpec = {
+    root: "page",
+    elements: {
+      page: { type: "Page", props: { look: "soft", headingFont: "mono", corners: "square" }, children: ["title"] },
+      title: { type: "Heading", props: { text: "Cook" } },
+    },
+  };
+  expect(renderSpecToHtml(styledSpec, "editorial").startsWith('<main class="page look-soft corners-square">')).toBe(true);
+  expect(listStyleTokens(styledSpec, "editorial", THEME_TOKENS)).toEqual([
+    { name: "font-heading", value: expect.stringContaining("monospace") },
+  ]);
+});
+
+test("renderSpecToHtml splits a hero that has a picture into copy and image", () => {
+  const html = renderSpecToHtml({
+    root: "hero",
+    elements: { hero: { type: "Hero", props: { title: "Cook tonight", image: "A pan of shakshuka" } } },
+  });
+  expect(html).toContain('<header class="hero hero-split hero-image-right">');
+  expect(html).toContain('aria-label="A pan of shakshuka"');
+});
+
+test("renderSpecToHtml draws the layout pieces: a section band, split columns, a banner, a quote, steps and features", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["how", "split", "banner"] },
+      how: { type: "Section", props: { title: "How it works", tone: "muted" }, children: ["steps"] },
+      steps: { type: "Steps", children: ["step-one"] },
+      "step-one": { type: "Step", props: { title: "Pick a recipe", text: "From 200 dinners." } },
+      split: { type: "Split", props: { ratio: "wide-left" }, children: ["feature", "quote"] },
+      feature: { type: "Feature", props: { icon: "clock", title: "Fast", text: "20 minutes." } },
+      quote: { type: "Quote", props: { text: "Dinner is solved.", name: "Dana Ortiz", role: "Home cook" } },
+      banner: { type: "Banner", props: { title: "Cook tonight", text: "Free for a month.", action: "Start" } },
+    },
+  });
+  expect(html).toContain('<section class="section section-muted section-start">');
+  expect(html).toContain('<h2 class="heading heading-2">How it works</h2>');
+  expect(html).toContain('<ol class="steps"><li class="step">');
+  expect(html).toContain('<div class="split split-wide-left items-start">');
+  expect(html).toContain('<div class="feature"><span class="feature-icon"><svg');
+  expect(html).toContain("<blockquote class=\"quote\"><p>Dinner is solved.</p>");
+  expect(html).toContain('<aside class="banner banner-accent">');
+});
+
+test("renderSpecToHtml lets a card span two columns of a grid", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["grid"] },
+      grid: { type: "Grid", children: ["big"] },
+      big: { type: "Card", props: { span: "2" }, children: ["title"] },
+      title: { type: "Heading", props: { text: "Cook" } },
+    },
+  });
+  expect(html).toContain('<section class="span-2 card card-plain">');
+});
+
+test("renderSpecToHtml places any element with the span, place, text align and width a model gives it", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", props: { spacing: "airy" }, children: ["title"] },
+      title: { type: "Heading", props: { text: "Cook", rowSpan: "2", place: "end", textAlign: "center", maxWidth: "md" } },
+    },
+  });
+  expect(html).toContain('<h2 class="row-span-2 place-end text-align-center max-width-md heading heading-2">Cook</h2>');
+  expect(html).toContain("spacing-airy");
 });

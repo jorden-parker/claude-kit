@@ -36,7 +36,7 @@ const VARIANT_REPLY = [
   '{"op":"add","path":"/elements/start","value":{"type":"Button","props":{"label":"Start"}}}',
 ].join("\n");
 const VARIANT_HTML =
-  '<main class="page"><div class="page-inner page-wide"><h2 class="heading heading-2">Cook</h2><p class="text text-default text-md">Tonight</p><button type="button" class="button button-secondary">Start</button></div></main>';
+  '<main class="page look-sharp"><div class="page-inner page-wide spacing-normal"><h2 class="heading heading-2">Cook</h2><p class="text text-default text-md">Tonight</p><button type="button" class="button button-secondary">Start</button></div></main>';
 const BROKEN_REPLY = [
   "NAME: Split hero",
   "RATIONALE: Clear.",
@@ -118,7 +118,10 @@ test("runStudio reuses a saved theme, asks the model once per variant and render
   expect(toolCalls[0]!.input).toMatchObject({
     mode: "new",
     subject: "Recipe onboarding",
-    variants: [{ name: "Split hero", html: VARIANT_HTML }, {}],
+    variants: [
+      { name: "Split hero", html: VARIANT_HTML },
+      { html: VARIANT_HTML.replace("look-sharp", "look-bold") },
+    ],
   });
   expect(events.at(-1)).toMatchObject({
     kind: "done",
@@ -199,7 +202,7 @@ test("runStudio previews the spec after each finished line and once more for the
   };
   await runStudio({ brief: "Recipe onboarding", variantCount: 1, projectFolder }, streamingTools);
   expect(events.filter((event) => event.kind === "preview")).toEqual([
-    { kind: "preview", callId: "variant-a", html: '<main class="page"><div class="page-inner page-wide"></div></main>' },
+    { kind: "preview", callId: "variant-a", html: '<main class="page look-sharp"><div class="page-inner page-wide spacing-normal"></div></main>' },
     { kind: "preview", callId: "variant-a", html: VARIANT_HTML },
   ]);
 });

@@ -4,10 +4,11 @@ import { readVariantLetter } from "../plugins/ui-design/hooks/design-page";
 import {
   buildCatalogPrompt,
   findSpecProblems,
-  renderSpecToHtml,
+  pickLook,
   renderStylesheet,
+  type Look,
 } from "./catalog";
-import { parseVariantReply, readReplySpec } from "./variant-reply";
+import { parseVariantReply, readReplySpec, renderPreview } from "./variant-reply";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -57,7 +58,7 @@ type StudioRequest = {
 
 type ThemeToken = { name: string; kind: string; value: string };
 
-type Draft = { label: string; messages: ChatMessage[]; replyText: string };
+type Draft = { label: string; look: Look; messages: ChatMessage[]; replyText: string };
 
 const DESIGN_FOLDER = ".claude/ui-design";
 const STARTER_THEME_PATH = `${DESIGN_FOLDER}/starter-theme.css`;
@@ -151,12 +152,16 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
     }
   };
 
-  const askModel = async (callId: string, label: string, messages: ChatMessage[]) => {
+  const askModel = async (
+    callId: string,
+    { label, look, messages }: Omit<Draft, "replyText">,
+    tokens: ThemeToken[]
+  ) => {
     emit({ kind: "call", id: callId, label, state: "running" });
     let heardReply = "";
     let shownHtml = "";
     const emitPreview = (replyText: string) => {
-      const html = renderSpecToHtml(readReplySpec(replyText));
+      const html = renderPreview(replyText, tokens, look);
       if (html === shownHtml) return;
       shownHtml = html;
       emit({ kind: "preview", callId, html });
@@ -245,7 +250,7 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
       project: basename(projectFolder),
       mode: "new",
       subject: brief,
-      variants: drafts.map((draft) => parseVariantReply(draft.replyText, tokens)),
+      variants: drafts.map((draft) => parseVariantReply(draft.replyText, tokens, draft.look)),
     });
   };
 
@@ -273,8 +278,8 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
         ];
         draft.replyText = await askModel(
           `${draft.label.toLowerCase().replace(" ", "-")}-repair-${round + 1}`,
-          `${draft.label}, repair ${round + 1}`,
-          draft.messages
+          { ...draft, label: `${draft.label}, repair ${round + 1}` },
+          tokens
         );
       }
     }
@@ -293,12 +298,10 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
           { role: "system", content: systemPrompt },
           { role: "user", content: buildVariantPrompt(request, i, directions[i]) },
         ];
-        const replyText = await askModel(
-          label.toLowerCase().replace(" ", "-"),
-          label,
-          messages
-        );
-        writtenDrafts.push({ label, messages, replyText });
+        const style = directions[i]?.style;
+        const look = pickLook(`${style?.name} ${style?.keywords}`, brief, i);
+        const replyText = await askModel(label.toLowerCase().replace(" ", "-"), { label, look, messages }, tokens);
+        writtenDrafts.push({ label, look, messages, replyText });
       }
       return { result: writtenDrafts, detail: `${writtenDrafts.length} writtenDrafts` };
     });

@@ -1,5 +1,14 @@
 import { createSpecStreamCompiler } from "@json-render/core";
-import { renderCatalogCss, renderSpecToHtml, type Spec, type StyleToken } from "./catalog";
+import { escapeHtml } from "../plugins/ui-design/hooks/design-page";
+import { readTokenVariable } from "../plugins/ui-design/hooks/theme";
+import {
+  listStyleTokens,
+  renderCatalogCss,
+  renderSpecToHtml,
+  type Look,
+  type Spec,
+  type StyleToken,
+} from "./catalog";
 
 const SPLIT_CHILD_LISTS = /"\s*\]\s*,\s*\[\s*"/g;
 const TEXTS_AND_CHARACTERS = /"(?:[^"\\]|\\.)*"?|[\s\S]/g;
@@ -69,10 +78,25 @@ export const readReplySpec = (replyText: string) => {
   return spec;
 };
 
-export const parseVariantReply = (replyText: string, tokens: StyleToken[]) => ({
-  name: readLabeledLine(replyText, "NAME"),
-  rationale: readLabeledLine(replyText, "RATIONALE"),
-  html: renderSpecToHtml(readReplySpec(replyText)),
-  css: renderCatalogCss(tokens),
-  restyledTokens: readRestyledTokens(readLabeledLine(replyText, "TOKENS")),
-});
+export const parseVariantReply = (replyText: string, tokens: StyleToken[], fallbackLook: Look = "clean") => {
+  const spec = readReplySpec(replyText);
+  return {
+    name: readLabeledLine(replyText, "NAME"),
+    rationale: readLabeledLine(replyText, "RATIONALE"),
+    html: renderSpecToHtml(spec, fallbackLook),
+    css: renderCatalogCss(tokens),
+    restyledTokens: [
+      ...listStyleTokens(spec, fallbackLook, tokens),
+      ...readRestyledTokens(readLabeledLine(replyText, "TOKENS")),
+    ],
+  };
+};
+
+export const renderPreview = (replyText: string, tokens: StyleToken[], fallbackLook: Look) => {
+  const spec = readReplySpec(replyText);
+  const html = renderSpecToHtml(spec, fallbackLook);
+  const fontStyle = listStyleTokens(spec, fallbackLook, tokens)
+    .map((token) => `${readTokenVariable(token.name)}:${token.value}`)
+    .join(";");
+  return html && fontStyle ? `<div style="display:contents;${escapeHtml(fontStyle)}">${html}</div>` : html;
+};

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderCatalogCss } from "./catalog";
-import { mendPatchLine, parseVariantReply, readReplySpec } from "./variant-reply";
+import { mendPatchLine, parseVariantReply, readReplySpec, renderPreview } from "./variant-reply";
 
 const TOKENS = [{ name: "primary", kind: "color", value: "#2563eb" }];
 const ROOT_LINE = '{"op":"add","path":"/root","value":"page"}';
@@ -82,4 +82,23 @@ test("mendPatchLine keeps the rows of a table apart, also in a line it has to cl
     '{"op":"add","path":"/elements/orders","value":{"type":"Table","props":{"columns":["Bike"],"rows":[["Trek"],["Brompton"]]},"children":[]}}';
   expect(mendPatchLine(tableLine)).toBe(tableLine);
   expect(JSON.parse(mendPatchLine(tableLine.slice(0, -1))).value.props.rows).toEqual([["Trek"], ["Brompton"]]);
+});
+
+test("parseVariantReply renders the look it is given and adds the look's font to the restyled tokens", () => {
+  const fontTokens = [...TOKENS, { name: "font-heading", kind: "font", value: "system-ui" }];
+  const variant = parseVariantReply(FULL_REPLY, fontTokens, "editorial");
+  expect(variant.html).toContain('class="page look-editorial"');
+  expect(variant.restyledTokens).toEqual([
+    { name: "font-heading", value: expect.stringContaining("serif") },
+    { name: "primary", value: "#0f766e" },
+  ]);
+});
+
+test("renderPreview shows the look's heading font by setting the token on a wrapper", () => {
+  const fontTokens = [...TOKENS, { name: "font-heading", kind: "font", value: "system-ui" }];
+  const preview = renderPreview(FULL_REPLY, fontTokens, "editorial");
+  expect(preview.startsWith('<div style="display:contents;--font-heading:&quot;Iowan Old Style&quot;')).toBe(true);
+  expect(preview).toContain('class="page look-editorial"');
+  expect(renderPreview(FULL_REPLY, TOKENS, "editorial").startsWith("<main")).toBe(true);
+  expect(renderPreview("NAME: Split hero", fontTokens, "editorial")).toBe("");
 });

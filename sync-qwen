@@ -5,31 +5,16 @@ usage="Usage: ./sync-qwen [plugin...]
 Installs this repo's plugins into Qwen Code, replacing earlier syncs. Run it again after changes.
 Without arguments it syncs every plugin under plugins/. QWEN_HOME overrides ~/.qwen."
 
-case "${1:-}" in -h | --help) echo "$usage"; exit 0 ;; esac
+source "$(dirname "$0")/plugin-host/sync-lib.sh"
+exit_after_usage_request "$usage" "${1:-}"
 
-repository_root="$(cd "$(dirname "$0")" && pwd)"
 qwen_home="${QWEN_HOME:-$HOME/.qwen}"
 staging_root="$qwen_home/claude-kit"
 failed_plugins=()
 
-if [ "$#" -gt 0 ]; then
-  plugin_folders=()
-  for plugin_name in "$@"; do plugin_folders+=("$repository_root/plugins/$plugin_name"); done
-else
-  plugin_folders=("$repository_root"/plugins/*/)
-fi
-
-uses_module_api() {
-  [ -f "$1/hooks/hooks.json" ] && jq -e 'has("modules")' "$1/hooks/hooks.json" >/dev/null
-}
-
-has_qwen_commands() {
-  [ -d "$1/qwen-commands" ]
-}
-
 has_qwen_loadable_parts() {
-  has_qwen_commands "$1" || [ -d "$1/skills" ] || [ -d "$1/agents" ] || [ -d "$1/commands" ] || [ -f "$1/.mcp.json" ] ||
-    { [ -f "$1/hooks/hooks.json" ] && ! uses_module_api "$1"; }
+  [ -f "$1/hooks/hooks.json" ] || [ -d "$1/skills" ] || [ -d "$1/agents" ] ||
+    [ -d "$1/commands" ] || [ -f "$1/.mcp.json" ]
 }
 
 remove_earlier_install() {
@@ -37,29 +22,17 @@ remove_earlier_install() {
   return 0
 }
 
-stage_plugin() {
-  local plugin_folder="$1" staged_folder="$2"
-  mkdir -p "$staged_folder"
-  rsync -a --delete --exclude node_modules --exclude tests --exclude .git --exclude output-styles \
-    "$plugin_folder/" "$staged_folder/"
-  if uses_module_api "$plugin_folder"; then rm "$staged_folder/hooks/hooks.json"; fi
-  if has_qwen_commands "$plugin_folder"; then mv "$staged_folder/qwen-commands" "$staged_folder/commands"; fi
-}
-
 install_plugin() {
-  local plugin_folder="$1" plugin_name="$2" staged_folder="$staging_root/$2"
-  stage_plugin "$plugin_folder" "$staged_folder"
+  local plugin_folder="$1" plugin_name="$2" staged_folder="$3"
+  if ! stage_plugin qwen "$plugin_folder" "$staged_folder"; then return 1; fi
   remove_earlier_install "$plugin_name"
-  if ! qwen extensions install "$staged_folder" --consent >/dev/null; then
-    echo "$plugin_name: FAILED to install"
-    failed_plugins+=("$plugin_name")
-    return 1
-  fi
+  qwen extensions install "$staged_folder" --consent >/dev/null
 }
 
 sync_plugin() {
-  local plugin_folder="${1%/}" plugin_name
-  plugin_name="$(jq -r .name "$plugin_folder/.claude-plugin/plugin.json")"
+  local plugin_folder="${1%/}" plugin_name staged_folder
+  plugin_name="$(read_plugin_name "$plugin_folder")"
+  staged_folder="$staging_root/$plugin_name"
 
   if [ -d "$plugin_folder/output-styles" ]; then
     mkdir -p "$qwen_home/output-styles"
@@ -69,18 +42,19 @@ sync_plugin() {
 
   if ! has_qwen_loadable_parts "$plugin_folder"; then
     remove_earlier_install "$plugin_name"
-    if uses_module_api "$plugin_folder"; then
-      echo "$plugin_name: skipped. It is built only on Claude Code's register.ts module API, which Qwen Code cannot load"
-    fi
     return 0
   fi
 
-  install_plugin "$plugin_folder" "$plugin_name" || return 0
+  if ! install_plugin "$plugin_folder" "$plugin_name" "$staged_folder"; then
+    echo "$plugin_name: FAILED to install"
+    failed_plugins+=("$plugin_name")
+    return 0
+  fi
 
-  if has_qwen_commands "$plugin_folder"; then
-    echo "$plugin_name: partial. Its slash commands run as prompts in Qwen Code; the tools, flags and pages from register.ts are missing"
+  if [ -f "$staged_folder/.mcp.json" ]; then
+    echo "$plugin_name: installed. Its tools and slash commands run through an MCP server; panes, autocomplete and composer fill stay in Claude Code"
   elif uses_module_api "$plugin_folder"; then
-    echo "$plugin_name: partial. Skills and agents installed; its tools come from register.ts and are missing in Qwen Code"
+    echo "$plugin_name: installed. Its slash commands run as prompts in Qwen Code"
   elif grep -rqs transcript_path "$plugin_folder/hooks"; then
     echo "$plugin_name: installed. Warning: some hooks read Claude Code's transcript format and may never block in Qwen Code"
   else
@@ -88,11 +62,8 @@ sync_plugin() {
   fi
 }
 
-command -v qwen >/dev/null || { echo "qwen not found on PATH" >&2; exit 1; }
+require_commands qwen jq rsync bun node
+select_plugin_folders "$@"
 for plugin_folder in "${plugin_folders[@]}"; do sync_plugin "$plugin_folder"; done
 rm -rf "$staging_root"
-
-if [ "${#failed_plugins[@]}" -gt 0 ]; then
-  echo "Failed: ${failed_plugins[*]}" >&2
-  exit 1
-fi
+report_failed_plugins ${failed_plugins[@]+"${failed_plugins[@]}"}

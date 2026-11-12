@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="Usage: ./sync-pi [plugin...]
+Installs this repo's register.ts plugins into pi as local packages. Run it again after changes.
+Without arguments it syncs every plugin under plugins/. PI_CODING_AGENT_DIR overrides ~/.pi/agent."
+
+source "$(dirname "$0")/plugin-host/sync-lib.sh"
+exit_after_usage_request "$usage" "${1:-}"
+
+agent_folder="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+package_root="$agent_folder/claude-kit"
+failed_plugins=()
+
+sync_plugin() {
+  local plugin_folder="${1%/}" plugin_name package_folder
+  plugin_name="$(read_plugin_name "$plugin_folder")"
+  package_folder="$package_root/$plugin_name"
+
+  if ! uses_module_api "$plugin_folder"; then
+    echo "$plugin_name: skipped. It has no register.ts module, and pi runs no Claude Code hooks or output styles"
+    return 0
+  fi
+
+  if ! stage_plugin pi "$plugin_folder" "$package_folder" || ! pi install "$package_folder" >/dev/null; then
+    echo "$plugin_name: FAILED to install"
+    failed_plugins+=("$plugin_name")
+    return 0
+  fi
+
+  if [ -f "$package_folder/plugin-host-extension.js" ]; then
+    echo "$plugin_name: installed. Its tools run in a pi extension and its slash commands as prompt templates; panes, autocomplete, composer fill and subagents stay in Claude Code"
+  else
+    echo "$plugin_name: installed. Its slash commands run as prompt templates in pi"
+  fi
+}
+
+require_commands pi jq rsync bun node
+select_plugin_folders "$@"
+for plugin_folder in "${plugin_folders[@]}"; do sync_plugin "$plugin_folder"; done
+report_failed_plugins ${failed_plugins[@]+"${failed_plugins[@]}"}

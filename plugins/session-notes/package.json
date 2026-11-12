@@ -1,8 +1,8 @@
 {
   "name": "session-notes",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "scripts": {
-    "test": "claude plugin test .",
+    "test": "claude plugin test . && for test_file in tests/*.test.sh; do bash \"$test_file\" || exit 1; done",
     "typecheck": "tsc -p ."
   },
   "packageManager": "pnpm@10.15.0",

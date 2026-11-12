@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="Usage: session-notes list
+       session-notes delete <session> <note>
+       session-notes amend <session> <note> <text>"
+
+fail() {
+  printf '%s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+find_store() {
+  if [ -n "${SESSION_NOTES_STORE:-}" ]; then
+    printf '%s\n' "$SESSION_NOTES_STORE"
+    return
+  fi
+  local store_directory="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/store"
+  local store_files=()
+  shopt -s nullglob
+  store_files=("$store_directory"/session-notes_*.json)
+  shopt -u nullglob
+  if [ "${#store_files[@]}" -gt 1 ]; then
+    fail "Several session-notes stores found; set SESSION_NOTES_STORE to one of:
+$(printf '  %s\n' "${store_files[@]}")"
+  fi
+  printf '%s\n' "${store_files[0]:-$store_directory/session-notes.json}"
+}
+
+require_number() {
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || fail "$usage" 2
+}
+
+list_notes() {
+  jq -r '
+    (.notes // []) | to_entries | map(
+      .key as $session_index | .value as $session |
+      ["[\($session_index + 1)] \($session.startedAt[0:10]) \($session.startedAt[11:16]) UTC  \($session.cwd)"]
+      + ($session.prompts | map("  > \(.)"))
+      + (($session.notes // []) | to_entries | map("  note \(.key + 1) \(.value)"))
+      + ($session.files | map("  edited \(.)"))
+      + ($session.commands | map("  $ \(.)"))
+      | join("\n")
+    ) | join("\n\n")
+  ' "$store_path"
+}
+
+replace_note() {
+  local session_number="$1" note_number="$2" replacement_json="$3"
+  local session_index=$((session_number - 1)) note_index=$((note_number - 1))
+  jq -e --argjson session_index "$session_index" '.notes[$session_index] != null' \
+    "$store_path" > /dev/null || fail "No session $session_number."
+  jq -e --argjson session_index "$session_index" --argjson note_index "$note_index" \
+    '(.notes[$session_index].notes // [])[$note_index] != null' \
+    "$store_path" > /dev/null || fail "No note $note_number in session $session_number."
+  local updated_store
+  updated_store="$(mktemp "$store_path.XXXXXX")"
+  jq --argjson session_index "$session_index" --argjson note_index "$note_index" \
+    --argjson replacement "$replacement_json" \
+    '.notes[$session_index].notes |= (.[:$note_index] + $replacement + .[$note_index + 1:])' \
+    "$store_path" > "$updated_store"
+  mv "$updated_store" "$store_path"
+}
+
+[ "$#" -ge 1 ] || fail "$usage" 2
+store_path="$(find_store)"
+[ -f "$store_path" ] || fail "No session notes yet."
+
+case "$1" in
+  list)
+    [ "$#" -eq 1 ] || fail "$usage" 2
+    list_notes
+    ;;
+  delete)
+    [ "$#" -eq 3 ] || fail "$usage" 2
+    require_number "$2"
+    require_number "$3"
+    replace_note "$2" "$3" '[]'
+    printf 'Deleted note %s from session %s.\n' "$3" "$2"
+    ;;
+  amend)
+    [ "$#" -ge 4 ] || fail "$usage" 2
+    require_number "$2"
+    require_number "$3"
+    session_number="$2" note_number="$3"
+    shift 3
+    note_text="$(printf '%s' "$*" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [ -n "$note_text" ] || fail "The note needs some text."
+    replace_note "$session_number" "$note_number" "$(jq -cn --arg text "${note_text:0:500}" '[$text]')"
+    printf 'Amended note %s in session %s.\n' "$note_number" "$session_number"
+    ;;
+  *)
+    fail "$usage" 2
+    ;;
+esac

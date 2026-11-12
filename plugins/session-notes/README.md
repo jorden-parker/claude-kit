@@ -31,6 +31,26 @@ The plugin never adds saved notes to the system prompt, the context or a tool re
 
 Limits keep the store small: the latest 100 sessions, 100 entries per list, 500 characters per entry. Repeated entries are kept once.
 
+## Outside Claude Code
+
+`bin/session-notes` reads and edits the same store from your own terminal. It needs `jq`.
+
+```
+session-notes list                           # every session, newest first, notes numbered
+session-notes delete <session> <note>        # e.g. session-notes delete 1 2
+session-notes amend <session> <note> <text>  # e.g. session-notes amend 1 2 Deploy moved to Monday
+```
+
+Session and note numbers are the ones `list` prints. A number with no note, or empty text, is refused with a message and the store is left unchanged.
+
+Put it on your PATH once, for example:
+
+```
+ln -s ~/src/claude-kit/plugins/session-notes/bin/session-notes ~/.local/bin/session-notes
+```
+
+It finds the store at `~/.claude/plugins/store/session-notes_*.json` (under `$CLAUDE_CONFIG_DIR` when set). Set `SESSION_NOTES_STORE` to a file path to use another store.
+
 ## Install
 
 ```

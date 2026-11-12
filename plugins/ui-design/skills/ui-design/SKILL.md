@@ -2,7 +2,7 @@
 name: ui-design
 description: Design UI as themed mockups in the browser, built from the project's own colors, type, spacing and components, or audit the project's theme and components for consistency. Use whenever the user asks to design, mock up or sketch a new screen, page or component, to redesign, restyle or rethink existing UI, to audit or check the theme, design system, design tokens, hardcoded colors, typography or component consistency, or to apply, build or implement a design variant, or to fix audit findings. Changes no project code until the user picks a variant with apply, answers the go-ahead question after redesign, or names findings with fix.
 user-invocable: false
-argument-hint: "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors>"
+argument-hint: "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors> | gallery"
 ---
 
 # Design
@@ -20,6 +20,7 @@ The first word of the request picks the mode:
 | `audit`    | Checks the theme, the components and their consistency.                                                               |
 | `apply`    | Builds the picked variant of a saved design in project code.                                                          |
 | `fix`      | Fixes numbered audit findings in project code.                                                                        |
+| `gallery`  | Opens a gallery of every saved design and audit in the browser.                                                       |
 | none       | A target that exists in the project means `redesign`. Anything else: new.                                             |
 
 A request in plain words picks the mode by what it asks for.
@@ -34,11 +35,12 @@ In `new`, `redesign` and `audit`, the page is the only output.
 
 ## The tools
 
-Three tools, all writing to `.claude/ui-design/` in the project. If a tool's schema is not loaded, load it with `ToolSearch` first. If the tool does not exist even then, stop and say in one line that the design plugin's tools are not loaded. Do not write a page yourself.
+Four tools, all writing to `.claude/ui-design/` in the project. If a tool's schema is not loaded, load it with `ToolSearch` first. If the tool does not exist even then, stop and say in one line that the design plugin's tools are not loaded. Do not write a page yourself.
 
 - `mcp__ui-design__save_design_theme` checks and saves the theme as `theme.json`.
 - `mcp__ui-design__render_design` checks the variants against the saved theme, writes the mockup page and opens it.
 - `mcp__ui-design__render_design_audit` scans the files, merges its findings with yours, writes the audit page and opens it.
+- `mcp__ui-design__open_design_gallery` writes `gallery.html` from every saved design and audit and opens it. It takes no input.
 
 A tool that refuses a call replies with one problem per line. Fix every problem and call it again.
 
@@ -151,7 +153,7 @@ The variants come from the `ui-ux-pro-max` skill. Before writing any variant, ru
 
 ### Web Interface Guidelines
 
-The `web-design-guidelines` skill holds the Web Interface Guidelines: rules for focus, forms, motion, typography, touch targets, dark mode, performance and copy. Run it once with the `Skill` tool, before writing any variant, and keep its rules for this design.
+The `web-design-guidelines` skill holds the Web Interface Guidelines: rules for focus, forms, motion, typography, touch targets, dark mode, performance and copy. Run it once with the `Skill` tool, before writing any variant, and keep its rules for this design. Always pass it files, or it stops to ask for them: in `redesign`, the target's file; in `new`, the similar screens read in step 2.
 
 - Every variant follows those rules, as far as a static mockup can show them.
 - Where a rule and the theme disagree, the theme wins, and the rule goes in `rationale`.
@@ -428,3 +430,7 @@ Fix changes the project's code for numbered findings of the newest audit. Like a
 7. Review the files you changed with the `web-design-guidelines` skill, and fix what it reports in them. If the skill is not installed, skip this step.
 8. Follow every hook the project has installed. Where a test must come first, write it first. Run the project's type check and tests.
 9. End with one line per number: what changed and in which files, or why it was left. Then what to check in the browser. Last, suggest running `/ui-design audit` again to confirm the findings are gone.
+
+## 9. Gallery
+
+Gallery lists every saved design and audit on one page, newest first. Call `mcp__ui-design__open_design_gallery` once, with no input. Your last message is its one-line result, and nothing else.

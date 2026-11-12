@@ -56,7 +56,7 @@ const BARE_WORD = /^[a-z]+$/i;
 
 type Section = { slug: string; label: string; count: number };
 
-const pluralize = (count: number, noun: string) =>
+export const pluralize = (count: number, noun: string) =>
   `${count || "No"} ${noun}${count === 1 ? "" : "s"}`;
 
 const listSections = (groupCount: number, findings: AuditFinding[]) => [

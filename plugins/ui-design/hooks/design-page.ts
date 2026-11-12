@@ -127,7 +127,7 @@ const renderPanel =
 
 const STAGE_RESIZER = `<div class="resizer" data-resizer role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Preview height" aria-valuemin="${STAGE_HEIGHT.min}" aria-valuemax="${STAGE_HEIGHT.max}" aria-valuenow="${STAGE_HEIGHT.initial}" title="Drag to resize. Double-click to reset."><span class="grip"></span></div>`;
 
-const SWATCH_FAN_MARK = `<svg viewBox="0 0 40 28" width="46" height="32" fill="none" stroke="currentColor" stroke-width="1.5"><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g></svg>`;
+export const SWATCH_FAN_MARK = `<svg viewBox="0 0 40 28" width="46" height="32" fill="none" stroke="currentColor" stroke-width="1.5"><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g></svg>`;
 
 const renderTagline = (variantCount: number) =>
   `<p class="tagline">${variantCount} ${variantCount === 1 ? "variant" : "variants"}, freshly mocked. Pick a favorite: the others won’t mind.</p>`;

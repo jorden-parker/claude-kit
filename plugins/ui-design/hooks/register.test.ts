@@ -200,7 +200,7 @@ test("/ui-design runs the ui-design skill with its arguments", async ($, on) => 
 const readPage = (writes: FileWrite[]) =>
   writes.find((write) => write.path.endsWith(".html"))?.text ?? "";
 
-test("session start registers the bare /ui-design command and the three tools", async ($, on) => {
+test("session start registers the bare /ui-design command and the four tools", async ($, on) => {
   const commandNames: string[] = [];
   const tools: { name: string; isDeferred?: unknown }[] = [];
   on("command.register", (_, e) => {
@@ -224,6 +224,7 @@ test("session start registers the bare /ui-design command and the three tools", 
     { name: "save_design_theme", isDeferred: false },
     { name: "render_design", isDeferred: false },
     { name: "render_design_audit", isDeferred: false },
+    { name: "open_design_gallery", isDeferred: false },
   ]);
 });
 
@@ -883,9 +884,13 @@ test("the first word after /ui-design suggests the matching modes", async ($, on
     "audit",
     "apply",
     "fix",
+    "gallery",
   ]);
   expect(suggestedTexts(auditReply)).toEqual(["audit"]);
   expect(auditReply.suggestions[0]!.description).toContain("consistency");
+  expect(suggestedTexts(await autocomplete($, "/ui-design ga"))).toEqual([
+    "gallery",
+  ]);
 });
 
 test("the menu form /ui-design:ui-design suggests the same modes", async ($, on) => {
@@ -900,6 +905,7 @@ test("the menu form /ui-design:ui-design suggests the same modes", async ($, on)
     "audit",
     "apply",
     "fix",
+    "gallery",
   ]);
   expect(suggestedTexts(auditReply)).toEqual(["audit"]);
 });
@@ -912,4 +918,93 @@ test("later words and other commands get no /ui-design mode suggestions", async 
 
   expect(suggestedTexts(laterReply)).toEqual([]);
   expect(suggestedTexts(otherReply)).toEqual([]);
+});
+
+const GALLERY_TOOL = "mcp__ui-design__open_design_gallery";
+const GALLERY_PATH = `${DESIGN_FOLDER}/gallery.html`;
+const SAVED_DESIGN_JSON = JSON.stringify({
+  project: "acme-notes",
+  mode: "redesign",
+  subject: "src/app/settings/page.tsx",
+  theme: SAVED_THEME,
+  variants: [
+    {
+      name: "Sidebar",
+      rationale: "One centered card.",
+      html: "<main>Sidebar</main>",
+      css: ".page{color:var(--primary)}",
+      kept: ["Every field"],
+      changed: ["The sidebar moves"],
+      newTokens: [],
+      restyledTokens: [],
+    },
+  ],
+});
+const SAVED_AUDIT_JSON = JSON.stringify({
+  project: "acme-notes",
+  files: ["src/ui/button.tsx"],
+  theme: SAVED_THEME,
+  componentGroups: [],
+  findings: [{ category: "theme", severity: "error" }],
+});
+const GALLERY_FILE_TEXTS = {
+  ...PROJECT_FILES,
+  [`${DESIGN_FOLDER}/design-2026-11-10-090000.json`]: SAVED_DESIGN_JSON,
+  [`${DESIGN_FOLDER}/audit-2026-11-11-093000.json`]: SAVED_AUDIT_JSON,
+  [`${DESIGN_FOLDER}/design-2026-11-09-080000.json`]: "{not json",
+};
+
+test("/ui-design gallery writes a page of the saved designs and audits, opens it, and runs no skill", async ($, on) => {
+  const submittedPrompts: string[] = [];
+  on("prompt.submit", (_, e) => {
+    submittedPrompts.push(e.text);
+    return { text: e.text };
+  });
+  const { writes, ranCommands } = mockEngine(on, {
+    fileTexts: GALLERY_FILE_TEXTS,
+  });
+
+  const reply = await $.command.run(buildDesignCommand("gallery"));
+
+  expect(reply.text).toBe(`Opened ${GALLERY_PATH} in the browser.`);
+  expect(submittedPrompts).toEqual([]);
+  expect(writes.map((write) => write.path)).toEqual([
+    `${DESIGN_FOLDER}/.gitignore`,
+    GALLERY_PATH,
+  ]);
+  expect(ranCommands).toEqual([["open", GALLERY_PATH]]);
+  const page = readPage(writes);
+  expect(page).toContain("1 design and 1 audit saved.");
+  expect(page).toContain('href="design-2026-11-10-090000.html"');
+  expect(page).toContain('href="audit-2026-11-11-093000.html"');
+  expect(page).not.toContain("design-2026-11-09-080000.html");
+});
+
+test("the gallery tool opens the gallery page", async ($, on) => {
+  const { writes } = mockEngine(on, { fileTexts: GALLERY_FILE_TEXTS });
+
+  const reply = await callTool($, GALLERY_TOOL, {});
+
+  expect(reply.result).toBe(`Opened ${GALLERY_PATH} in the browser.`);
+  expect(writes.map((write) => write.path)).toContain(GALLERY_PATH);
+});
+
+test("with nothing saved, the gallery opens with its empty state", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  const reply = await callTool($, GALLERY_TOOL, {});
+
+  expect(reply.result).toBe(`Opened ${GALLERY_PATH} in the browser.`);
+  expect(readPage(writes)).toContain("No designs yet. Run /ui-design new");
+});
+
+test("a gallery that cannot be written says so in the command and the tool", async ($, on) => {
+  mockEngine(on, { isReadOnly: true });
+
+  const commandReply = await $.command.run(buildDesignCommand("gallery"));
+  const toolReply = await callTool($, GALLERY_TOOL, {});
+
+  expect(commandReply.text).toContain("Could not open the gallery: ");
+  expect(commandReply.text).toContain("EACCES");
+  expect(toolReply.deny).toContain("Could not open the gallery: ");
 });

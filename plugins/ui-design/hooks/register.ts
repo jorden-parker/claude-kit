@@ -30,6 +30,11 @@ import {
   type DesignVariant,
 } from "./design-page";
 import {
+  readGalleryEntry,
+  renderGalleryPage,
+  type GalleryEntry,
+} from "./gallery-page";
+import {
   listMarkupProblems,
   listNewTokenProblems,
   listRawCssProblems,
@@ -58,6 +63,10 @@ const AUDIT_TOOL_NAME = "render_design_audit";
 const QUALIFIED_THEME_TOOL_NAME = `mcp__ui-design__${THEME_TOOL_NAME}`;
 const QUALIFIED_DESIGN_TOOL_NAME = `mcp__ui-design__${DESIGN_TOOL_NAME}`;
 const QUALIFIED_AUDIT_TOOL_NAME = `mcp__ui-design__${AUDIT_TOOL_NAME}`;
+const GALLERY_TOOL_NAME = "open_design_gallery";
+const QUALIFIED_GALLERY_TOOL_NAME = `mcp__ui-design__${GALLERY_TOOL_NAME}`;
+const GALLERY_MODE = "gallery";
+const GALLERY_FILE_NAME = "gallery.html";
 const DESIGN_MODES: readonly DesignMode[] = ["redesign", "new"];
 const DESIGN_COMMAND = "ui-design";
 const DESIGN_SKILL = "ui-design:ui-design";
@@ -81,6 +90,10 @@ const DESIGN_MODE_SUGGESTIONS = [
     description: "Builds the picked variant of a saved design in project code",
   },
   { text: "fix", description: "Fixes numbered audit findings in project code" },
+  {
+    text: "gallery",
+    description: "Opens a gallery of every saved design and audit",
+  },
 ];
 const MAX_VARIANTS = 4;
 
@@ -89,6 +102,7 @@ declare module "claude-code" {
     [QUALIFIED_THEME_TOOL_NAME]: Record<string, unknown>;
     [QUALIFIED_DESIGN_TOOL_NAME]: Record<string, unknown>;
     [QUALIFIED_AUDIT_TOOL_NAME]: Record<string, unknown>;
+    [QUALIFIED_GALLERY_TOOL_NAME]: Record<string, unknown>;
   }
 }
 
@@ -400,6 +414,11 @@ const openInBrowser = async (engine: EngineInterface, pagePath: string) => {
   return false;
 };
 
+const describeOpening = async (engine: EngineInterface, pagePath: string) =>
+  (await openInBrowser(engine, pagePath))
+    ? `Opened ${pagePath} in the browser.`
+    : `Could not open the browser. The page is saved at ${pagePath}.`;
+
 const readFileText = (engine: EngineInterface, filePath: string) =>
   engine.fs.read(filePath).then(
     (fileText) => String(fileText),
@@ -468,9 +487,7 @@ const writeAndOpenPage = async (
   await engine.fs.write(`${designFolder}/.gitignore`, "*\n");
   await engine.fs.write(`${pathWithoutExtension}.json`, serialize(saved));
   await engine.fs.write(pagePath, pageHtml);
-  return (await openInBrowser(engine, pagePath))
-    ? `Opened ${pagePath} in the browser.`
-    : `Could not open the browser. The page is saved at ${pagePath}.`;
+  return describeOpening(engine, pagePath);
 };
 
 const findSourceProblems = async (
@@ -756,6 +773,49 @@ const renderAudit = async (
   };
 };
 
+const listSavedFileNames = async (
+  engine: EngineInterface,
+  designFolder: string
+) => {
+  try {
+    return (await engine.fs.list(designFolder)).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+};
+
+const readSavedEntries = async (
+  engine: EngineInterface,
+  designFolder: string
+): Promise<GalleryEntry[]> => {
+  const fileNames = (await listSavedFileNames(engine, designFolder)).filter(
+    (fileName) => fileName.endsWith(".json")
+  );
+  const entries = await Promise.all(
+    fileNames.map(async (fileName) => {
+      try {
+        return readGalleryEntry(
+          fileName,
+          await readFileText(engine, `${designFolder}/${fileName}`)
+        );
+      } catch {
+        return undefined;
+      }
+    })
+  );
+  return entries.filter((entry): entry is GalleryEntry => entry !== undefined);
+};
+
+const openGallery = async (engine: EngineInterface) => {
+  const workingDirectory = await engine.session.cwd();
+  const designFolder = readDesignFolder(workingDirectory);
+  const entries = await readSavedEntries(engine, designFolder);
+  const pagePath = `${designFolder}/${GALLERY_FILE_NAME}`;
+  await engine.fs.write(`${designFolder}/.gitignore`, "*\n");
+  await engine.fs.write(pagePath, renderGalleryPage(entries));
+  return describeOpening(engine, pagePath);
+};
+
 const describeFailure = (failedAction: string, error: unknown) => ({
   deny: `Could not ${failedAction}: ${describeError(error)}`,
 });
@@ -770,7 +830,7 @@ export const register: Register = (on) => {
       description:
         "Design UI as themed mockups in the browser, or audit the theme and components",
       argumentHint:
-        "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors>",
+        "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors> | gallery",
     });
     await $.tool.register({
       name: THEME_TOOL_NAME,
@@ -793,11 +853,25 @@ export const register: Register = (on) => {
       inputSchema: AUDIT_TOOL_SCHEMA,
       isDeferred: false,
     });
+    await $.tool.register({
+      name: GALLERY_TOOL_NAME,
+      description:
+        "Opens a gallery page of every design and audit saved in .claude/ui-design/ in the browser: search, filters by kind, a newest-first or oldest-first sort, and the apply command for each variant. Call it when the user asks in plain words to see, browse or open their saved designs or audits. It takes no input.",
+      inputSchema: { type: "object", properties: {} },
+      isDeferred: false,
+    });
     return next(e);
   });
 
   on("command.run", { command: DESIGN_COMMAND }, async ($, e) => {
     const commandArguments = e.args.trim();
+    if (commandArguments === GALLERY_MODE) {
+      try {
+        return { text: await openGallery($) };
+      } catch (error) {
+        return { text: `Could not open the gallery: ${describeError(error)}` };
+      }
+    }
     $.clock.after(
       0,
       () => void $.prompt.submit({ text: buildSkillPrompt(commandArguments) })
@@ -840,6 +914,14 @@ export const register: Register = (on) => {
       return await renderAudit($, e);
     } catch (error) {
       return describeFailure("write the audit", error);
+    }
+  });
+
+  on("tool.call", { tool: QUALIFIED_GALLERY_TOOL_NAME }, async ($) => {
+    try {
+      return { result: await openGallery($) };
+    } catch (error) {
+      return describeFailure("open the gallery", error);
     }
   });
 };

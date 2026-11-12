@@ -9,6 +9,7 @@ One skill, `/ui-design`, designs UI in the project's own theme and opens the res
 | `/ui-design audit [scope]`             | Checks the theme, the components and their consistency.                                                               |
 | `/ui-design apply [design] <letter>`   | Builds the picked variant of a saved design in project code.                                                          |
 | `/ui-design fix <numbers>`             | Fixes numbered audit findings in project code.                                                                        |
+| `/ui-design gallery`                   | Opens every saved design and audit on one page, with search, filters and apply commands.                              |
 
 With no mode word, a target that exists in the project means `redesign`, and anything else means `new`.
 
@@ -163,6 +164,16 @@ Each finding is fixed at its file and line, and a theme finding where its token 
 
 It ends with one line per number and a suggestion to run `/ui-design audit` again to confirm.
 
+## Gallery
+
+`/ui-design gallery` writes `gallery.html` into `.claude/ui-design/` and opens it. The page lists every saved design and audit, newest first:
+
+- Search by project, subject, variant or file name, and filter to All, New, Redesign or Audit. The sort toggle puts the oldest first.
+- Each design shows a live thumbnail of its variants, and a copyable `/ui-design apply` command for each one.
+- Each audit shows its finding counts by severity and its component groups.
+
+Saved files that do not parse, or lack what the page needs, are skipped. In plain words, Claude opens the same page through the `open_design_gallery` tool.
+
 ## Limits
 
 - Mockups are plain HTML and CSS. They approximate the project's components; they do not render them.
@@ -182,6 +193,7 @@ Everything goes to `.claude/ui-design/` in the project:
 - `theme.json`: the saved theme.
 - `design-YYYY-MM-DD-HHMMSS.html` (UTC): a mockup page. The `.json` beside it holds the project, the mode, the subject, the theme and the variants. `/ui-design apply` reads the newest one.
 - `audit-YYYY-MM-DD-HHMMSS.html` (UTC): an audit page. The `.json` beside it holds the project, the files, the theme, the component groups and the findings, each with its `number`. A finding has its `lines` as a list, and the tool's own findings add the `value` they found. After an earlier audit, it also has `progress`: the earlier file's name as `previousAudit`, and the counts `fixed` and `new`.
+- `gallery.html`: the gallery of every saved design and audit. `/ui-design gallery` rewrites it each time it runs.
 
 The folder gets a `.gitignore` of `*`, so pages stay out of git.
 
@@ -189,21 +201,22 @@ If no browser opens, the tool reports the page's path instead.
 
 ## Where things live
 
-| File                                | Holds                                                             |
-| ----------------------------------- | ----------------------------------------------------------------- |
-| `hooks/register.ts`                 | The three tools, the wiring of their checks and the autocomplete. |
-| `hooks/mockup-checks.ts`            | The checks on a variant's CSS, markup and proposed tokens.        |
-| `hooks/theme.ts`                    | The theme's shape, and its tokens as CSS variables.               |
-| `hooks/design-page.ts`              | The HTML of the mockup page.                                      |
-| `hooks/hardcoded-values.ts`         | The finder of hardcoded colors, fonts, sizes and spacing.         |
-| `hooks/audit.ts`                    | The findings, the theme's self-checks, numbering and counts.      |
-| `hooks/audit-page.ts`               | The HTML of the audit page.                                       |
-| `hooks/component-groups.ts`         | The same-purpose groups and their shape checks.                   |
-| `hooks/input.ts`                    | The shared readers and small checks of tool input.                |
-| `hooks/page-style.ts`               | The CSS of both pages.                                            |
-| `hooks/page-script.ts`              | The behavior of both pages: tabs, width, dark and copy.           |
-| `skills/ui-design/SKILL.md`         | How Claude reads the theme, designs, audits and applies.          |
-| `skills/ui-design/theme-sources.md` | Where each stack keeps its theme.                                 |
+| File                                | Holds                                                            |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `hooks/register.ts`                 | The four tools, the wiring of their checks and the autocomplete. |
+| `hooks/mockup-checks.ts`            | The checks on a variant's CSS, markup and proposed tokens.       |
+| `hooks/theme.ts`                    | The theme's shape, and its tokens as CSS variables.              |
+| `hooks/design-page.ts`              | The HTML of the mockup page.                                     |
+| `hooks/hardcoded-values.ts`         | The finder of hardcoded colors, fonts, sizes and spacing.        |
+| `hooks/audit.ts`                    | The findings, the theme's self-checks, numbering and counts.     |
+| `hooks/audit-page.ts`               | The HTML of the audit page.                                      |
+| `hooks/gallery-page.ts`             | The gallery page's HTML and the reader of the saved files.       |
+| `hooks/component-groups.ts`         | The same-purpose groups and their shape checks.                  |
+| `hooks/input.ts`                    | The shared readers and small checks of tool input.               |
+| `hooks/page-style.ts`               | The CSS of both pages.                                           |
+| `hooks/page-script.ts`              | The behavior of both pages: tabs, width, dark and copy.          |
+| `skills/ui-design/SKILL.md`         | How Claude reads the theme, designs, audits and applies.         |
+| `skills/ui-design/theme-sources.md` | Where each stack keeps its theme.                                |
 
 ## Install
 

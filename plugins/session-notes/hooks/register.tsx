@@ -7,10 +7,11 @@ type SessionNote = {
   prompts: string[];
   files: string[];
   commands: string[];
+  notes?: string[];
 };
 
 type NoteAddition = Partial<
-  Pick<SessionNote, "prompts" | "files" | "commands">
+  Pick<SessionNote, "prompts" | "files" | "commands" | "notes">
 >;
 
 const NOTES_KEY = "notes";
@@ -19,6 +20,17 @@ const PANE_TITLE = "Session notes";
 const MAX_SESSIONS = 100;
 const MAX_ENTRIES_PER_LIST = 100;
 const MAX_ENTRY_LENGTH = 500;
+const WRITE_NOTE_TOOL_NAME = "write_note";
+const QUALIFIED_WRITE_NOTE_TOOL_NAME = `mcp__session-notes__${WRITE_NOTE_TOOL_NAME}`;
+const WRITE_NOTE_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    text: { type: "string", description: "The note, in plain words." },
+  },
+  required: ["text"],
+};
+const SESSION_SUMMARY_TOPIC =
+  "a short summary of this session: what was done, what was decided, and what is left to do";
 const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 const readNotes = async (engine: EngineInterface): Promise<SessionNote[]> => {
@@ -39,6 +51,7 @@ const mergeIntoNote = (note: SessionNote, addition: NoteAddition) => ({
   prompts: appendEntries(note.prompts, addition.prompts),
   files: appendEntries(note.files, addition.files),
   commands: appendEntries(note.commands, addition.commands),
+  notes: appendEntries(note.notes ?? [], addition.notes),
 });
 
 let pendingWrite: Promise<void> = Promise.resolve();
@@ -86,6 +99,26 @@ const describeNoteToolCall = (
   return undefined;
 };
 
+const noteInstructions = new Set<string>();
+
+const buildNoteInstruction = (topic: string) =>
+  `Call the ${QUALIFIED_WRITE_NOTE_TOOL_NAME} tool once with ${topic}. Write it in plain words, as short bullets, from what happened in this conversation. Reply with one line saying the note is saved.`;
+
+const askClaudeToWriteNote = (engine: EngineInterface, topic: string) => {
+  const instruction = buildNoteInstruction(topic);
+  noteInstructions.add(instruction);
+  engine.clock.after(0, () => void engine.prompt.submit({ text: instruction }));
+};
+
+const writeNote = async (engine: EngineInterface, requestedText: unknown) => {
+  const noteText =
+    typeof requestedText === "string" ? requestedText.trim() : "";
+  if (!noteText) return { deny: "The note needs some text." };
+  await addToSessionNote(engine, { notes: [noteText] });
+  await openNotesPane(engine);
+  return { result: "Note saved and the notes pane opened." };
+};
+
 const formatStartTime = (startedAt: string) =>
   `${startedAt.slice(0, 10)} ${startedAt.slice(11, 16)} UTC`;
 
@@ -98,6 +131,18 @@ export const register: Register = (on) => {
       name: "notes",
       description: "Show the notes kept for each session in a pane",
     });
+    await $.command.register({
+      name: "note",
+      description:
+        "Have Claude note a summary of the session and what is left, or what you name after /note",
+    });
+    await $.tool.register({
+      name: WRITE_NOTE_TOOL_NAME,
+      description:
+        "Writes a note to this session's notes and opens the notes pane. Call it when the user asks you to note, jot down or remember something for this session.",
+      inputSchema: WRITE_NOTE_TOOL_SCHEMA,
+      isDeferred: false,
+    });
     return next(e);
   });
 
@@ -106,17 +151,28 @@ export const register: Register = (on) => {
     return { text: "Session notes pane opened." };
   });
 
+  on("command.run", { command: "note" }, async ($, e) => {
+    const requestedTopic = e.args.trim();
+    askClaudeToWriteNote(
+      $,
+      requestedTopic ? `a note about: ${requestedTopic}` : SESSION_SUMMARY_TOPIC
+    );
+    return { text: "Writing a session note…" };
+  });
+
   on("prompt.submit", async ($, e, next) => {
-    const isUserPrompt = !e.command && e.text.trim() !== "";
+    const isNoteInstruction = noteInstructions.delete(e.text);
+    const isUserPrompt =
+      !e.command && !isNoteInstruction && e.text.trim() !== "";
     if (isUserPrompt) await addToSessionNote($, { prompts: [e.text.trim()] });
     return next(e);
   });
 
   on("tool.call", async ($, e, next) => {
-    const addition = describeNoteToolCall(
-      e.tool,
-      e as unknown as Record<string, unknown>
-    );
+    const toolInput = e as unknown as Record<string, unknown>;
+    if (e.tool === (QUALIFIED_WRITE_NOTE_TOOL_NAME as string))
+      return writeNote($, toolInput.text);
+    const addition = describeNoteToolCall(e.tool, toolInput);
     if (addition) await addToSessionNote($, addition);
     return next(e);
   });
@@ -139,6 +195,9 @@ export const register: Register = (on) => {
               >{`${formatStartTime(note.startedAt)}  ${note.cwd}`}</Text>
               {note.prompts.map((prompt) => (
                 <Text>{`  > ${prompt}`}</Text>
+              ))}
+              {(note.notes ?? []).map((noteText) => (
+                <Text>{`  note ${noteText}`}</Text>
               ))}
               {note.files.map((filePath) => (
                 <Text dimColor>{`  edited ${filePath}`}</Text>

@@ -1,5 +1,7 @@
 import type { On, PromptComposeInput, PromptSubmitInput } from "claude-code";
-import { expect, test } from "claude-code/testing";
+import { expect, mock, test, type Engine } from "claude-code/testing";
+
+const WRITE_NOTE_TOOL = "mcp__session-notes__write_note";
 
 const submitted = (text: string) => ({ text }) as PromptSubmitInput;
 
@@ -21,7 +23,11 @@ const NOTES_PANE = {
 const mockEngine = (
   on: On,
   sessionId: string,
-  storedEntries: Record<string, unknown> = {}
+  storedEntries: Record<string, unknown> = {},
+  recorded: { openedPanes: string[]; submittedPrompts: string[] } = {
+    openedPanes: [],
+    submittedPrompts: [],
+  }
 ) => {
   const store = new Map(Object.entries(storedEntries));
   on("store.get", (_, e) => ({ value: store.get(e.key) }));
@@ -31,9 +37,15 @@ const mockEngine = (
   });
   on("session.id", () => ({ value: sessionId }));
   on("session.cwd", () => ({ value: "/repo" }));
-  on("prompt.submit", (_, e) => ({ text: e.text }));
+  on("prompt.submit", (_, e) => {
+    recorded.submittedPrompts.push(e.text);
+    return { text: e.text };
+  });
   on("tool.call", () => ({ result: {} }));
-  on("ui.open", () => ({ value: { isPlaced: true } }));
+  on("ui.open", (_, e) => {
+    recorded.openedPanes.push(e.id);
+    return { value: { isPlaced: true } };
+  });
   return store;
 };
 
@@ -136,4 +148,92 @@ test("the pane says when there are no notes", async ($, on) => {
     "No session notes yet."
   );
   await mountedPane.unmount();
+});
+
+test("Claude writes a note with the tool, and the pane opens", async ($, on) => {
+  const recorded = { openedPanes: [] as string[], submittedPrompts: [] };
+  const store = mockEngine(
+    on,
+    "session-a",
+    {
+      notes: [
+        {
+          sessionId: "session-a",
+          cwd: "/repo",
+          startedAt: "2026-11-12T09:30:00.000Z",
+          prompts: [],
+          files: [],
+          commands: [],
+        },
+      ],
+    },
+    recorded
+  );
+
+  const outcome = await $.tool.call({
+    tool: WRITE_NOTE_TOOL,
+    text: "Login bug was a stale session cookie",
+  } as never);
+
+  const [note] = store.get("notes") as Array<Record<string, unknown>>;
+  expect(note?.notes).toEqual(["Login bug was a stale session cookie"]);
+  expect(recorded.openedPanes).toEqual(["session-notes"]);
+  expect(outcome).toEqual({ result: "Note saved and the notes pane opened." });
+
+  const mountedPane = await $.ui.mount(NOTES_PANE);
+  expect((await mountedPane.find({ type: "Text", text: /stale/ }))?.text).toBe(
+    "  note Login bug was a stale session cookie"
+  );
+  await mountedPane.unmount();
+});
+
+test("an empty note is refused", async ($, on) => {
+  mockEngine(on, "session-a");
+
+  const outcome = await $.tool.call({
+    tool: WRITE_NOTE_TOOL,
+    text: " ",
+  } as never);
+
+  expect(outcome).toEqual({ deny: "The note needs some text." });
+});
+
+const runNoteCommand = async ($: Engine, on: On, commandArguments: string) => {
+  const clock = mock.clock(on);
+  const recorded = { openedPanes: [], submittedPrompts: [] as string[] };
+  const store = mockEngine(on, "session-a", {}, recorded);
+  const reply = await $.command.run({
+    command: "note",
+    args: commandArguments,
+  } as never);
+  await clock.settle();
+  return { reply, store, submittedPrompts: recorded.submittedPrompts };
+};
+
+test("/note asks Claude to note a summary and what is left", async ($, on) => {
+  const { reply, submittedPrompts } = await runNoteCommand($, on, "");
+
+  expect(reply.text).toBe("Writing a session note…");
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain(WRITE_NOTE_TOOL);
+  expect(submittedPrompts[0]).toContain("summary of this session");
+  expect(submittedPrompts[0]).toContain("what is left");
+});
+
+test("/note with arguments asks Claude to note that instead", async ($, on) => {
+  const { submittedPrompts } = await runNoteCommand(
+    $,
+    on,
+    "the open questions"
+  );
+
+  expect(submittedPrompts[0]).toContain(WRITE_NOTE_TOOL);
+  expect(submittedPrompts[0]).toContain("the open questions");
+  expect(submittedPrompts[0]).not.toContain("summary of this session");
+});
+
+test("the /note instructions are not noted as a prompt", async ($, on) => {
+  const { store } = await runNoteCommand($, on, "");
+
+  expect(store.get("notes")).toBeUndefined();
 });

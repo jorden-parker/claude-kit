@@ -1,6 +1,6 @@
 {
   "name": "ui-design",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "scripts": {
     "test": "claude plugin test . && node --test tests/",
     "typecheck": "tsc -p ."

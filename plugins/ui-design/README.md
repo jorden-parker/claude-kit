@@ -58,6 +58,8 @@ With almost no theme to find, Claude stops and asks before it proposes one.
 `/ui-design new` and `/ui-design redesign` end with the `render_design` tool. It writes one self-contained page and opens it in the browser.
 
 - One tab per variant, A to D. Two variants by default.
+- Each variant renders in a browser-style window with its own address, such as `variant-a.preview`, on a dotted stage.
+- The hero counts the variants, and a footer signs the page off. Motion stays off under `prefers-reduced-motion`.
 - Each variant renders in its own sandboxed frame, with the theme injected as CSS variables. A variant's CSS only uses `var(--token)`.
 - **Desktop** and **Mobile** switch the frame's width. **Dark** appears when the theme has dark values.
 - Each variant has a name and a rationale. A redesign also lists what it **Kept** and what it **Changed**.

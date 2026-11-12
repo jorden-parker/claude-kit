@@ -120,10 +120,15 @@ const renderPanel =
     return `<section role="tabpanel" id="panel-${slug}" aria-labelledby="tab-${slug}"${variantIndex ? " hidden" : ""}>
 <div class="variant-head"><h2>${letter} · ${name}</h2><div class="apply"><code id="command-${slug}">/ui-design apply ${designName ? `${escapeHtml(designName)} ` : ""}${letter}</code><button type="button" class="button primary" data-copies="command-${slug}">Use this</button></div></div>
 <p class="muted">${escapeHtml(variant.rationale)}</p>
-<div class="stage"><iframe sandbox="" title="Variant ${letter}: ${name}" srcdoc="${escapeHtml(renderVariantDocument(theme, variant))}"></iframe></div>
+<div class="window"><div class="window-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="address">variant-${slug}.preview</span></div><div class="stage"><iframe sandbox="" title="Variant ${letter}: ${name}" srcdoc="${escapeHtml(renderVariantDocument(theme, variant))}"></iframe></div></div>
 <div class="notes">${redesignNotes}${renderTokenTable("Restyled colors and fonts", variant.restyledTokens)}${renderTokenTable("Proposed additions", readProposedTokens(variant))}</div>
 </section>`;
   };
+
+const SHAPES_MARK = `<svg viewBox="0 0 54 16" width="54" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><rect x="20.5" y="1.5" width="13" height="13" rx="2"/><path d="M46 1.75 52.5 14.25h-13z" stroke-linejoin="round"/></svg>`;
+
+const renderTagline = (variantCount: number) =>
+  `<p class="tagline">${variantCount} ${variantCount === 1 ? "variant" : "variants"}, freshly mocked. Pick a favorite: the others won’t mind.</p>`;
 
 const renderWidthButton = (width: string, label: string, isPressed: boolean) =>
   `<button type="button" class="button secondary" data-width="${width}" aria-pressed="${isPressed}">${label}</button>`;
@@ -154,14 +159,17 @@ export const renderDesignPage = (design: Design, designName = "") => {
 <body data-frame-width="desktop">
 <main>
 <header class="hero">
+<span class="mark" aria-hidden="true">${SHAPES_MARK}</span>
 <p class="eyebrow">${labels.eyebrow}</p>
 <h1>${escapeHtml(design.project)}</h1>
 <p class="muted">${labels.subject}: ${escapeHtml(design.subject)}</p>
+${renderTagline(design.variants.length)}
 </header>
 <div class="toolbar"><div role="tablist" aria-label="Variants">${design.variants.map(renderTab).join("")}</div><div class="toggles" role="group" aria-label="Preview">${renderWidthButton("desktop", "Desktop", true)}${renderWidthButton("mobile", "Mobile", false)}${darkToggle}</div></div>
 <p class="muted" id="copy-status" role="status"></p>
 ${design.variants.map(renderPanel(design, designName)).join("\n")}
 ${renderThemePanel(design.theme)}
+<footer class="signoff"><span class="mark" aria-hidden="true">${SHAPES_MARK}</span>Drawn by <code>/ui-design</code>. No pixels were harmed.</footer>
 </main>
 <script>${PAGE_SCRIPT}</script>
 </body>

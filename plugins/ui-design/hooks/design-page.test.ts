@@ -321,3 +321,27 @@ test("the variant notes list its restyled colors and fonts", () => {
   expect(pageHtml).toContain("<h3>Restyled colors and fonts</h3>");
   expect(renderDesignPage(REDESIGN)).not.toContain("Restyled colors and fonts");
 });
+
+test("each variant sits in a browser-style frame with its own address", () => {
+  const pageHtml = renderDesignPage(REDESIGN);
+
+  expect(pageHtml).toContain(
+    '<div class="window"><div class="window-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="address">variant-a.preview</span></div><div class="stage"><iframe'
+  );
+  expect(pageHtml).toContain('<span class="address">variant-b.preview</span>');
+});
+
+test("the hero counts the variants and the page signs off in the footer", () => {
+  const pageHtml = renderDesignPage(REDESIGN);
+
+  expect(pageHtml).toContain(
+    '<p class="tagline">2 variants, freshly mocked. Pick a favorite: the others won’t mind.</p>'
+  );
+  expect(pageHtml).toContain(
+    '<footer class="signoff"><span class="mark" aria-hidden="true">'
+  );
+  expect(pageHtml).toContain("No pixels were harmed.</footer>");
+  expect(
+    renderDesignPage({ ...REDESIGN, variants: [FIRST_VARIANT] })
+  ).toContain("1 variant, freshly mocked.");
+});

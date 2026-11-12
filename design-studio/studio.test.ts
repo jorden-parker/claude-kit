@@ -4,17 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderStylesheet } from "./catalog";
 import {
-  readMockupRules,
   runStudio,
   type ChatMessage,
   type StudioEvent,
   type StudioTools,
 } from "./studio";
 
-const SKILL_PATH = join(
-  import.meta.dir,
-  "../plugins/ui-design/skills/ui-design/SKILL.md"
-);
 const SAVED_THEME = {
   tokens: [
     { name: "primary", kind: "color", value: "#2563eb", source: "app.css:2" },
@@ -22,7 +17,7 @@ const SAVED_THEME = {
   ],
 };
 const DIRECTION = {
-  style: { name: "Brutalism" },
+  style: { name: "Brutalism", keywords: "raw, bold" },
   pattern: { name: "Hero-Centric Design" },
   colors: {
     primary: "#9A3412",
@@ -35,10 +30,13 @@ const VARIANT_REPLY = [
   "NAME: Split hero",
   "RATIONALE: Clear.",
   '{"op":"add","path":"/root","value":"page"}',
-  '{"op":"add","path":"/elements/page","value":{"type":"Page","props":{},"children":["title"]}}',
+  '{"op":"add","path":"/elements/page","value":{"type":"Page","props":{},"children":["title","intro","start"]}}',
   '{"op":"add","path":"/elements/title","value":{"type":"Heading","props":{"text":"Cook"}}}',
+  '{"op":"add","path":"/elements/intro","value":{"type":"Text","props":{"text":"Tonight"}}}',
+  '{"op":"add","path":"/elements/start","value":{"type":"Button","props":{"label":"Start"}}}',
 ].join("\n");
-const VARIANT_HTML = '<main class="page"><h2 class="heading heading-2">Cook</h2></main>';
+const VARIANT_HTML =
+  '<main class="page"><div class="page-inner page-wide"><h2 class="heading heading-2">Cook</h2><p class="text text-default text-md">Tonight</p><button type="button" class="button button-secondary">Start</button></div></main>';
 const BROKEN_REPLY = [
   "NAME: Split hero",
   "RATIONALE: Clear.",
@@ -103,12 +101,6 @@ const OPENED_REPLY = {
   isError: false,
 };
 
-test("readMockupRules takes the variant rules out of the ui-design skill", async () => {
-  const rules = readMockupRules(await readFile(SKILL_PATH, "utf8"));
-  expect(rules).toContain("var(--<token name>)");
-  expect(rules).not.toContain("## 5.");
-});
-
 test("runStudio reuses a saved theme, asks the model once per variant and renders them", async () => {
   const projectFolder = await makeProject(SAVED_THEME);
   const { tools, events, conversations, toolCalls } = makeTools(projectFolder, [
@@ -119,8 +111,9 @@ test("runStudio reuses a saved theme, asks the model once per variant and render
     tools
   );
   expect(conversations).toHaveLength(2);
-  expect(conversations[0]![0]!.content).toContain("--font-sans (font)");
-  expect(conversations[1]![1]!.content).toContain("Brutalism");
+  expect(conversations[0]![0]!.content).toContain("The tokens: primary, font-sans.");
+  expect(conversations[1]![1]!.content).toContain("Design direction: Brutalism (raw, bold).");
+  expect(conversations[1]![1]!.content).not.toContain("#9A3412");
   expect(toolCalls).toHaveLength(1);
   expect(toolCalls[0]!.input).toMatchObject({
     mode: "new",
@@ -190,7 +183,7 @@ test("runStudio emits the stylesheet once, after the theme loads and before the 
   expect(stylesheetIndex).toBeLessThan(events.findIndex((event) => event.kind === "call"));
 });
 
-test("runStudio previews the spec as each patch arrives and ignores thinking text", async () => {
+test("runStudio previews the spec after each finished line and once more for the whole reply, ignoring thinking text", async () => {
   const projectFolder = await makeProject(SAVED_THEME);
   const { tools, events } = makeTools(projectFolder, [OPENED_REPLY]);
   const streamingTools: StudioTools = {
@@ -206,12 +199,12 @@ test("runStudio previews the spec as each patch arrives and ignores thinking tex
   };
   await runStudio({ brief: "Recipe onboarding", variantCount: 1, projectFolder }, streamingTools);
   expect(events.filter((event) => event.kind === "preview")).toEqual([
-    { kind: "preview", callId: "variant-a", html: "" },
-    { kind: "preview", callId: "variant-a", html: '<main class="page"></main>' },
+    { kind: "preview", callId: "variant-a", html: '<main class="page"><div class="page-inner page-wide"></div></main>' },
+    { kind: "preview", callId: "variant-a", html: VARIANT_HTML },
   ]);
 });
 
-test("runStudio sends a spec the catalog rejects back to the model, then renders the repaired one", async () => {
+test("runStudio sends a spec that shows next to nothing back to the model, then renders the repaired one", async () => {
   const projectFolder = await makeProject(SAVED_THEME);
   const { tools, conversations, toolCalls } = makeTools(projectFolder, [OPENED_REPLY]);
   const replies = [INVALID_REPLY, VARIANT_REPLY];
@@ -225,14 +218,14 @@ test("runStudio sends a spec the catalog rejects back to the model, then renders
   };
   await runStudio({ brief: "Recipe onboarding", variantCount: 1, projectFolder }, repairingTools);
   expect(conversations).toHaveLength(2);
-  expect(conversations[1]!.at(-1)!.content).toContain("ghost");
+  expect(conversations[1]!.at(-1)!.content).toContain("shows only 1 of its elements");
   expect(toolCalls).toHaveLength(1);
   expect(toolCalls[0]!.input.variants).toEqual([
     expect.objectContaining({ name: "Split hero", html: VARIANT_HTML }),
   ]);
 });
 
-test("runStudio refuses a patch line the stream cannot apply, asks for a repair, and keeps going", async () => {
+test("runStudio asks for a repair when no patch line of the reply can be applied", async () => {
   const projectFolder = await makeProject(SAVED_THEME);
   const { tools, conversations, toolCalls } = makeTools(projectFolder, [OPENED_REPLY]);
   const replies = [BROKEN_REPLY, VARIANT_REPLY];
@@ -246,7 +239,7 @@ test("runStudio refuses a patch line the stream cannot apply, asks for a repair,
   };
   await runStudio({ brief: "Recipe onboarding", variantCount: 1, projectFolder }, repairingTools);
   expect(conversations).toHaveLength(2);
-  expect(conversations[1]!.at(-1)!.content).toContain("could not be applied");
+  expect(conversations[1]!.at(-1)!.content).toContain("has no root element");
   expect(toolCalls).toHaveLength(1);
 });
 

@@ -1,4 +1,3 @@
-import { createSpecStreamCompiler } from "@json-render/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readVariantLetter } from "../plugins/ui-design/hooks/design-page";
@@ -60,11 +59,6 @@ type ThemeToken = { name: string; kind: string; value: string };
 
 type Draft = { label: string; messages: ChatMessage[]; replyText: string };
 
-const SKILL_PATH = join(
-  import.meta.dir,
-  "../plugins/ui-design/skills/ui-design/SKILL.md"
-);
-const RULES_HEADING = "### Rules for every variant";
 const DESIGN_FOLDER = ".claude/ui-design";
 const STARTER_THEME_PATH = `${DESIGN_FOLDER}/starter-theme.css`;
 const VARIANCE_BY_VARIANT = [2, 9, 5, 7];
@@ -74,9 +68,6 @@ const STARTER_EXTRA_TOKENS = [
   { name: "font-body", kind: "font", value: "system-ui, sans-serif" },
   { name: "radius", kind: "radius", value: "8px" },
 ];
-export const readMockupRules = (skillText: string) =>
-  skillText.slice(skillText.indexOf(RULES_HEADING)).split("\n## ")[0]!.trim();
-
 const describeError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
@@ -105,6 +96,11 @@ const listStarterTokens = (direction: Direction) => [
   ...STARTER_EXTRA_TOKENS,
 ];
 
+const describeDirection = (direction: Direction | undefined) =>
+  direction?.style
+    ? `Design direction: ${direction.style.name} (${direction.style.keywords}). Let it shape the layout and the wording, and name the design after it.`
+    : "";
+
 const buildVariantPrompt = (
   { brief, variantCount }: StudioRequest,
   variantIndex: number,
@@ -113,9 +109,7 @@ const buildVariantPrompt = (
   [
     `Design brief: ${brief}`,
     `This is variant ${readVariantLetter(variantIndex)} of ${variantCount}. Variants differ in structure, not just in color.`,
-    direction
-      ? `Follow this design direction from ui-ux-pro-max. Name the variant after it:\n${JSON.stringify(direction)}`
-      : "",
+    describeDirection(direction),
     variantIndex === 0 && variantCount > 1
       ? "Keep the theme's colors and fonts: write no TOKENS line."
       : "",
@@ -159,23 +153,22 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
 
   const askModel = async (callId: string, label: string, messages: ChatMessage[]) => {
     emit({ kind: "call", id: callId, label, state: "running" });
-    const compiler = createSpecStreamCompiler();
-    const emitPreview = (heardText: string) => {
-      let pushed: ReturnType<typeof compiler.push>;
-      try {
-        pushed = compiler.push(heardText);
-      } catch {
-        return;
-      }
-      if (pushed.newPatches.length) {
-        emit({ kind: "preview", callId, html: renderSpecToHtml(pushed.result) });
-      }
+    let heardReply = "";
+    let shownHtml = "";
+    const emitPreview = (replyText: string) => {
+      const html = renderSpecToHtml(readReplySpec(replyText));
+      if (html === shownHtml) return;
+      shownHtml = html;
+      emit({ kind: "preview", callId, html });
     };
     try {
       const { text, ...counts } = await tools.chat(messages, (heardText, isThinking) => {
         emit({ kind: "text", callId, text: heardText, isThinking });
-        if (!isThinking) emitPreview(heardText);
+        if (isThinking) return;
+        heardReply += heardText;
+        if (heardText.includes("\n")) emitPreview(heardReply.slice(0, heardReply.lastIndexOf("\n")));
       });
+      emitPreview(text);
       emit({ kind: "call", id: callId, label, state: "done", ...counts });
       return text;
     } catch (error) {
@@ -239,18 +232,10 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
     };
   };
 
-  const readSpecProblems = (replyText: string) => {
-    try {
-      return findSpecProblems(readReplySpec(replyText));
-    } catch (error) {
-      return [`a JSON Patch line could not be applied: ${describeError(error)}`];
-    }
-  };
-
   const checkDrafts = async (drafts: Draft[], tokens: ThemeToken[]) => {
     const specRefusal = drafts
       .flatMap((draft, draftIndex) =>
-        readSpecProblems(draft.replyText).map(
+        findSpecProblems(readReplySpec(draft.replyText)).map(
           (problem) => `Variant ${readVariantLetter(draftIndex)}: ${problem}`
         )
       )
@@ -299,10 +284,7 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
     const directions = await runStep("directions", "Get design directions", findDirections);
     const tokens = await runStep("theme", "Load the theme", () => loadTheme(directions[0]));
     emit({ kind: "stylesheet", css: renderStylesheet(tokens) });
-    const systemPrompt = buildCatalogPrompt(
-      readMockupRules(await readFile(SKILL_PATH, "utf8")),
-      tokens
-    );
+    const systemPrompt = buildCatalogPrompt(tokens);
     const drafts = await runStep("variants", "Write the variants", async () => {
       const writtenDrafts: Draft[] = [];
       for (let i = 0; i < variantCount; i++) {

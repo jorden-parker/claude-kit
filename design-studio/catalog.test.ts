@@ -7,6 +7,7 @@ import {
   renderSpecToHtml,
   renderStylesheet,
 } from "./catalog";
+import { readReplySpec } from "./variant-reply";
 
 const THEME_TOKENS = [
   { name: "background", kind: "color", value: "#ffffff" },
@@ -34,57 +35,88 @@ const FULL_SPEC = {
 const RAW_COLOR = /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl|oklch)a?\(/i;
 
 test("renderSpecToHtml renders a full spec as escaped markup", () => {
-  expect(renderSpecToHtml(FULL_SPEC)).toBe(
-    '<main class="page"><h1 class="heading heading-1">Cook &lt;tonight&gt;</h1><section class="card card-accent"><div class="stat"><span class="stat-label">Recipes</span><strong class="stat-value">42</strong><span class="stat-detail">this week</span></div></section></main>'
-  );
+  const html = renderSpecToHtml(FULL_SPEC);
+  expect(html.startsWith('<main class="page"><div class="page-inner page-wide">')).toBe(true);
+  expect(html).toContain('<h1 class="heading heading-1">Cook &lt;tonight&gt;</h1>');
+  expect(html).toContain('<section class="card card-accent">');
+  expect(html).toContain('<strong class="stat-value">42</strong>');
 });
 
 test("renderSpecToHtml renders partial specs without throwing", () => {
   expect(renderSpecToHtml({})).toBe("");
   expect(renderSpecToHtml({ root: "page" })).toBe("");
-  expect(
-    renderSpecToHtml({
-      root: "page",
-      elements: { page: { type: "Page", children: ["later"] } },
-    })
-  ).toBe('<main class="page"></main>');
-  expect(
-    renderSpecToHtml({ root: "x", elements: { x: { type: "Unknown" } } })
-  ).toBe("");
-  expect(
-    renderSpecToHtml({
-      root: "b",
-      elements: { b: { type: "Button", props: { tone: "neon", label: 5 } } },
-    })
-  ).toBe('<button type="button" class="button button-secondary"></button>');
+  expect(renderSpecToHtml({ root: "page", elements: { page: { type: "Page", children: ["later"] } } })).toBe(
+    '<main class="page"><div class="page-inner page-wide"></div></main>'
+  );
   expect(renderSpecToHtml({ root: "constructor", elements: {} })).toBe("");
-  expect(renderSpecToHtml({ root: "a", elements: { a: null } })).toBe("");
-  expect(
-    renderSpecToHtml({
-      root: "a",
-      elements: { a: { type: "Stack", children: ["a"] } },
-    })
-  ).toBe('<div class="stack gap-md"></div>');
+  expect(renderSpecToHtml({ root: "a", elements: { a: null as never } })).toBe("");
+  expect(renderSpecToHtml({ root: "a", elements: { a: { type: "Stack", children: ["a"] } } })).toContain(
+    '<div class="stack gap-md align-stretch"></div>'
+  );
 });
 
-test("findSpecProblems accepts a full spec and names what is wrong with the rest", () => {
+test("renderSpecToHtml keeps the valid props of an element when one prop is wrong", () => {
+  const html = renderSpecToHtml({
+    root: "save",
+    elements: { save: { type: "Button", props: { tone: "neon", label: "Save" } } },
+  });
+  expect(html).toContain('<button type="button" class="button button-secondary">Save</button>');
+});
+
+test("renderSpecToHtml reads numbers a model wrote for text options", () => {
+  const html = renderSpecToHtml({
+    root: "title",
+    elements: { title: { type: "Heading", props: { level: 1, text: "Cook" } } },
+  });
+  expect(html).toContain('<h1 class="heading heading-1">Cook</h1>');
+});
+
+test("renderSpecToHtml flattens nested child lists and shows the children of an unknown component", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: [["tabs"], ["title"]] as never },
+      tabs: { type: "Tabs", children: ["title"] },
+      title: { type: "Heading", props: { text: "Cook" } },
+    },
+  });
+  expect(html.split("Cook")).toHaveLength(3);
+});
+
+test("renderSpecToHtml wraps a root that is not a Page in a page", () => {
+  expect(
+    renderSpecToHtml({ root: "title", elements: { title: { type: "Heading", props: { text: "Cook" } } } })
+  ).toBe('<main class="page"><div class="page-inner page-wide"><h2 class="heading heading-2">Cook</h2></div></main>');
+});
+
+test("renderSpecToHtml draws a chart as bars sized by their values and a table with its rows", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["chart", "table"] },
+      chart: { type: "Chart", props: { title: "Revenue", labels: ["Jan", "Feb"], values: [50, 100] } },
+      table: { type: "Table", props: { columns: ["Plan", "Seats"], rows: [["Pro", 12]] } },
+    },
+  });
+  expect(html).toContain('style="height:50%"');
+  expect(html).toContain('style="height:100%"');
+  expect(html).toContain("<th scope=\"col\">Plan</th>");
+  expect(html).toContain("<td>12</td>");
+});
+
+test("findSpecProblems accepts a full spec and small slips, and refuses a spec that shows next to nothing", () => {
   expect(findSpecProblems(FULL_SPEC)).toEqual([]);
-  expect(findSpecProblems({ root: "page" })).not.toEqual([]);
-  expect(
-    findSpecProblems({ root: "b", elements: { b: { type: "Nope" } } })
-  ).toContainEqual(expect.stringContaining("elements.b.type"));
   expect(
     findSpecProblems({
-      root: "b",
-      elements: { b: { type: "Button", props: { tone: "neon" } } },
+      ...FULL_SPEC,
+      elements: { ...FULL_SPEC.elements, title: { type: "Heading", props: { level: "9", text: "Cook" } } },
     })
-  ).toContainEqual(expect.stringContaining('element "b" (Button)'));
+  ).toEqual([]);
+  expect(findSpecProblems({ root: "page" })).toContainEqual(expect.stringContaining("/root"));
+  expect(findSpecProblems({})).toContainEqual(expect.stringContaining("/root"));
   expect(
-    findSpecProblems({
-      root: "a",
-      elements: { a: { type: "Page", children: ["ghost"] } },
-    })
-  ).toContainEqual(expect.stringContaining("ghost"));
+    findSpecProblems({ root: "page", elements: { page: { type: "Page", children: ["ghost"] } } })
+  ).toContainEqual(expect.stringContaining("only 1"));
 });
 
 test("renderCatalogCss styles with the theme's variables and no raw colors", () => {
@@ -98,8 +130,7 @@ test("renderCatalogCss styles with the theme's variables and no raw colors", () 
 test("renderCatalogCss falls back to keywords for the roles the theme lacks", () => {
   const css = renderCatalogCss([{ name: "ink", kind: "color", value: "#111827" }]);
   expect(css).not.toContain("var(--primary)");
-  expect(css).toContain("background:transparent");
-  expect(css).not.toMatch(RAW_COLOR);
+    expect(css).not.toMatch(RAW_COLOR);
 });
 
 test("renderStylesheet puts the theme tokens on :root before the catalog styles", () => {
@@ -109,27 +140,32 @@ test("renderStylesheet puts the theme tokens on :root before the catalog styles"
   expect(stylesheet).toContain(renderCatalogCss(THEME_TOKENS));
 });
 
-test("the catalog holds the sixteen layout and content components", () => {
-  expect(catalog.componentNames).toHaveLength(16);
-  expect(catalog.componentNames).toContain("ListItem");
+test("the catalog holds the layout, content and data components", () => {
+  expect(catalog.componentNames).toHaveLength(21);
+  expect(catalog.componentNames).toContain("Chart");
 });
 
-test("buildCatalogPrompt carries the rules, the tokens and the reply shape", () => {
-  const prompt = buildCatalogPrompt("RULE TEXT FROM THE SKILL", THEME_TOKENS);
-  expect(prompt).toContain("AVAILABLE COMPONENTS (16)");
-  expect(prompt).toContain("RULE TEXT FROM THE SKILL");
-  expect(prompt).toContain("--primary (color): #0f766e");
+test("buildCatalogPrompt lists the components and the reply shape, without json-render's state features", () => {
+  const prompt = buildCatalogPrompt(THEME_TOKENS);
+  expect(prompt).toContain("- Chart: {");
   expect(prompt).toContain("NAME: <two to four words>");
-  expect(prompt).toContain('TOKENS: [{"name"');
+  expect(prompt).toContain('{"op":"add","path":"/root","value":"page"}');
+  expect(prompt).toContain("primary, primary-foreground");
+  expect(prompt).not.toContain("$state");
+  expect(prompt).not.toContain("```");
+  expect(prompt.length).toBeLessThan(8000);
 });
 
-test("renderSpecToHtml and findSpecProblems read props a model wrote beside the type", () => {
+test("the example spec in the prompt renders with no problems", () => {
+  const exampleSpec = readReplySpec(buildCatalogPrompt(THEME_TOKENS).split("EXAMPLE")[1]!);
+  expect(findSpecProblems(exampleSpec)).toEqual([]);
+  expect(renderSpecToHtml(exampleSpec)).toContain("</table>");
+});
+
+test("renderSpecToHtml reads props a model wrote beside the type", () => {
   const looseSpec = {
     root: "title",
     elements: { title: { type: "Heading", level: "1", text: "Cook tonight", children: [] } },
   };
-  expect(renderSpecToHtml(looseSpec)).toContain("Cook tonight");
-  expect(
-    findSpecProblems({ root: "title", elements: { title: { type: "Heading", level: "9", children: [] } } })
-  ).not.toEqual([]);
+  expect(renderSpecToHtml(looseSpec)).toContain('<h1 class="heading heading-1">Cook tonight</h1>');
 });

@@ -73,11 +73,18 @@ converts skills, agents, hooks and MCP servers on install. Checked against
   Hooks that read Claude Code's transcript format may never block in Qwen Code;
   the script warns for each.
 - **Installs part of** `brainstorm`, `design` and `draft-pr`: skills and agents
-  work, but their slash commands and tools come from `register.ts`, Claude Code's
-  plugin-module API, which Qwen Code cannot load. The script drops their
-  `hooks/hooks.json` so Qwen Code does not warn about an invalid `modules` hook event.
-- **Skips** `handoff`, `prompt-optimizer` and `session-notes`, which are built
-  only on `register.ts`, and removes any earlier sync of them.
+  work, but their tools come from `register.ts`, Claude Code's plugin-module API,
+  which Qwen Code cannot load. The script drops their `hooks/hooks.json` so Qwen
+  Code does not warn about an invalid `modules` hook event.
+- **Ships slash commands as prompts** for `brainstorm`, `handoff` and
+  `prompt-optimizer`: each plugin's `qwen-commands/*.md` is installed as the
+  extension's `commands/`, so `/brainstorm`, `/handoff` and `/optimize` exist in
+  Qwen Code. They are plain prompts: no browser page, no stored handoffs, no
+  flags, no composer fill, and `/brainstorm build` is not available. To give
+  another `register.ts` command a Qwen version, add `qwen-commands/<name>.md`
+  with `{{args}}` where the arguments go.
+- **Skips** `session-notes`, which is built only on `register.ts`, and removes
+  any earlier sync of it.
 - **Copies** output styles (`adhd-style`) to `~/.qwen/output-styles/`, since Qwen
   Code drops them on install. Pick one with `/output-style`.
 

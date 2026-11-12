@@ -23,8 +23,12 @@ uses_module_api() {
   [ -f "$1/hooks/hooks.json" ] && jq -e 'has("modules")' "$1/hooks/hooks.json" >/dev/null
 }
 
+has_qwen_commands() {
+  [ -d "$1/qwen-commands" ]
+}
+
 has_qwen_loadable_parts() {
-  [ -d "$1/skills" ] || [ -d "$1/agents" ] || [ -d "$1/commands" ] || [ -f "$1/.mcp.json" ] ||
+  has_qwen_commands "$1" || [ -d "$1/skills" ] || [ -d "$1/agents" ] || [ -d "$1/commands" ] || [ -f "$1/.mcp.json" ] ||
     { [ -f "$1/hooks/hooks.json" ] && ! uses_module_api "$1"; }
 }
 
@@ -39,6 +43,7 @@ stage_plugin() {
   rsync -a --delete --exclude node_modules --exclude tests --exclude .git --exclude output-styles \
     "$plugin_folder/" "$staged_folder/"
   if uses_module_api "$plugin_folder"; then rm "$staged_folder/hooks/hooks.json"; fi
+  if has_qwen_commands "$plugin_folder"; then mv "$staged_folder/qwen-commands" "$staged_folder/commands"; fi
 }
 
 install_plugin() {
@@ -72,8 +77,10 @@ sync_plugin() {
 
   install_plugin "$plugin_folder" "$plugin_name" || return 0
 
-  if uses_module_api "$plugin_folder"; then
-    echo "$plugin_name: partial. Skills and agents installed; its slash commands and tools come from register.ts and are missing in Qwen Code"
+  if has_qwen_commands "$plugin_folder"; then
+    echo "$plugin_name: partial. Its slash commands run as prompts in Qwen Code; the tools, flags and pages from register.ts are missing"
+  elif uses_module_api "$plugin_folder"; then
+    echo "$plugin_name: partial. Skills and agents installed; its tools come from register.ts and are missing in Qwen Code"
   elif grep -rqs transcript_path "$plugin_folder/hooks"; then
     echo "$plugin_name: installed. Warning: some hooks read Claude Code's transcript format and may never block in Qwen Code"
   else

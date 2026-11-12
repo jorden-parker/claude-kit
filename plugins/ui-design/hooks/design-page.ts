@@ -127,7 +127,7 @@ const renderPanel =
 
 const STAGE_RESIZER = `<div class="resizer" data-resizer role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Preview height" aria-valuemin="${STAGE_HEIGHT.min}" aria-valuemax="${STAGE_HEIGHT.max}" aria-valuenow="${STAGE_HEIGHT.initial}" title="Drag to resize. Double-click to reset."><span class="grip"></span></div>`;
 
-const SHAPES_MARK = `<svg viewBox="0 0 54 16" width="54" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><rect x="20.5" y="1.5" width="13" height="13" rx="2"/><path d="M46 1.75 52.5 14.25h-13z" stroke-linejoin="round"/></svg>`;
+const SHAPES_MARK = `<svg viewBox="0 0 54 16" width="54" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><rect x="20.5" y="1.5" width="13" height="13" rx="2"/><path d="M46 1.5Q47 7 52.5 8Q47 9 46 14.5Q45 9 39.5 8Q45 7 46 1.5Z" stroke-linejoin="round"/></svg>`;
 
 const renderTagline = (variantCount: number) =>
   `<p class="tagline">${variantCount} ${variantCount === 1 ? "variant" : "variants"}, freshly mocked. Pick a favorite: the others won’t mind.</p>`;

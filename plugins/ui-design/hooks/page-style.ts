@@ -12,14 +12,25 @@ main{max-width:1280px;margin:0 auto;padding:0 24px 64px}
 .hero{position:relative;padding:72px 0 36px;isolation:isolate}
 .hero::before{content:"";position:absolute;inset:0 -24px;z-index:-1;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px;background-position:-1px -1px;-webkit-mask-image:radial-gradient(ellipse 70% 90% at 20% 0%,#000 30%,transparent 75%);mask-image:radial-gradient(ellipse 70% 90% at 20% 0%,#000 30%,transparent 75%)}
 .mark{display:inline-flex;color:var(--text)}
-.mark svg>*{transform-box:fill-box;transform-origin:center;transition:transform .5s var(--ease),stroke .3s}
+.mark svg{overflow:visible}
+.mark svg>*{transform-box:fill-box;transform-origin:50% 88%;transition:transform .55s var(--ease)}
+.mark rect{fill:var(--bg);transition:stroke .3s}
+.mark circle{fill:currentColor;stroke:none;transition:fill .3s}
+.mark svg>:nth-child(1){transform:rotate(-30deg)}
+.mark svg>:nth-child(2){transform:rotate(30deg)}
 .hero .mark{margin-bottom:20px}
 .hero .mark svg>*{animation:bob 3.6s var(--ease) infinite}
-.hero .mark svg>:nth-child(2){animation-delay:.25s}
-.hero .mark svg>:nth-child(3){animation-delay:.5s}
-.mark:hover svg>:nth-child(1){stroke:var(--blue);transform:scale(1.15)}
-.mark:hover svg>:nth-child(2){stroke:var(--pink);transform:rotate(45deg)}
-.mark:hover svg>:nth-child(3){stroke:var(--amber-bright);transform:rotate(180deg)}
+.hero .mark svg>:nth-child(3){animation-delay:.25s}
+.hero .mark svg>:nth-child(2){animation-delay:.5s}
+.mark:hover svg>:nth-child(1){transform:rotate(-42deg)}
+.mark:hover svg>:nth-child(2){transform:rotate(42deg)}
+.mark:hover svg>:nth-child(3){transform:rotate(-3deg)}
+.mark:hover svg>:nth-child(1) rect{stroke:var(--blue)}
+.mark:hover svg>:nth-child(1) circle{fill:var(--blue)}
+.mark:hover svg>:nth-child(2) rect{stroke:var(--amber-bright)}
+.mark:hover svg>:nth-child(2) circle{fill:var(--amber-bright)}
+.mark:hover svg>:nth-child(3) rect{stroke:var(--pink)}
+.mark:hover svg>:nth-child(3) circle{fill:var(--pink)}
 @keyframes bob{0%,70%,100%{translate:0 0}80%{translate:0 -3px}90%{translate:0 1px}}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;margin:0 0 14px;padding:2px 10px 2px 8px;border:1px solid var(--line);border-radius:99px;background:var(--panel);font-size:12px;font-weight:500;letter-spacing:.02em;color:var(--muted)}
 .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 20%,transparent)}
@@ -104,7 +115,8 @@ tr:hover .swatch,p:hover>.swatch{transform:scale(1.35)}
 .pill.warning{border-color:var(--amber);color:var(--amber)}
 .pill{margin-left:8px;padding:1px 8px;border:1px solid var(--line);border-radius:99px;background:var(--surface);font-size:11px;color:var(--muted)}
 .signoff{text-align:center;margin-top:72px;padding-top:24px;border-top:1px solid var(--line);font-size:13px;color:var(--subtle)}
-.signoff .mark{margin-right:10px;vertical-align:-3px;color:var(--subtle)}
+.signoff .mark{margin-right:8px;vertical-align:-6px;color:var(--subtle)}
+.signoff .mark svg{width:32px;height:22px}
 @media (max-width:640px){.hero{padding-top:48px}.toolbar{position:static}.address{display:none}body[data-frame-width=mobile] iframe{width:100%}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 `;

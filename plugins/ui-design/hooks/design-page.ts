@@ -127,7 +127,7 @@ const renderPanel =
 
 const STAGE_RESIZER = `<div class="resizer" data-resizer role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Preview height" aria-valuemin="${STAGE_HEIGHT.min}" aria-valuemax="${STAGE_HEIGHT.max}" aria-valuenow="${STAGE_HEIGHT.initial}" title="Drag to resize. Double-click to reset."><span class="grip"></span></div>`;
 
-const SHAPES_MARK = `<svg viewBox="0 0 54 16" width="54" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><rect x="20.5" y="1.5" width="13" height="13" rx="2"/><path d="M46 1.5Q47 7 52.5 8Q47 9 46 14.5Q45 9 39.5 8Q45 7 46 1.5Z" stroke-linejoin="round"/></svg>`;
+const SWATCH_FAN_MARK = `<svg viewBox="0 0 40 28" width="46" height="32" fill="none" stroke="currentColor" stroke-width="1.5"><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g><g><rect x="17" y="3" width="6" height="21" rx="1.75"/><circle cx="20" cy="7.5" r="1.25"/></g></svg>`;
 
 const renderTagline = (variantCount: number) =>
   `<p class="tagline">${variantCount} ${variantCount === 1 ? "variant" : "variants"}, freshly mocked. Pick a favorite: the others won’t mind.</p>`;
@@ -161,7 +161,7 @@ export const renderDesignPage = (design: Design, designName = "") => {
 <body data-frame-width="desktop">
 <main>
 <header class="hero">
-<span class="mark" aria-hidden="true">${SHAPES_MARK}</span>
+<span class="mark" aria-hidden="true">${SWATCH_FAN_MARK}</span>
 <p class="eyebrow">${labels.eyebrow}</p>
 <h1>${escapeHtml(design.project)}</h1>
 <p class="muted">${labels.subject}: ${escapeHtml(design.subject)}</p>
@@ -171,7 +171,7 @@ ${renderTagline(design.variants.length)}
 <p class="muted" id="copy-status" role="status"></p>
 ${design.variants.map(renderPanel(design, designName)).join("\n")}
 ${renderThemePanel(design.theme)}
-<footer class="signoff"><span class="mark" aria-hidden="true">${SHAPES_MARK}</span>Drawn by <code>/ui-design</code>. No pixels were harmed.</footer>
+<footer class="signoff"><span class="mark" aria-hidden="true">${SWATCH_FAN_MARK}</span>Drawn by <code>/ui-design</code>. No pixels were harmed.</footer>
 </main>
 <script>${PAGE_SCRIPT}</script>
 </body>

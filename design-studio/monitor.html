@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Design Studio</title>
+    <style>
+      :root {
+        --color-background: #0f172a;
+        --color-card: #1b2336;
+        --color-muted: #272f42;
+        --color-hairline: #334155;
+        --color-border: #475569;
+        --color-foreground: #f8fafc;
+        --color-muted-foreground: #94a3b8;
+        --color-accent: #22c55e;
+        --color-on-accent: #0f172a;
+        --color-destructive: #f87171;
+        --color-ring: #ffffff;
+        --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-6: 24px;
+        --radius: 6px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        background: var(--color-background);
+        color: var(--color-foreground);
+        font: 14px/1.5 var(--font-sans);
+      }
+      h1,
+      h2,
+      p,
+      ol {
+        margin: 0;
+      }
+      :focus-visible {
+        outline: 2px solid var(--color-ring);
+        outline-offset: 2px;
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--color-hairline);
+      }
+      h1 {
+        font: 600 14px var(--font-mono);
+        letter-spacing: 0.02em;
+      }
+      #brief {
+        flex: 1 1 240px;
+        min-width: 0;
+        color: var(--color-muted-foreground);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chip {
+        padding: 2px var(--space-2);
+        border: 1px solid var(--color-hairline);
+        border-radius: 999px;
+        font: 12px var(--font-mono);
+        color: var(--color-muted-foreground);
+        white-space: nowrap;
+      }
+      #status {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--color-foreground);
+      }
+      #status[data-state="done"] {
+        border-color: var(--color-accent);
+        color: var(--color-accent);
+      }
+      #status[data-state="failed"] {
+        border-color: var(--color-destructive);
+        color: var(--color-destructive);
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(240px, 320px) minmax(0, 1fr) minmax(0, 1fr);
+        min-height: 0;
+      }
+      section {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        min-width: 0;
+      }
+      #steps-panel {
+        border-right: 1px solid var(--color-hairline);
+        overflow-y: auto;
+      }
+      h2 {
+        padding: var(--space-3) var(--space-4) var(--space-2);
+        font: 600 11px var(--font-mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--color-muted-foreground);
+      }
+      #steps {
+        list-style: none;
+        padding: 0 var(--space-4) var(--space-4);
+      }
+      #steps li {
+        display: grid;
+        grid-template-columns: 20px 1fr auto;
+        gap: 0 var(--space-2);
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--color-hairline);
+      }
+      #steps .detail {
+        grid-column: 2 / -1;
+        color: var(--color-muted-foreground);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      #steps li[data-state="failed"] .detail {
+        color: var(--color-destructive);
+      }
+      .icon {
+        width: 16px;
+        height: 16px;
+        margin-top: 3px;
+        flex: none;
+      }
+      [data-state="done"] > .icon {
+        color: var(--color-accent);
+      }
+      [data-state="failed"] > .icon {
+        color: var(--color-destructive);
+      }
+      [data-state="running"] > .icon {
+        animation: spin 900ms linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .time {
+        color: var(--color-muted-foreground);
+        font-size: 12px;
+      }
+      #result {
+        margin: var(--space-3) var(--space-4) 0;
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--color-accent);
+        border-radius: var(--radius);
+        background: var(--color-card);
+        overflow-wrap: anywhere;
+      }
+      #result[data-state="failed"] {
+        border-color: var(--color-destructive);
+        white-space: pre-wrap;
+      }
+      #result[hidden] {
+        display: none;
+      }
+      .table-scroll {
+        overflow-x: auto;
+        margin: 0 var(--space-4);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius);
+        flex: none;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        padding: var(--space-2) var(--space-3);
+        text-align: right;
+        white-space: nowrap;
+        border-bottom: 1px solid var(--color-hairline);
+      }
+      th {
+        font: 500 11px var(--font-mono);
+        color: var(--color-muted-foreground);
+        background: var(--color-card);
+      }
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      tbody tr[aria-selected="true"] {
+        background: var(--color-muted);
+      }
+      .call-button {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 28px;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .call-button:hover .label {
+        text-decoration: underline;
+      }
+      .call-button .icon {
+        margin-top: 0;
+      }
+      #empty-calls {
+        padding: var(--space-3);
+        color: var(--color-muted-foreground);
+        text-align: left;
+      }
+      .stream-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding-right: var(--space-4);
+      }
+      #follow {
+        min-height: 28px;
+        padding: 0 var(--space-3);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--color-foreground);
+        font: 12px var(--font-mono);
+        cursor: pointer;
+        transition: background-color 150ms ease-out;
+      }
+      #follow:hover {
+        background: var(--color-muted);
+      }
+      #follow[aria-pressed="true"] {
+        border-color: var(--color-accent);
+        color: var(--color-accent);
+      }
+      #stream {
+        flex: 1;
+        min-height: 160px;
+        margin: 0 var(--space-4) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius);
+        background: #0b1120;
+        font: 13px/1.6 var(--font-mono);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        overflow-y: auto;
+      }
+      #stream .thinking {
+        color: var(--color-muted-foreground);
+        font-style: italic;
+      }
+      #stream:empty::before {
+        content: "The model's output appears here as it is written.";
+        color: var(--color-muted-foreground);
+      }
+      #preview-panel {
+        border-left: 1px solid var(--color-hairline);
+      }
+      #preview-empty {
+        flex: 1;
+        margin: 0 var(--space-4) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        border: 1px dashed var(--color-hairline);
+        border-radius: var(--radius);
+        color: var(--color-muted-foreground);
+      }
+      #preview {
+        flex: 1;
+        width: calc(100% - 2 * var(--space-4));
+        min-height: 320px;
+        margin: 0 var(--space-4) var(--space-4);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius);
+        background: #ffffff;
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      @media (max-width: 1099px) {
+        main {
+          grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+        }
+        #preview-panel {
+          grid-column: 1 / -1;
+          border-left: 0;
+          border-top: 1px solid var(--color-hairline);
+        }
+      }
+      @media (max-width: 767px) {
+        body {
+          height: auto;
+        }
+        main {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        #steps-panel {
+          border-right: 0;
+          border-bottom: 1px solid var(--color-hairline);
+          overflow: visible;
+        }
+        #preview {
+          min-height: 60vh;
+        }
+        #stream {
+          min-height: 320px;
+          max-height: 70vh;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        [data-state="running"] > .icon {
+          animation: none;
+        }
+        #follow {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Design Studio</h1>
+      <p id="brief">Waiting for the run to start…</p>
+      <span class="chip" id="model" hidden></span>
+      <span class="chip mono" id="elapsed">0:00</span>
+      <span class="chip" id="status" data-state="running" role="status" aria-live="polite">Running</span>
+    </header>
+    <main>
+      <section id="steps-panel" aria-labelledby="steps-title">
+        <h2 id="steps-title">Steps</h2>
+        <ol id="steps"></ol>
+      </section>
+      <section aria-labelledby="calls-title">
+        <p id="result" hidden></p>
+        <h2 id="calls-title">Model calls</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Call</th>
+                <th scope="col">State</th>
+                <th scope="col">Prompt tokens</th>
+                <th scope="col">Output tokens</th>
+                <th scope="col">Tokens/s</th>
+                <th scope="col">First token</th>
+                <th scope="col">Time</th>
+              </tr>
+            </thead>
+            <tbody id="calls">
+              <tr>
+                <td id="empty-calls" colspan="7">No model call yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="stream-head">
+          <h2 id="stream-title">Live output</h2>
+          <button type="button" id="follow" aria-pressed="true">Follow latest</button>
+        </div>
+        <pre id="stream" tabindex="0" aria-labelledby="stream-title"></pre>
+      </section>
+      <section id="preview-panel" aria-labelledby="preview-title">
+        <h2 id="preview-title">Live preview</h2>
+        <p id="preview-empty">No preview yet for this call.</p>
+        <iframe id="preview" title="Live preview of the mockup" sandbox="allow-same-origin" hidden
+          srcdoc="<!doctype html><html><head><style>body { margin: 0; background: #ffffff; color: #0f172a; font: 16px/1.5 system-ui, sans-serif; } @keyframes mockup-fade { from { opacity: 0; } to { opacity: 1; } } .mockup-fresh { animation: mockup-fade 400ms ease-out; } @media (prefers-reduced-motion: reduce) { .mockup-fresh { animation: none; } }</style><style id='mockup-style'></style></head><body></body></html>"></iframe>
+      </section>
+    </main>
+    <script>
+      const ICONS = {
+        running: '<circle cx="8" cy="8" r="6" opacity="0.3"/><path d="M8 2a6 6 0 0 1 6 6"/>',
+        done: '<path d="M3 8.5l3.2 3.2L13 5"/>',
+        failed: '<path d="M4 4l8 8M12 4l-8 8"/>',
+      };
+      const STATE_WORDS = { running: "Running", done: "Done", failed: "Failed" };
+      const findElement = (id) => document.getElementById(id);
+      const stepRows = new Map();
+      const calls = new Map();
+      let startedAt = 0;
+      let endedAt = 0;
+      let selectedCallId = "";
+      let isFollowing = true;
+      const previewHtmlByCall = new Map();
+      let mockupCss = "";
+      let previewCallId = "";
+      let previewElementCount = 0;
+
+      const drawIcon = (state) =>
+        `<svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[state]}</svg>`;
+
+      const formatClock = (milliseconds) => {
+        const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+        return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+      };
+
+      const formatSeconds = (seconds) => `${seconds.toFixed(1)}s`;
+
+      const showStep = (event) => {
+        let row = stepRows.get(event.id);
+        if (!row) {
+          row = document.createElement("li");
+          row.startedAt = event.at;
+          stepRows.set(event.id, row);
+          findElement("steps").append(row);
+        }
+        if (event.state !== "running") row.endedAt = event.at;
+        row.dataset.state = event.state;
+        row.innerHTML = `${drawIcon(event.state)}<span class="title"></span><span class="time mono"></span><span class="detail"></span><span class="visually-hidden"></span>`;
+        row.querySelector(".title").textContent = event.title;
+        row.querySelector(".detail").textContent = event.detail ?? "";
+        row.querySelector(".visually-hidden").textContent = STATE_WORDS[event.state];
+        showStepTime(row);
+      };
+
+      const showStepTime = (row) => {
+        row.querySelector(".time").textContent = formatClock(
+          (row.endedAt ?? Date.now()) - row.startedAt
+        );
+      };
+
+      const showCallRow = (call) => {
+        const isRunning = call.state === "running";
+        const cells = [
+          STATE_WORDS[call.state],
+          isRunning ? "…" : call.promptTokens ?? "–",
+          isRunning ? `~${call.chunkCount}` : call.outputTokens ?? "–",
+          isRunning ? "…" : call.tokensPerSecond ?? "–",
+          call.firstTokenSeconds === undefined ? "…" : formatSeconds(call.firstTokenSeconds),
+          isRunning ? formatClock(Date.now() - call.startedAt) : formatSeconds(call.seconds ?? 0),
+        ];
+        call.row.setAttribute("aria-selected", String(call.id === selectedCallId));
+        call.row.dataset.state = call.state;
+        call.row.innerHTML = `<td><button type="button" class="call-button" data-state="${call.state}">${drawIcon(call.state)}<span class="label"></span></button></td>${cells.map(() => '<td class="mono"></td>').join("")}`;
+        call.row.querySelector(".label").textContent = call.label;
+        call.row.querySelectorAll("td.mono").forEach((cell, cellIndex) => {
+          cell.textContent = cells[cellIndex];
+        });
+        call.row.querySelector("button").addEventListener("click", () => {
+          isFollowing = false;
+          selectCall(call.id);
+        });
+      };
+
+      const appendSegment = (segment) => {
+        const stream = findElement("stream");
+        const isAtBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 48;
+        const lastSpan = stream.lastElementChild;
+        if (lastSpan && lastSpan.classList.contains("thinking") === segment.isThinking) {
+          lastSpan.append(segment.text);
+        } else {
+          const span = document.createElement("span");
+          span.classList.toggle("thinking", segment.isThinking);
+          span.textContent = segment.text;
+          stream.append(span);
+        }
+        if (isAtBottom) stream.scrollTop = stream.scrollHeight;
+      };
+
+      const selectCall = (callId) => {
+        selectedCallId = callId;
+        findElement("follow").setAttribute("aria-pressed", String(isFollowing));
+        findElement("stream-title").textContent = `Live output: ${calls.get(callId).label}`;
+        findElement("stream").replaceChildren();
+        calls.get(callId).segments.forEach(appendSegment);
+        findElement("stream").scrollTop = findElement("stream").scrollHeight;
+        calls.forEach(showCallRow);
+        renderPreview();
+      };
+
+      const renderPreview = () => {
+        const frame = findElement("preview");
+        const frameDocument = frame.contentDocument;
+        const frameStyle = frameDocument?.getElementById("mockup-style");
+        if (!frameStyle) return;
+        if (frameStyle.textContent !== mockupCss) frameStyle.textContent = mockupCss;
+        const html = previewHtmlByCall.get(selectedCallId);
+        findElement("preview-empty").hidden = html !== undefined;
+        frame.hidden = html === undefined;
+        const isSameCall = previewCallId === selectedCallId;
+        frameDocument.body.innerHTML = html ?? "";
+        const elements = frameDocument.body.getElementsByTagName("*");
+        const firstNewIndex = isSameCall ? previewElementCount : elements.length;
+        for (let index = firstNewIndex; index < elements.length; index += 1) {
+          elements[index].classList.add("mockup-fresh");
+        }
+        previewCallId = selectedCallId;
+        previewElementCount = elements.length;
+      };
+
+      const showCall = (event) => {
+        let call = calls.get(event.id);
+        if (!call) {
+          findElement("empty-calls")?.parentElement.remove();
+          call = { row: document.createElement("tr"), segments: [], chunkCount: 0, startedAt: event.at };
+          calls.set(event.id, call);
+          findElement("calls").append(call.row);
+        }
+        Object.assign(call, event);
+        if (isFollowing && selectedCallId !== event.id) selectCall(event.id);
+        else showCallRow(call);
+      };
+
+      const showText = (event) => {
+        const call = calls.get(event.callId);
+        if (!call) return;
+        call.chunkCount += 1;
+        const lastSegment = call.segments.at(-1);
+        if (lastSegment && lastSegment.isThinking === event.isThinking) lastSegment.text += event.text;
+        else call.segments.push({ text: event.text, isThinking: event.isThinking });
+        if (event.callId === selectedCallId) appendSegment(event);
+      };
+
+      const showEnd = (state, text, at) => {
+        endedAt = at;
+        const status = findElement("status");
+        status.dataset.state = state;
+        status.textContent = STATE_WORDS[state];
+        const result = findElement("result");
+        result.hidden = false;
+        result.dataset.state = state;
+        result.textContent = text;
+        document.title = `${STATE_WORDS[state]} · Design Studio`;
+        eventSource.close();
+      };
+
+      const SHOW_BY_KIND = {
+        run: (event) => {
+          findElement("brief").textContent = event.brief;
+          findElement("brief").title = event.brief;
+          findElement("model").textContent = event.model;
+          findElement("model").hidden = false;
+        },
+        step: showStep,
+        call: showCall,
+        text: showText,
+        done: (event) => showEnd("done", event.resultLine, event.at),
+        failed: (event) => showEnd("failed", event.message, event.at),
+        stylesheet: (event) => {
+          mockupCss = event.css;
+          renderPreview();
+        },
+        preview: (event) => {
+          previewHtmlByCall.set(event.callId, event.html);
+          if (event.callId === selectedCallId) renderPreview();
+        },
+      };
+
+      const eventSource = new EventSource("/events");
+      eventSource.onmessage = (message) => {
+        const event = JSON.parse(message.data);
+        startedAt ||= event.at;
+        SHOW_BY_KIND[event.kind]?.(event);
+      };
+      eventSource.onerror = () => {
+        if (endedAt) return;
+        eventSource.close();
+        showEnd("failed", "Lost the connection to the studio. It may have been stopped.", Date.now());
+      };
+
+      findElement("preview").addEventListener("load", renderPreview);
+
+      findElement("follow").addEventListener("click", () => {
+        isFollowing = true;
+        const latestCallId = [...calls.keys()].at(-1);
+        if (latestCallId) selectCall(latestCallId);
+        findElement("follow").setAttribute("aria-pressed", "true");
+      });
+
+      setInterval(() => {
+        if (startedAt) findElement("elapsed").textContent = formatClock((endedAt || Date.now()) - startedAt);
+        stepRows.forEach((row) => row.endedAt ?? showStepTime(row));
+        calls.forEach((call) => {
+          if (call.state !== "running") return;
+          const cells = call.row.querySelectorAll("td.mono");
+          cells[2].textContent = `~${call.chunkCount}`;
+          cells[5].textContent = formatClock(Date.now() - call.startedAt);
+        });
+      }, 500);
+    </script>
+  </body>
+</html>

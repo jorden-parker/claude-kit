@@ -3,8 +3,10 @@
   // Fallow cannot see that hooks.json loads register.ts, so the hooks files are declared as entry points.
   // draft-pr starts its server script with node, which fallow cannot see either.
   // turn-edits-lib.sh is copied into plugins/code-style/hooks and plugins/tdd/hooks on purpose: each plugin is self-contained.
-  // plugin-host/build.ts is run by sync-qwen and sync-pi, and it writes the entry file that imports targets.ts.
-  "entry": ["plugins/*/hooks/register.ts", "plugins/*/hooks/register.tsx", "plugins/*/hooks/run.ts", "plugins/*/hooks/*.test.ts", "plugins/*/server/*.mjs", "plugin-host/build.ts", "plugin-host/targets.ts", "plugin-host/**/*.test.ts"],
+  // plugin-host/build.ts is run by sync-qwen, sync-pi and sync-opencode, and it writes the entry file that imports targets.ts.
+  // plugin-host/opencode-install.ts is run by sync-opencode.
+  // design-studio/cli.ts is run directly with bun.
+  "entry": ["design-studio/cli.ts", "design-studio/*.test.ts", "plugins/*/hooks/register.ts", "plugins/*/hooks/register.tsx", "plugins/*/hooks/run.ts", "plugins/*/hooks/*.test.ts", "plugins/*/server/*.mjs", "plugin-host/build.ts", "plugin-host/opencode-install.ts", "plugin-host/targets.ts", "plugin-host/**/*.test.ts"],
   "duplicates": {
     // describeRecentMessages is copied between prompt-optimizer and handoff on purpose: plugins must be self-contained.
     // readPlanFiles/readTemplateFiles are copied between brainstorm and draft-pr for the same reason.

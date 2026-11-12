@@ -20,6 +20,7 @@ export type DesignVariant = {
   kept: string[];
   changed: string[];
   newTokens: ThemeToken[];
+  restyledTokens: ThemeToken[];
 };
 
 export type Design = {
@@ -69,7 +70,7 @@ const readProposedTokens = (variant: DesignVariant) =>
   variant.newTokens.slice(0, MAX_NEW_TOKENS);
 
 export const renderVariantDocument = (theme: Theme, variant: DesignVariant) =>
-  `<!doctype html><html data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}"><style>${renderThemeCss([...theme.tokens, ...readProposedTokens(variant)])}</style><style>${variant.css}</style></head><body>${variant.html}</body></html>`;
+  `<!doctype html><html data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${FRAME_POLICY}"><style>${renderThemeCss([...theme.tokens, ...readProposedTokens(variant), ...variant.restyledTokens])}</style><style>${variant.css}</style></head><body>${variant.html}</body></html>`;
 
 const renderList = (heading: string, entries: string[]) =>
   entries.length
@@ -120,7 +121,7 @@ const renderPanel =
 <div class="variant-head"><h2>${letter} · ${name}</h2><div class="apply"><code id="command-${slug}">/ui-design apply ${designName ? `${escapeHtml(designName)} ` : ""}${letter}</code><button type="button" class="button primary" data-copies="command-${slug}">Use this</button></div></div>
 <p class="muted">${escapeHtml(variant.rationale)}</p>
 <div class="stage"><iframe sandbox="" title="Variant ${letter}: ${name}" srcdoc="${escapeHtml(renderVariantDocument(theme, variant))}"></iframe></div>
-<div class="notes">${redesignNotes}${renderTokenTable("Proposed additions", readProposedTokens(variant))}</div>
+<div class="notes">${redesignNotes}${renderTokenTable("Restyled colors and fonts", variant.restyledTokens)}${renderTokenTable("Proposed additions", readProposedTokens(variant))}</div>
 </section>`;
   };
 

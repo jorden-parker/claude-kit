@@ -144,9 +144,20 @@ Fewer than about five tokens, declared and inferred together, is not a theme.
 The variants come from the `ui-ux-pro-max` skill. Before writing any variant, run it once with the `Skill` tool. Give it the product type, the subject, the stack and the theme's look, and ask for as many distinct design directions as there are variants: a style, a layout pattern and the UX rules that apply.
 
 - Each variant follows one direction. Name the variant after its direction and say in `rationale` what the direction is good at.
-- Take style, layout, hierarchy, density and UX rules from it. Colors and fonts still come from the theme: a palette or font pairing it suggests is a hint, and a value the theme lacks goes in `newTokens`, within its limit.
+- Take style, layout, hierarchy, density and UX rules from it.
+- Take its palette and font pairing too, when you judge they look better for this design than the theme's own. Put them in `restyledTokens`, as "Different colors and fonts" below says. Keep the theme's values when they already look good.
 - Do not print its output in the session. Stay quiet still holds.
 - If the skill is not installed, carry on without it.
+
+### Different colors and fonts
+
+A variant may give the theme's own color and font tokens new values, through `restyledTokens`. Use it when another palette or font pairing makes that variant look better. At least one variant keeps the theme as it is, so the user can compare.
+
+- Each entry has the `name` of a color or font token the theme already has, a `value`, and a `darkValue` when the theme has dark values. The tool takes the kind from the theme and refuses any other name.
+- The new value holds only inside that variant's frame. The css still writes `var(--<token name>)`.
+- Fonts are system or generic stacks, such as `Georgia, serif` or `ui-rounded, system-ui, sans-serif`, since frames load no web fonts.
+- The new colors still meet the contrast rule below, in both modes.
+- Say in `rationale` that the variant changes the colors or fonts, and in `changed` in a redesign.
 
 ### Rules for every variant
 
@@ -182,7 +193,8 @@ Call `mcp__ui-design__render_design` once, with every variant. It reads the save
       "css": ".page{background:var(--background);color:var(--foreground)}",
       "kept": ["All three fields and their labels"],
       "changed": ["The sidebar is gone; the page is one column"],
-      "newTokens": []
+      "newTokens": [],
+      "restyledTokens": [{ "name": "primary", "value": "oklch(0.55 0.12 170)" }]
     }
   ]
 }
@@ -385,7 +397,7 @@ Apply builds one variant in the project's real code. This mode is not quiet.
 4. Build the variant with the project's own components and tokens, used the way the project uses them: its utility classes, its theme object, its variables. The mockup is a picture. Never copy its HTML or CSS into the project.
 5. `redesign`: edit the target in place. Everything in `kept` stays. Props, data and behavior do not change, so callers keep working.
 6. `new`: put the files where the project puts such files, named the way it names them.
-7. Add a token to the theme's source only when the variant lists it in `newTokens`. Add no other token and no raw value.
+7. Add a token to the theme's source only when the variant lists it in `newTokens`. Change a token's value in the theme's source only when the variant lists it in `restyledTokens`, at the line its `source` cites. Add no other token and no raw value.
 8. Follow every hook the project has installed. Where a test must come first, write it first.
 9. Run the project's type check and tests.
 10. End with what to check in the browser: the route, the states, dark mode and the 390px width.

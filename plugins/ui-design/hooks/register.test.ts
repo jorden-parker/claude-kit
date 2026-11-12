@@ -312,8 +312,13 @@ test("the design tool saves the design with the theme, writes the page and opens
     subject: "src/app/settings/page.tsx",
     theme: SAVED_THEME,
     variants: [
-      { ...FIRST_VARIANT, newTokens: [] },
-      { ...FIRST_VARIANT, name: "Two columns", newTokens: [] },
+      { ...FIRST_VARIANT, newTokens: [], restyledTokens: [] },
+      {
+        ...FIRST_VARIANT,
+        name: "Two columns",
+        newTokens: [],
+        restyledTokens: [],
+      },
     ],
   });
   expect(readPage(writes)).toContain('<p class="eyebrow">Redesign</p>');
@@ -454,6 +459,51 @@ test("a new design needs no changed list, and proposed tokens may hold raw value
   expect(reply.result).toBe(`Opened ${DESIGN_PAGE_PATH} in the browser.`);
   expect(readPage(writes)).toContain("--accent:#e8f0ff");
   expect(readPage(writes)).toContain('<p class="eyebrow">New design</p>');
+});
+
+test("a variant can restyle the theme's colors and fonts, and gets their kind from the theme", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  const reply = await callTool($, DESIGN_TOOL, {
+    ...DESIGN_INPUT,
+    variants: [
+      {
+        ...FIRST_VARIANT,
+        restyledTokens: [
+          { name: "primary", value: "#0f766e" },
+          { name: "font-sans", value: "Georgia, serif" },
+        ],
+      },
+    ],
+  });
+
+  expect(reply.result).toBe(`Opened ${DESIGN_PAGE_PATH} in the browser.`);
+  expect(readPage(writes)).toContain("--primary:#0f766e");
+  expect(readPage(writes)).toContain("--font-sans:Georgia, serif");
+});
+
+test("a variant can restyle only colors and fonts the theme already has", async ($, on) => {
+  mockEngine(on);
+
+  const reply = await callTool($, DESIGN_TOOL, {
+    ...DESIGN_INPUT,
+    variants: [
+      {
+        ...FIRST_VARIANT,
+        restyledTokens: [
+          { name: "brand", value: "#0f766e" },
+          { name: "primary", value: "" },
+        ],
+      },
+    ],
+  });
+
+  expect(reply.deny).toBe(
+    [
+      'Variant A: restyled token "brand" is not a color or font in the theme. A value the theme lacks goes in newTokens.',
+      'Variant A: restyled token "primary" needs a value.',
+    ].join("\n")
+  );
 });
 
 test("a failed write is reported as a refusal", async ($, on) => {

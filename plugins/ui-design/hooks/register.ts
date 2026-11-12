@@ -228,6 +228,23 @@ const DESIGN_TOOL_SCHEMA = {
               required: ["name", "kind", "value"],
             },
           },
+          restyledTokens: {
+            type: "array",
+            description:
+              "New values for the theme's own color and font tokens, used in this variant only. Its css still writes var(--token).",
+            items: {
+              type: "object",
+              properties: {
+                name: {
+                  type: "string",
+                  description: "A color or font token the theme already has.",
+                },
+                value: { type: "string" },
+                darkValue: { type: "string" },
+              },
+              required: ["name", "value"],
+            },
+          },
         },
         required: ["name", "rationale", "html", "css"],
       },
@@ -505,9 +522,39 @@ const saveTheme = async (
   return { result: `Saved ${theme.tokens.length} tokens to ${themePath}.` };
 };
 
+const RESTYLABLE_KINDS = ["color", "font"];
+
+const readRestyledTokens = (rawTokens: unknown, themeTokens: ThemeToken[]) => {
+  const problems: string[] = [];
+  const tokens = readList(rawTokens).flatMap((rawToken) => {
+    const fields = readFields(rawToken);
+    const name = readText(fields.name);
+    const value = readText(fields.value);
+    const darkValue = readText(fields.darkValue) || undefined;
+    const themeToken = themeTokens.find(
+      (token) => token.name === name && RESTYLABLE_KINDS.includes(token.kind)
+    );
+    if (!themeToken) {
+      problems.push(
+        `restyled token "${name}" is not a color or font in the theme. A value the theme lacks goes in newTokens.`
+      );
+      return [];
+    }
+    if (!value) {
+      problems.push(`restyled token "${name}" needs a value.`);
+      return [];
+    }
+    return [{ ...themeToken, value, darkValue }];
+  });
+  return { tokens, problems };
+};
+
 const readVariant =
-  (mode: string) => (rawVariant: unknown, variantIndex: number) => {
+  (mode: string, themeTokens: ThemeToken[]) =>
+  (rawVariant: unknown, variantIndex: number) => {
     const fields = readFields(rawVariant);
+    const { tokens: restyledTokens, problems: restyleProblems } =
+      readRestyledTokens(fields.restyledTokens, themeTokens);
     const { tokens: newTokens, problems: tokenProblems } = readTokens(
       fields.newTokens,
       false
@@ -520,6 +567,7 @@ const readVariant =
       kept: readTextList(fields.kept),
       changed: readTextList(fields.changed),
       newTokens,
+      restyledTokens,
     };
     const problems = [
       ...listProblemUnless(
@@ -527,6 +575,7 @@ const readVariant =
         "needs a name and html."
       ),
       ...listNewTokenProblems(newTokens, tokenProblems),
+      ...restyleProblems,
       ...listProblemUnless(
         mode !== "redesign" || variant.changed.length,
         "a redesign lists at least one thing under changed."
@@ -547,7 +596,9 @@ const renderDesign = async (
     await readThemedCall(engine, input);
   if (!theme) return missingTheme;
   const mode = readText(fields.mode) as DesignMode;
-  const readings = readList(fields.variants).map(readVariant(mode));
+  const readings = readList(fields.variants).map(
+    readVariant(mode, theme.tokens)
+  );
   const problems = [
     ...listUnknownValue("mode", mode, DESIGN_MODES),
     ...listProblemUnless(

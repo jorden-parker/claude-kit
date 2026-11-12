@@ -60,6 +60,7 @@ const FIRST_VARIANT: DesignVariant = {
   kept: ["Every field <and> its label"],
   changed: ["Sidebar becomes tabs"],
   newTokens: [],
+  restyledTokens: [],
 };
 
 const SECOND_VARIANT: DesignVariant = {
@@ -75,6 +76,7 @@ const SECOND_VARIANT: DesignVariant = {
     { ...PROPOSED_TOKEN, name: "accent-three" },
     { ...PROPOSED_TOKEN, name: "accent-four" },
   ],
+  restyledTokens: [],
 };
 
 const REDESIGN: Design = {
@@ -282,4 +284,40 @@ test("the page is self-contained and follows the system color scheme", () => {
   expect(pageHtml).not.toContain("<img");
   expect(pageHtml).not.toContain(' src="');
   expect(pageHtml).not.toContain("@import");
+});
+
+const RESTYLED_VARIANT: DesignVariant = {
+  ...FIRST_VARIANT,
+  restyledTokens: [
+    {
+      name: "surface",
+      kind: "color",
+      value: "#f5f0e6",
+      darkValue: "#1c1917",
+      source: "src/app/globals.css:4",
+      isInferred: false,
+    },
+  ],
+};
+
+test("a restyled token overrides the theme value inside its variant's frame, in both modes", () => {
+  const variantDocument = renderVariantDocument(THEME, RESTYLED_VARIANT);
+
+  expect(variantDocument.indexOf("--surface:#f5f0e6")).toBeGreaterThan(
+    variantDocument.indexOf("--surface:#ffffff")
+  );
+  expect(variantDocument.indexOf("--surface:#1c1917")).toBeGreaterThan(
+    variantDocument.indexOf("--surface:#0b0b0c")
+  );
+  expect(renderVariantDocument(THEME, FIRST_VARIANT)).not.toContain("#f5f0e6");
+});
+
+test("the variant notes list its restyled colors and fonts", () => {
+  const pageHtml = renderDesignPage({
+    ...REDESIGN,
+    variants: [RESTYLED_VARIANT],
+  });
+
+  expect(pageHtml).toContain("<h3>Restyled colors and fonts</h3>");
+  expect(renderDesignPage(REDESIGN)).not.toContain("Restyled colors and fonts");
 });

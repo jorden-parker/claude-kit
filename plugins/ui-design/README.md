@@ -16,7 +16,7 @@ Plain words work too: "redesign the settings page", "mock up a pricing page", "a
 
 The plugin registers the bare `/ui-design` command, which runs the skill. Plugin skills are always namespaced as `/<plugin>:<skill>`, so the skill itself is hidden from the menu with `user-invocable: false`; Claude can still pick it from plain words.
 
-`new` and `redesign` ask the `ui-ux-pro-max` skill for one design direction per variant, then open every variant side by side on one page. Without `ui-ux-pro-max` installed, Claude writes the variants on its own.
+`new` and `redesign` ask the `ui-ux-pro-max` skill for one design direction per variant, then open every variant side by side on one page. A variant may also try other colors and fonts when they look better. It does this by giving the theme's color and font tokens new values inside its own frame, through `restyledTokens`, and `apply` writes them into the theme. Without `ui-ux-pro-max` installed, Claude writes the variants on its own.
 
 In `new`, `redesign` and `audit` the session stays quiet. Claude prints no theme, variant or finding: the result is on the page, and the last line in the session says the page opened.
 

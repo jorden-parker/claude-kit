@@ -443,3 +443,35 @@ test("a picture beside text stays a sensible height, and details on a filled car
   expect(css).toContain(".hero-split .image,.split .image{max-height:420px}");
   expect(css).toContain(".look-bold .card-accent .list-detail");
 });
+
+test("renderSpecToHtml shows a block once when a model wrote the same block again beside it", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", props: {}, children: ["grid", "stars"] },
+      grid: { type: "Grid", props: {}, children: ["first", "second", "third"] },
+      first: { type: "Card", props: {}, children: ["firstTitle"] },
+      second: { type: "Card", props: {}, children: ["secondTitle"] },
+      third: { type: "Card", props: {}, children: ["thirdTitle"] },
+      firstTitle: { type: "Heading", props: { text: "Open Mic Night" } },
+      secondTitle: { type: "Heading", props: { text: "Open Mic Night" } },
+      thirdTitle: { type: "Heading", props: { text: "Jazz Brunch" } },
+      stars: { type: "Row", props: {}, children: ["firstStar", "secondStar"] },
+      firstStar: { type: "Icon", props: { icon: "star" } },
+      secondStar: { type: "Icon", props: { icon: "star" } },
+    },
+  });
+  expect(html.split("Open Mic Night")).toHaveLength(2);
+  expect(html).toContain("Jazz Brunch");
+  expect(html.split('class="icon').length).toBe(3);
+});
+
+test("the moods between them name every look, so a model is steered to all of them", () => {
+  const moods = Array.from({ length: 50 }, (_, drawIndex) => pickDesignMoves(() => drawIndex / 50).split("\n")[1]!);
+  for (const look of ["clean", "bold", "sharp", "editorial", "soft"]) {
+    expect(moods.some((mood) => mood.includes(`look "${look}"`))).toBe(true);
+  }
+  for (const corners of ["square", "rounded", "pill"]) {
+    expect(moods.some((mood) => mood.includes(`corners "${corners}"`))).toBe(true);
+  }
+});

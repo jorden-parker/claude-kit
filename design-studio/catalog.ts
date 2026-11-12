@@ -574,11 +574,18 @@ const listShownElements = (spec: Spec, key: string, ancestorKeys: string[]): Ele
   ];
 };
 
+const hasChildren = (spec: Spec, key: string) => {
+  const element = readEntry(spec.elements, key);
+  return Boolean(element) && readChildKeys(element!).length > 0;
+};
+
 const renderElement = (spec: Spec, key: string, ancestorKeys: string[]): string => {
   const element = readShownElement(spec, key, ancestorKeys);
   if (!element) return "";
-  const children = readChildKeys(element)
-    .map((childKey) => renderElement(spec, childKey, [...ancestorKeys, key]))
+  const childKeys = readChildKeys(element);
+  const childHtmls = childKeys.map((childKey) => renderElement(spec, childKey, [...ancestorKeys, key]));
+  const children = childHtmls
+    .filter((html, childIndex) => !(childHtmls.indexOf(html) < childIndex && hasChildren(spec, childKeys[childIndex]!)))
     .join("");
   const definition = readEntry(components, element.type);
   if (!definition) return children;
@@ -931,13 +938,15 @@ const LAYOUT_ADVICE = [
 
 const DESIGN_MOVES: Record<string, string[]> = {
   Mood: [
-    "loud and playful: big type, filled color, pill corners",
-    "quiet luxury: serif headings, airy spacing, rules instead of boxes",
-    "technical and raw: mono headings, square corners, hard outlines, compact spacing",
-    "warm and friendly: rounded headings, soft shadows, generous corners",
-    "crisp and minimal: sans headings, thin borders, a lot of empty space",
-    "retro print: serif headings with square corners and thick outlines",
-    "bold poster: filled color blocks with mono headings and compact spacing",
+    'loud and playful: look "bold", headingFont "rounded", corners "pill", big type and filled color',
+    'quiet luxury: look "editorial", headingFont "serif", spacing "airy", rules instead of boxes',
+    'technical and raw: look "sharp", headingFont "mono", corners "square", spacing "compact"',
+    'warm and friendly: look "soft", headingFont "rounded", corners "rounded"',
+    'crisp and minimal: look "clean", headingFont "sans", corners "rounded", spacing "airy", a lot of empty space',
+    'retro print: look "sharp", headingFont "serif", corners "square", thick outlines',
+    'bold poster: look "bold", headingFont "mono", corners "square", spacing "compact", filled color blocks',
+    'magazine: look "editorial", headingFont "sans", corners "square", large type',
+    'gentle and calm: look "soft", headingFont "serif", corners "pill", spacing "airy"',
   ],
   Opening: [
     "a Hero whose picture sits on the left",
@@ -1017,7 +1026,7 @@ export const buildCatalogPrompt = (tokens: StyleToken[]) =>
       `ICONS: ${Object.keys(ICON_SHAPES).join(", ")}.`,
       `ARTWORK names, for an Image's art and a Hero's imageArt: ${Object.keys(ART_DRAWINGS).join(", ")}.`,
       `- A Graphic's shapes: {"shape":"${Object.keys(DRAWN_SHAPES).join(" | ")}","x":50,"y":50,"size":30,"tone":"${SHAPE_TONES.join(" | ")}","rotate":0}.`,
-      "- You make the pictures. Give the brand a logo: on the Nav, or as a Logo. Draw a Graphic from shapes when the product has a clear symbol. Use art for mood, and photo only for a real product photo.",
+      "- You make the pictures. Give the brand a logo: on the Nav, or as a Logo. Draw a Graphic from shapes when the product has a clear symbol: 3 to 6 large shapes that read as one thing, such as a circle sun over two half hills, a triangle mountain above a wave, a ring around a star. Use art for mood, and photo only for a real product photo.",
     ].join("\n"),
     ["LAYOUTS TO START FROM. Change them when the brief or your own idea calls for it.", ...LAYOUT_ADVICE].join("\n"),
     `TOKENS, an optional last line: TOKENS: [{"name":"<token>","value":"<new value>"}] gives theme tokens new values for this design only. Leave it out unless the brief asks for other colors. The tokens: ${tokens

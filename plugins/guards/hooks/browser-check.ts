@@ -1,6 +1,11 @@
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { EDIT_TOOLS, type HookEvent, type HookResult } from "./types.ts";
+import {
+  EDIT_TOOLS,
+  SHELL_TOOL_NAMES,
+  type HookEvent,
+  type HookResult,
+} from "./types.ts";
 
 const UI_FILE = /\.(?:[jt]sx|vue|svelte|astro|html|css|scss|sass|less)$/;
 const CONSOLE_TOOL = /^mcp__(?:playwright|claude-in-chrome)__.*console/;
@@ -10,10 +15,18 @@ type ToolUse = { name?: string; input?: Record<string, any> };
 
 function toolUsesIn(line: string): ToolUse[] {
   try {
-    const content = JSON.parse(line)?.message?.content;
-    return Array.isArray(content)
-      ? content.filter((block) => block?.type === "tool_use")
+    const message = JSON.parse(line)?.message;
+    const claudeUses = Array.isArray(message?.content)
+      ? message.content.filter((block: any) => block?.type === "tool_use")
       : [];
+    const qwenUses = Array.isArray(message?.parts)
+      ? message.parts.flatMap((part: any) =>
+          part?.functionCall
+            ? [{ name: part.functionCall.name, input: part.functionCall.args }]
+            : []
+        )
+      : [];
+    return [...claudeUses, ...qwenUses];
   } catch {
     return [];
   }
@@ -21,7 +34,8 @@ function toolUsesIn(line: string): ToolUse[] {
 
 const readsConsole = (use: ToolUse) =>
   CONSOLE_TOOL.test(use.name ?? "") ||
-  (use.name === "Bash" && AGENT_BROWSER_CONSOLE.test(use.input?.command ?? ""));
+  (SHELL_TOOL_NAMES.includes(use.name ?? "") &&
+    AGENT_BROWSER_CONSOLE.test(use.input?.command ?? ""));
 
 const isPluginHooksModule = (path: string) =>
   basename(dirname(path)) === "hooks" &&

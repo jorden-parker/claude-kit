@@ -94,3 +94,30 @@ test("blocks an edit to a React hooks folder outside a plugin", () =>
   expect(
     blocks([toolUse("Edit", { file_path: "/app/src/hooks/useCart.tsx" })])
   ).toBe(true));
+
+const qwenCall = (name: string, args: Record<string, unknown>) =>
+  JSON.stringify({
+    type: "assistant",
+    message: {
+      role: "model",
+      parts: [{ functionCall: { id: "call-1", name, args } }],
+    },
+  });
+const qwenEditUi = qwenCall("edit", { file_path: "/app/src/Page.tsx" });
+const qwenWriteUi = qwenCall("write_file", { file_path: "/app/src/Panel.vue" });
+const qwenEditServer = qwenCall("edit", { file_path: "/app/src/server.ts" });
+const qwenShellConsole = qwenCall("run_shell_command", {
+  command: "agent-browser errors --json",
+});
+
+test("Qwen Code blocks an edit to a UI file with no browser check", () =>
+  expect(blocks([qwenEditUi])).toBe(true));
+
+test("Qwen Code blocks a write_file to a UI file", () =>
+  expect(blocks([qwenWriteUi])).toBe(true));
+
+test("Qwen Code passes an edit to a server file", () =>
+  expect(blocks([qwenEditServer])).toBe(false));
+
+test("Qwen Code passes after agent-browser console was run through the shell", () =>
+  expect(blocks([qwenEditUi, qwenShellConsole])).toBe(false));

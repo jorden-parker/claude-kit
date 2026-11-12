@@ -42,3 +42,22 @@ test("long lines are clipped", () => {
 test("trimText stays internal to the hook", async () => {
   expect(Object.keys(await import("./bash-trim.ts"))).not.toContain("trimText");
 });
+
+const runQwen = (output: string) =>
+  decide({
+    tool_name: "run_shell_command",
+    tool_input: { command: "pytest" },
+    tool_response: { llmContent: output, returnDisplay: output },
+  }) as any;
+
+test("Qwen Code shell output is trimmed in llmContent and returnDisplay", () => {
+  const lines = Array.from({ length: 400 }, (_unused, i) => `line ${i}`);
+  const trimmedOutput = runQwen(lines.join("\n")).output.hookSpecificOutput
+    .updatedToolOutput;
+  expect(trimmedOutput.llmContent).toContain("bash-trim:");
+  expect(trimmedOutput.llmContent).toContain("line 399");
+  expect(trimmedOutput.returnDisplay).toContain("bash-trim:");
+});
+
+test("Qwen Code short shell output untouched", () =>
+  expect(runQwen("a\nb")).toBeNull());

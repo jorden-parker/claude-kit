@@ -1,4 +1,5 @@
-export const EDIT_TOOLS = ["Edit", "Write", "MultiEdit"];
+export const SHELL_TOOL_NAMES = ["Bash", "run_shell_command"];
+export const EDIT_TOOLS = ["Edit", "Write", "MultiEdit", "edit", "write_file"];
 export type HookEvent = {
   hook_event_name?: string;
   session_id?: string;

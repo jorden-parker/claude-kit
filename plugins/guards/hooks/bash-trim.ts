@@ -1,4 +1,4 @@
-import type { HookEvent, HookResult } from "./types.ts";
+import { SHELL_TOOL_NAMES, type HookEvent, type HookResult } from "./types.ts";
 
 const MAX_LINES = 150;
 const HEAD_LINES = 30;
@@ -29,6 +29,8 @@ function trimLines(lines: string[]): string[] {
   ];
 }
 
+const TRIMMABLE_STREAMS = ["stdout", "stderr", "llmContent", "returnDisplay"];
+
 const trimText = (text: string) =>
   trimLines(text.split("\n")).map(clip).join("\n");
 
@@ -38,10 +40,14 @@ const hiddenIn = (text: unknown) =>
 
 export function decide(event: HookEvent): HookResult {
   const response = event.tool_response;
-  if (event.tool_name !== "Bash" || !response || typeof response !== "object")
+  if (
+    !SHELL_TOOL_NAMES.includes(event.tool_name ?? "") ||
+    !response ||
+    typeof response !== "object"
+  )
     return null;
   const trimmed: Record<string, any> = { ...response };
-  for (const stream of ["stdout", "stderr"]) {
+  for (const stream of TRIMMABLE_STREAMS) {
     if (typeof response[stream] === "string")
       trimmed[stream] = trimText(response[stream]);
   }
@@ -53,6 +59,9 @@ export function decide(event: HookEvent): HookResult {
         updatedToolOutput: trimmed,
       },
     },
-    hiddenLines: hiddenIn(trimmed.stdout) + hiddenIn(trimmed.stderr),
+    hiddenLines: TRIMMABLE_STREAMS.reduce(
+      (total, stream) => total + hiddenIn(trimmed[stream]),
+      0
+    ),
   };
 }

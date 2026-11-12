@@ -651,7 +651,7 @@ const pickVariable = (tokens: StyleToken[], kind: string, names: string[], fallb
 
 const renderLookCss = ({ ink, accent, onAccent, muted }: Record<string, string>) => [
   `.look-bold .hero{padding:72px 40px;border-radius:28px;background:${accent};color:${onAccent}}`,
-  ".look-bold .hero .text-muted,.look-bold .card-accent .text-muted,.look-bold .card-accent .plan-period{color:inherit;opacity:0.85}",
+  ".look-bold .hero .text-muted,.look-bold .card-accent .list-detail,.look-bold .card-accent .text-muted,.look-bold .card-accent .plan-period{color:inherit;opacity:0.85}",
   `.look-bold .hero .button-primary,.look-bold .card-accent .button-primary,.look-bold .card-accent .badge-accent{border-color:${onAccent};background:${onAccent};color:${accent}}`,
   ".look-bold .hero .button-secondary,.look-bold .hero .badge{border-color:currentColor;background:transparent;color:inherit}",
   ".look-bold .heading-1{font-size:60px;font-weight:800}",
@@ -879,7 +879,7 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     ".icon-lg svg{width:64px;height:64px}",
     `.icon-accent{color:${accent}}`,
     `.icon-muted{${quietStyle}}`,
-    ".hero-split .image,.split>.image{max-height:none}",
+    ".hero-split .image,.split .image{max-height:420px}",
     ...renderLookCss({ ink, accent, onAccent, muted }),
     ...Object.entries(CORNER_RADII).map(
       ([name, cornerRadius]) =>

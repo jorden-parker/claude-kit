@@ -437,3 +437,9 @@ test("a narrow page widens when a model fills it with a nav, hero, grid or split
   expect(css).toContain(".page-inner>.image-art{max-height:280px}");
   expect(pickDesignMoves(() => 0.7)).not.toContain("narrow centered column");
 });
+
+test("a picture beside text stays a sensible height, and details on a filled card stay readable", () => {
+  const css = renderCatalogCss(THEME_TOKENS);
+  expect(css).toContain(".hero-split .image,.split .image{max-height:420px}");
+  expect(css).toContain(".look-bold .card-accent .list-detail");
+});

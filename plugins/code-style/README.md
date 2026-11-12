@@ -3,7 +3,7 @@
 Writes the rules for comments and names into every session, and blocks the
 edits that break them.
 
-- **SessionStart** prints the Comments and Naming rules (`rules/code-style.md`).
+- **SessionStart** prints the Comments and Naming rules (`context/code-style.md`).
 - **PostToolUse** on Edit and Write: `no-comments.sh` blocks added comments,
   `naming-check.sh` blocks short, vague or abbreviated names in declarations.
 - **Stop**: `naming-review-gate.sh` asks once per changed file set to run the

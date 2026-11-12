@@ -2,7 +2,7 @@
 
 Red, green, refactor, enforced.
 
-- **SessionStart** prints the TDD rules (`rules/tdd.md`) and clears the
+- **SessionStart** prints the TDD rules (`context/tdd.md`) and clears the
   session's test state.
 - **PreToolUse** on Edit and Write: `tdd-require-red.sh` guards implementation
   files.

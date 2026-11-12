@@ -98,6 +98,18 @@ const ICON_SHAPES: Record<string, string> = {
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/>',
 };
+const ICON_ALIASES: Record<string, string> = {
+  microphone: "mic", podcast: "mic", bicycle: "bike", cycle: "bike", house: "home", dog: "paw", pet: "paw", cat: "paw",
+  books: "book", loaf: "bread", bakery: "bread", cup: "coffee", tea: "coffee", wine: "glass", utensils: "fork",
+  food: "fork", shop: "bag", store: "bag", basket: "cart", fitness: "dumbbell", gym: "dumbbell", fire: "flame",
+  wave: "water", location: "map", pin: "map", people: "user", person: "user", idea: "lamp", bulb: "lamp",
+  travel: "plane", send: "plane", email: "mail", message: "chat", tool: "wrench", settings: "wrench", time: "clock",
+  graph: "chart", video: "play", world: "globe", plant: "leaf", money: "card", date: "calendar", edit: "pen",
+};
+const findIcon = (name: string) => {
+  const iconName = String(name).trim().toLowerCase();
+  return ICON_SHAPES[iconName] ?? ICON_SHAPES[ICON_ALIASES[iconName] ?? ""];
+};
 const LOGO_SHAPES: Record<string, string> = {
   plain: "<g/>",
   circle: '<circle cx="20" cy="20" r="18"/>',
@@ -226,19 +238,19 @@ const drawIconPicture = (iconShape: string, ratio: string) => {
 
 const renderImage = (givenAlt: string, ratio: string, art = "") => {
   const alt = /^\w+:\/\//.test(givenAlt) ? "Picture" : givenAlt;
-  if (ICON_SHAPES[art]) return renderArtFrame(alt, ratio, "", " art-icon", drawIconPicture(ICON_SHAPES[art], ratio));
+  if (findIcon(art)) return renderArtFrame(alt, ratio, "", " art-icon", drawIconPicture(findIcon(art), ratio));
   return ART_DRAWINGS[art]
     ? renderArtFrame(alt, ratio, "", ` art-${art}`, ART_DRAWINGS[art])
     : `<div class="image ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}">${IMAGE_ICON}<span>${alt === givenAlt ? escapeHtml(alt) : ""}</span></div>`;
 };
 
 const renderIcon = (icon: string) =>
-  `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_SHAPES[icon] ?? ICON_SHAPES.check}</svg>`;
+  `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${findIcon(icon) ?? ICON_SHAPES.check}</svg>`;
 
 const renderLogoMark = (name: string, shape: string, icon: string) =>
   `<svg class="logo-mark logo-${shape}" viewBox="0 0 40 40" aria-hidden="true">${LOGO_SHAPES[shape]}${
-    ICON_SHAPES[icon]
-      ? `<g class="logo-icon" transform="${shape === "plain" ? "translate(2 2) scale(1.5)" : "translate(9 9) scale(0.92)"}">${ICON_SHAPES[icon]}</g>`
+    findIcon(icon)
+      ? `<g class="logo-icon" transform="${shape === "plain" ? "translate(2 2) scale(1.5)" : "translate(9 9) scale(0.92)"}">${findIcon(icon)}</g>`
       : `<text class="logo-letter" x="20" y="21" text-anchor="middle" dominant-baseline="central">${escapeHtml(name.trim().charAt(0).toUpperCase())}</text>`
   }</svg>`;
 
@@ -252,10 +264,10 @@ const shapeProps = z.object({
 });
 
 const readIconShape = (icon: string) =>
-  ICON_SHAPES[icon] && {
+  findIcon(icon) && {
     isOutline: true,
     draw: (size: number) =>
-      `<g transform="scale(${size / 24}) translate(-12 -12)" stroke-width="2" stroke-linejoin="round">${ICON_SHAPES[icon]}</g>`,
+      `<g transform="scale(${size / 24}) translate(-12 -12)" stroke-width="2" stroke-linejoin="round">${findIcon(icon)}</g>`,
   };
 
 const renderShape = (givenShape: unknown, ratio: string) => {
@@ -682,19 +694,24 @@ const listShownElements = (spec: Spec, key: string, ancestorKeys: string[]): Ele
   ];
 };
 
-const hasChildren = (spec: Spec, key: string) => {
-  const element = readEntry(spec.elements, key);
-  return Boolean(element) && readChildKeys(element!).length > 0;
+const SHORTEST_REPEATED_TEXT = 12;
+
+const readShownText = (html: string) => html.replace(/<[^>]+>/g, "");
+
+const dropRepeatedBlocks = (htmls: string[]) => {
+  const shownTexts = htmls.map(readShownText);
+  return htmls.filter(
+    (_, htmlIndex) =>
+      shownTexts[htmlIndex]!.length < SHORTEST_REPEATED_TEXT || shownTexts.indexOf(shownTexts[htmlIndex]!) === htmlIndex
+  );
 };
 
 const renderElement = (spec: Spec, key: string, ancestorKeys: string[]): string => {
   const element = readShownElement(spec, key, ancestorKeys);
   if (!element) return "";
-  const childKeys = readChildKeys(element);
-  const childHtmls = childKeys.map((childKey) => renderElement(spec, childKey, [...ancestorKeys, key]));
-  const children = childHtmls
-    .filter((html, childIndex) => !(childHtmls.indexOf(html) < childIndex && hasChildren(spec, childKeys[childIndex]!)))
-    .join("");
+  const children = dropRepeatedBlocks(
+    readChildKeys(element).map((childKey) => renderElement(spec, childKey, [...ancestorKeys, key]))
+  ).join("");
   const definition = readEntry(components, element.type);
   if (!definition) return children;
   return placeElement(definition.render(readProps(definition.props, element), children), element);

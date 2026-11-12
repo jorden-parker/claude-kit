@@ -579,3 +579,24 @@ test("the prompt asks for pictures of the subject, with geometric shapes as one 
   const artworkIdeas = Array.from({ length: 40 }, (_, drawIndex) => pickDesignMoves(() => drawIndex / 40).split("\n").at(-1)!);
   expect(artworkIdeas.filter((idea) => /subject|product/.test(idea)).length).toBe(artworkIdeas.length);
 });
+
+test("renderSpecToHtml shows a plan once when a model wrote the same plan again, even with another highlight", () => {
+  const starter = { name: "Starter", price: "$0", features: ["SSO", "Audit logs"], action: "Get started" };
+  const html = renderSpecToHtml({
+    root: "grid",
+    elements: {
+      grid: { type: "Grid", props: {}, children: ["first", "second", "pro"] },
+      first: { type: "Plan", props: starter },
+      second: { type: "Plan", props: { ...starter, featured: true } },
+      pro: { type: "Plan", props: { ...starter, name: "Pro", price: "$12" } },
+    },
+  });
+  expect(html.split("Starter")).toHaveLength(2);
+  expect(html).toContain("Pro");
+});
+
+test("an icon is found by a common other name for it", () => {
+  expect(renderOne("Icon", { icon: "microphone" })).toBe(renderOne("Icon", { icon: "mic" }));
+  expect(renderOne("Logo", { name: "Spoke", icon: "Bicycle" })).toBe(renderOne("Logo", { name: "Spoke", icon: "bike" }));
+  expect(renderOne("Image", { alt: "Dog", art: "dog" })).toContain("art-icon");
+});

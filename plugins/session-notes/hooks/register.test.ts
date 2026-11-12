@@ -2,6 +2,7 @@ import type { On, PromptComposeInput, PromptSubmitInput } from "claude-code";
 import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const WRITE_NOTE_TOOL = "mcp__session-notes__write_note";
+const AMEND_NOTE_TOOL = "mcp__session-notes__amend_note";
 
 const submitted = (text: string) => ({ text }) as PromptSubmitInput;
 
@@ -192,6 +193,89 @@ test("an empty note is refused", async ($, on) => {
 
   const outcome = await $.tool.call({
     tool: WRITE_NOTE_TOOL,
+    text: " ",
+  } as never);
+
+  expect(outcome).toEqual({ deny: "The note needs some text." });
+});
+
+const sessionWithNote = (noteText: string) => ({
+  notes: [
+    {
+      sessionId: "session-a",
+      cwd: "/repo",
+      startedAt: "2026-11-12T09:30:00.000Z",
+      prompts: [],
+      files: [],
+      commands: [],
+      notes: [noteText, "Deploy is on Friday"],
+    },
+  ],
+});
+
+test("amend_note replaces an existing note", async ($, on) => {
+  const recorded = { openedPanes: [] as string[], submittedPrompts: [] };
+  const store = mockEngine(
+    on,
+    "session-a",
+    sessionWithNote("Login bug was a stale cookie"),
+    recorded
+  );
+
+  const outcome = await $.tool.call({
+    tool: AMEND_NOTE_TOOL,
+    old: "Login bug was a stale cookie",
+    text: "Login bug was a stale session cookie",
+  } as never);
+
+  const [note] = store.get("notes") as Array<Record<string, unknown>>;
+  expect(note?.notes).toEqual([
+    "Login bug was a stale session cookie",
+    "Deploy is on Friday",
+  ]);
+  expect(recorded.openedPanes).toEqual(["session-notes"]);
+  expect(outcome).toEqual({
+    result: "Note amended and the notes pane opened.",
+  });
+});
+
+test("amend_note refuses a note that does not exist", async ($, on) => {
+  const store = mockEngine(on, "session-a", sessionWithNote("Real note"));
+
+  const outcome = await $.tool.call({
+    tool: AMEND_NOTE_TOOL,
+    old: "Missing note",
+    text: "New text",
+  } as never);
+
+  expect(outcome).toEqual({
+    deny: 'No note in this session reads "Missing note".',
+  });
+  const [note] = store.get("notes") as Array<Record<string, unknown>>;
+  expect(note?.notes).toEqual(["Real note", "Deploy is on Friday"]);
+});
+
+test("amend_note refuses when the session has no notes yet", async ($, on) => {
+  const store = mockEngine(on, "session-a");
+
+  const outcome = await $.tool.call({
+    tool: AMEND_NOTE_TOOL,
+    old: "Anything",
+    text: "New text",
+  } as never);
+
+  expect(outcome).toEqual({
+    deny: 'No note in this session reads "Anything".',
+  });
+  expect(store.get("notes")).toBeUndefined();
+});
+
+test("amend_note refuses empty replacement text", async ($, on) => {
+  mockEngine(on, "session-a", sessionWithNote("Real note"));
+
+  const outcome = await $.tool.call({
+    tool: AMEND_NOTE_TOOL,
+    old: "Real note",
     text: " ",
   } as never);
 

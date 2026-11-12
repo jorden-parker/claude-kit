@@ -29,6 +29,19 @@ const WRITE_NOTE_TOOL_SCHEMA = {
   },
   required: ["text"],
 };
+const AMEND_NOTE_TOOL_NAME = "amend_note";
+const QUALIFIED_AMEND_NOTE_TOOL_NAME = `mcp__session-notes__${AMEND_NOTE_TOOL_NAME}`;
+const AMEND_NOTE_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    old: {
+      type: "string",
+      description: "The exact text of the note to change, as you wrote it.",
+    },
+    text: { type: "string", description: "The new note, in plain words." },
+  },
+  required: ["old", "text"],
+};
 const SESSION_SUMMARY_TOPIC =
   "a short summary of this session: what was done, what was decided, and what is left to do";
 const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -85,6 +98,38 @@ const addToSessionNote = (engine: EngineInterface, addition: NoteAddition) => {
   return pendingWrite;
 };
 
+const amendSessionNote = (
+  engine: EngineInterface,
+  oldText: string,
+  newText: string
+) => {
+  const amendment = pendingWrite
+    .then(async () => {
+      const sessionId = await engine.session.id();
+      const notes = await readNotes(engine);
+      const currentNote = notes.find((note) => note.sessionId === sessionId);
+      const sessionNotes = currentNote?.notes ?? [];
+      const storedOldText = oldText.slice(0, MAX_ENTRY_LENGTH);
+      if (!sessionNotes.includes(storedOldText)) return false;
+      const amendedNotes = sessionNotes.map((noteText) =>
+        noteText === storedOldText
+          ? newText.slice(0, MAX_ENTRY_LENGTH)
+          : noteText
+      );
+      await engine.store.set(
+        NOTES_KEY,
+        notes.map((note) =>
+          note === currentNote ? { ...note, notes: amendedNotes } : note
+        )
+      );
+      engine.ui.invalidate("ui.render");
+      return true;
+    })
+    .catch(() => false);
+  pendingWrite = amendment.then(() => undefined);
+  return amendment;
+};
+
 const describeNoteToolCall = (
   tool: string,
   toolInput: Record<string, unknown>
@@ -110,13 +155,30 @@ const askClaudeToWriteNote = (engine: EngineInterface, topic: string) => {
   engine.clock.after(0, () => void engine.prompt.submit({ text: instruction }));
 };
 
+const trimText = (requestedText: unknown) =>
+  typeof requestedText === "string" ? requestedText.trim() : "";
+
 const writeNote = async (engine: EngineInterface, requestedText: unknown) => {
-  const noteText =
-    typeof requestedText === "string" ? requestedText.trim() : "";
+  const noteText = trimText(requestedText);
   if (!noteText) return { deny: "The note needs some text." };
   await addToSessionNote(engine, { notes: [noteText] });
   await openNotesPane(engine);
   return { result: "Note saved and the notes pane opened." };
+};
+
+const amendNote = async (
+  engine: EngineInterface,
+  requestedOldText: unknown,
+  requestedText: unknown
+) => {
+  const oldText = trimText(requestedOldText);
+  const noteText = trimText(requestedText);
+  if (!noteText) return { deny: "The note needs some text." };
+  const isAmended = await amendSessionNote(engine, oldText, noteText);
+  if (!isAmended)
+    return { deny: `No note in this session reads "${oldText}".` };
+  await openNotesPane(engine);
+  return { result: "Note amended and the notes pane opened." };
 };
 
 const formatStartTime = (startedAt: string) =>
@@ -141,6 +203,13 @@ export const register: Register = (on) => {
       description:
         "Writes a note to this session's notes and opens the notes pane. Call it when the user asks you to note, jot down or remember something for this session.",
       inputSchema: WRITE_NOTE_TOOL_SCHEMA,
+      isDeferred: false,
+    });
+    await $.tool.register({
+      name: AMEND_NOTE_TOOL_NAME,
+      description:
+        "Replaces one of this session's notes with new text and opens the notes pane. Call it when the user asks you to amend, correct or update a note you already wrote.",
+      inputSchema: AMEND_NOTE_TOOL_SCHEMA,
       isDeferred: false,
     });
     return next(e);
@@ -172,6 +241,8 @@ export const register: Register = (on) => {
     const toolInput = e as unknown as Record<string, unknown>;
     if (e.tool === (QUALIFIED_WRITE_NOTE_TOOL_NAME as string))
       return writeNote($, toolInput.text);
+    if (e.tool === (QUALIFIED_AMEND_NOTE_TOOL_NAME as string))
+      return amendNote($, toolInput.old, toolInput.text);
     const addition = describeNoteToolCall(e.tool, toolInput);
     if (addition) await addToSessionNote($, addition);
     return next(e);

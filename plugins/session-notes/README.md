@@ -17,6 +17,8 @@ The pane redraws as new notes arrive.
 
 Ask Claude to note something ("note that the login bug was a stale cookie"). Claude calls the `write_note` tool, which saves the note to this session and opens the pane.
 
+Ask Claude to change a note it wrote ("amend that note: it was a stale session cookie"). Claude calls the `amend_note` tool with the note's exact old text and the new text; the note is replaced in place and the pane opens. If no note in this session has that text, the tool refuses and nothing changes. Only the current session's notes can be amended.
+
 `/note` has Claude note a short summary of the session: what was done, what was decided and what is left. `/note <topic>` notes that topic instead, for example `/note what's left` or `/note the open questions`.
 
 ## Storage

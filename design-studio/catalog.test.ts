@@ -613,3 +613,16 @@ test("the prompt offers a picture of the subject before a pattern for art", () =
   expect(prompt).toContain("PATTERNS, for mood only");
   expect(prompt).not.toContain("ARTWORK names, for an Image's art and a Hero's imageArt");
 });
+
+test("an icon in a Graphic is moved and shrunk to fit inside the picture, and a geometric shape may still run off it", () => {
+  const graphic = renderOne("Graphic", {
+    alt: "Camp",
+    ratio: "square",
+    shapes: [
+      { shape: "mountain", x: 10, y: 5, size: 100 },
+      { shape: "half", x: 50, y: 100, size: 100 },
+    ],
+  });
+  expect(graphic).toContain('<g transform="translate(40 40) rotate(0)" class="tone-accent outline"><g transform="scale(3.3333');
+  expect(graphic).toContain('<g transform="translate(50 100) rotate(0)" class="tone-accent">');
+});

@@ -270,11 +270,24 @@ const readIconShape = (icon: string) =>
       `<g transform="scale(${size / 24}) translate(-12 -12)" stroke-width="2" stroke-linejoin="round">${findIcon(icon)}</g>`,
   };
 
+const LARGEST_ICON_SIZE = 80;
+
+const fitInside = (center: number, size: number, length: number) =>
+  Math.min(Math.max(center, size / 2), length - size / 2);
+
 const renderShape = (givenShape: unknown, ratio: string) => {
   if (!givenShape || typeof givenShape !== "object") return "";
   const drawn = readProps(shapeProps, { type: "Shape", props: givenShape as Record<string, unknown> });
-  const { isOutline, draw } = DRAWN_SHAPES[drawn.shape] ?? readIconShape(drawn.shape) ?? DRAWN_SHAPES.circle!;
-  return `<g transform="translate(${(drawn.x * ART_WIDTHS[ratio]!) / 100} ${drawn.y}) rotate(${drawn.rotate})" class="tone-${drawn.tone}${isOutline ? " outline" : ""}">${draw(drawn.size)}</g>`;
+  const geometricShape = DRAWN_SHAPES[drawn.shape];
+  const iconShape = geometricShape ? undefined : readIconShape(drawn.shape);
+  const { isOutline, draw } = geometricShape ?? iconShape ?? DRAWN_SHAPES.circle!;
+  const width = ART_WIDTHS[ratio]!;
+  const size = iconShape ? Math.min(drawn.size, LARGEST_ICON_SIZE) : drawn.size;
+  const centerX = (drawn.x * width) / 100;
+  const [shownX, shownY] = iconShape
+    ? [fitInside(centerX, size, width), fitInside(drawn.y, size, ART_HEIGHT)]
+    : [centerX, drawn.y];
+  return `<g transform="translate(${shownX} ${shownY}) rotate(${drawn.rotate})" class="tone-${drawn.tone}${isOutline ? " outline" : ""}">${draw(size)}</g>`;
 };
 
 const HEADING_STYLES = ["plain", "uppercase", "underline", "bar", "accent"];

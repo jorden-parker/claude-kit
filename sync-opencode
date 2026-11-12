@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="Usage: ./sync-opencode [plugin...]
+Installs this repo's plugins into OpenCode: skills, commands, agents, and an MCP server in opencode.json for each register.ts plugin's tools. Run it again after changes.
+Without arguments it syncs every plugin under plugins/ and removes plugins that left the repo.
+OPENCODE_CONFIG_DIR overrides ~/.config/opencode."
+
+source "$(dirname "$0")/plugin-host/sync-lib.sh"
+exit_after_usage_request "$usage" "${1:-}"
+
+config_folder="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
+staging_root="$config_folder/claude-kit"
+installer="$repository_root/plugin-host/opencode-install.ts"
+failed_plugins=()
+synced_plugin_names=()
+
+has_opencode_loadable_parts() {
+  uses_module_api "$1" || [ -d "$1/skills" ] || [ -d "$1/agents" ] ||
+    [ -d "$1/commands" ] || [ -d "$1/portable-commands" ]
+}
+
+describe_install() {
+  local plugin_folder="$1" staged_folder="$2" description="installed"
+  [ -f "$staged_folder/plugin-host-server.mjs" ] &&
+    description="$description. Its tools run through an MCP server; panes, autocomplete and composer fill stay in Claude Code"
+  uses_command_hooks "$plugin_folder" &&
+    description="$description. Its Claude Code command hooks are not ported, since OpenCode runs JavaScript plugins instead"
+  echo "$description"
+}
+
+sync_plugin() {
+  local plugin_folder="${1%/}" plugin_name staged_folder problem
+  plugin_name="$(read_plugin_name "$plugin_folder")"
+  staged_folder="$staging_root/$plugin_name"
+  synced_plugin_names+=("$plugin_name")
+
+  if ! has_opencode_loadable_parts "$plugin_folder"; then
+    bun "$installer" remove "$config_folder" "$plugin_name"
+    if uses_command_hooks "$plugin_folder"; then
+      echo "$plugin_name: skipped. Its Claude Code command hooks are not ported, since OpenCode runs JavaScript plugins instead"
+    else
+      echo "$plugin_name: skipped. OpenCode has no output styles"
+    fi
+    return 0
+  fi
+
+  if ! problem="$(stage_plugin opencode "$plugin_folder" "$staged_folder" 2>&1 &&
+    bun "$installer" install "$config_folder" "$plugin_name" "$staged_folder" "$opencode_major_version" 2>&1)"; then
+    echo "$plugin_name: FAILED to install. $problem"
+    failed_plugins+=("$plugin_name")
+    return 0
+  fi
+  echo "$plugin_name: $(describe_install "$plugin_folder" "$staged_folder")"
+}
+
+remove_plugins_gone_from_repo() {
+  local manifest plugin_name
+  for manifest in "$staging_root"/*.files; do
+    [ -f "$manifest" ] || continue
+    plugin_name="$(basename "$manifest" .files)"
+    [[ " ${synced_plugin_names[*]} " == *" $plugin_name "* ]] && continue
+    bun "$installer" remove "$config_folder" "$plugin_name"
+    echo "$plugin_name: removed, since it is no longer in this repo"
+  done
+}
+
+require_commands opencode jq rsync bun node
+opencode_major_version="$(opencode --version | grep -oE '[0-9]+' | head -1)"
+mkdir -p "$staging_root"
+select_plugin_folders "$@"
+for plugin_folder in "${plugin_folders[@]}"; do sync_plugin "$plugin_folder"; done
+[ "$#" -eq 0 ] && remove_plugins_gone_from_repo
+report_failed_plugins ${failed_plugins[@]+"${failed_plugins[@]}"}

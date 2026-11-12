@@ -29,6 +29,14 @@ export const serveQwenPlugin = async (plugin: BundledPlugin) =>
     await startHostedPlugin({ ...plugin, storeFolder: findQwenStoreFolder() })
   );
 
+export const serveOpenCodePlugin = async (plugin: BundledPlugin) =>
+  serveMcp(
+    await startHostedPlugin({
+      ...plugin,
+      storeFolder: join(plugin.pluginRoot, "..", "..", STORE_FOLDER),
+    })
+  );
+
 export const createPiPluginExtension = (plugin: BundledPlugin) =>
   createPiExtension({ ...plugin, storeFolder: findPiStoreFolder() });
 

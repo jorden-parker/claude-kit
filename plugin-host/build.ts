@@ -10,7 +10,7 @@ import {
 import { join, resolve } from "node:path";
 import type { PluginDescription } from "./host-tools";
 
-type TargetName = "qwen" | "pi";
+type TargetName = "qwen" | "pi" | "opencode";
 
 type Target = {
   bundleName: string;
@@ -105,6 +105,15 @@ const TARGETS: Record<TargetName, Target> = {
         },
       });
     },
+  },
+  opencode: {
+    bundleName: "plugin-host-server.mjs",
+    starterName: "serveOpenCodePlugin",
+    startStatement: "await serveOpenCodePlugin(plugin);",
+    commandFolder: "commands",
+    argumentsPlaceholder: "$ARGUMENTS",
+    hostsCommandHooks: false,
+    writeManifest: () => {},
   },
 };
 
@@ -259,7 +268,7 @@ const stageCommands = (
 
 const findTarget = (targetName: string) => {
   const target = TARGETS[targetName as TargetName];
-  if (!target) throw new Error(`Unknown target ${targetName}: use qwen or pi.`);
+  if (!target) throw new Error(`Unknown target ${targetName}: use qwen, pi or opencode.`);
   return target;
 };
 

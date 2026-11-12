@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { startPlugin, TARGET_NAMES, type TargetName } from "../testing";
+import { composeToolPrefix, startPlugin, TARGET_NAMES, type TargetName } from "../testing";
 
 const runFile = promisify(execFile);
 const PLUGIN_NAME = "draft-pr";
@@ -300,11 +300,12 @@ for (const target of TARGET_NAMES) {
     const repositoryFolder = await createGitRepository();
     const plugin = await startDraftPlugin(target, repositoryFolder);
     try {
-      const toolNames = (await plugin.listToolNames()).map((name) =>
-        name.startsWith("mcp__") ? name : `mcp__${PLUGIN_NAME}__${name}`
+      const toolPrefix = composeToolPrefix(target, PLUGIN_NAME);
+      const toolNames = (await plugin.listToolNames()).map(
+        (name) => `${toolPrefix}${name}`
       );
       expect(toolNames.sort()).toEqual(
-        [`mcp__${PLUGIN_NAME}__${PR_TOOL}`, `mcp__${PLUGIN_NAME}__${REVIEW_TOOL}`].sort()
+        [`${toolPrefix}${PR_TOOL}`, `${toolPrefix}${REVIEW_TOOL}`].sort()
       );
       for (const skillName of ["draft-pr", "draft-pr-review"]) {
         const skillText = await readFile(
@@ -312,7 +313,7 @@ for (const target of TARGET_NAMES) {
           "utf8"
         );
         const mentionedToolNames = [
-          ...new Set(skillText.match(/mcp__draft-pr__\w+/g) ?? []),
+          ...new Set(skillText.match(new RegExp(`${toolPrefix}\\w+`, "g")) ?? []),
         ];
         expect(mentionedToolNames.length).toBeGreaterThan(0);
         for (const mentionedToolName of mentionedToolNames) {

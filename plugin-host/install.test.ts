@@ -95,3 +95,58 @@ test("pi: a hand-written portable command becomes a prompt with pi's placeholder
     JSON.parse(await readFile(join(installedFolder, "package.json"), "utf8")).pi
   ).toEqual({ prompts: ["./prompts"] });
 });
+
+const readOpenCodeConfig = async (targetHome: string) =>
+  JSON.parse(await readFile(join(targetHome, "opencode.json"), "utf8"));
+
+test("opencode: the MCP server is declared under mcp.servers in opencode.json", async () => {
+  const { targetHome, installedFolder } = await installPlugin("opencode", "brainstorm");
+  expect((await readOpenCodeConfig(targetHome)).mcp.servers.brainstorm).toEqual({
+    type: "local",
+    command: ["node", join(installedFolder, "plugin-host-server.mjs")],
+  });
+});
+
+test("opencode 1.x: the MCP server is declared directly under mcp", async () => {
+  const { targetHome, installedFolder } = await installPlugin("opencode", "brainstorm", {
+    fakeCommands: { opencode: `[ "$1" = "--version" ] && echo 1.18.35; exit 0` },
+  });
+  expect((await readOpenCodeConfig(targetHome)).mcp.brainstorm).toEqual({
+    type: "local",
+    command: ["node", join(installedFolder, "plugin-host-server.mjs")],
+    enabled: true,
+  });
+});
+
+test("opencode: commands land in the config's commands folder and call tools by OpenCode's names", async () => {
+  const { targetHome } = await installPlugin("opencode", "brainstorm");
+  const commandText = await readFile(
+    join(targetHome, "commands", "brainstorm.md"),
+    "utf8"
+  );
+  expect(commandText).toContain("`brainstorm_run_brainstorm`");
+  expect(commandText).not.toContain("mcp__");
+  expect(commandText).toContain("<arguments>\n$ARGUMENTS\n</arguments>");
+});
+
+test("opencode: skills are copied whole and name tools by OpenCode's names", async () => {
+  const { targetHome } = await installPlugin("opencode", "brainstorm");
+  const skillText = await readFile(
+    join(targetHome, "skills", "build-plans", "SKILL.md"),
+    "utf8"
+  );
+  expect(skillText).not.toContain("mcp__brainstorm__");
+});
+
+test("opencode: agents become subagents without Claude-only model names and keep their tool limits", async () => {
+  const { targetHome } = await installPlugin("opencode", "brainstorm");
+  const agentText = await readFile(
+    join(targetHome, "agents", "step-reader.md"),
+    "utf8"
+  );
+  const frontmatter = agentText.split("---")[1]!;
+  expect(frontmatter).toContain("mode: subagent");
+  expect(frontmatter).toContain("description: ");
+  expect(frontmatter).not.toMatch(/^(name|model|tools):/m);
+  expect(frontmatter).toContain("permission:\n  edit: deny\n  bash: deny\n");
+});

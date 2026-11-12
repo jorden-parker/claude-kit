@@ -12,8 +12,11 @@ import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import type { Outcome } from "./engine";
 
-export const TARGET_NAMES = ["qwen", "pi"] as const;
+export const TARGET_NAMES = ["qwen", "pi", "opencode"] as const;
 export type TargetName = (typeof TARGET_NAMES)[number];
+
+export const composeToolPrefix = (target: TargetName, pluginName: string) =>
+  target === "opencode" ? `${pluginName}_` : `mcp__${pluginName}__`;
 
 export type InstallOptions = {
   fakeCommands?: Record<string, string>;
@@ -27,6 +30,7 @@ const COPY_INSTALLED_EXTENSION = `if [ "$1 $2" = "extensions install" ]; then mk
 const BUILT_IN_FAKE_COMMANDS: Record<string, string> = {
   qwen: COPY_INSTALLED_EXTENSION,
   pi: "exit 0",
+  opencode: `[ "$1" = "--version" ] && echo "\${FAKE_OPENCODE_VERSION:-2.1.2}"; exit 0`,
   open: LOG_INVOCATION,
   "xdg-open": LOG_INVOCATION,
 };
@@ -68,6 +72,7 @@ export const installPlugin = async (
     PATH: `${binFolder}:${process.env.PATH}`,
     QWEN_HOME: targetHome,
     PI_CODING_AGENT_DIR: targetHome,
+    OPENCODE_CONFIG_DIR: targetHome,
     FAKE_COMMAND_LOG: commandLogPath,
   };
   await runFile(join(REPOSITORY_ROOT, `sync-${target}`), [pluginName], {
@@ -78,6 +83,7 @@ export const installPlugin = async (
     target,
     pluginName,
     environment,
+    targetHome,
     workingDirectory: projectFolder,
     installedFolder: join(
       targetHome,
@@ -202,8 +208,8 @@ export const startPlugin = async (
 ) => {
   const installed = await installPlugin(target, pluginName, installOptions);
   const client =
-    target === "qwen"
-      ? await startMcpClient(installed)
-      : await startPiClient(installed);
+    target === "pi"
+      ? await startPiClient(installed)
+      : await startMcpClient(installed);
   return { ...installed, ...client };
 };

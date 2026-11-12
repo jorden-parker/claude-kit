@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { startPlugin, TARGET_NAMES, type TargetName } from "../testing";
+import { composeToolPrefix, startPlugin, TARGET_NAMES, type TargetName } from "../testing";
 
 const DESIGN_FOLDER = ".claude/ui-design";
 const THEME_TOOL = "save_design_theme";
@@ -264,7 +264,11 @@ for (const target of TARGET_NAMES) {
       );
       const mentionedToolNames = [
         ...new Set(
-          [...skillText.matchAll(/mcp__ui-design__(\w+)/g)].map((match) => match[1]!)
+          [
+            ...skillText.matchAll(
+              new RegExp(`${composeToolPrefix(target, "ui-design")}(\\w+)`, "g")
+            ),
+          ].map((match) => match[1]!)
         ),
       ];
       expect(mentionedToolNames.sort()).toEqual(
@@ -275,6 +279,11 @@ for (const target of TARGET_NAMES) {
           await readFile(join(plugin.installedFolder, "package.json"), "utf8")
         );
         expect(manifest.pi.skills).toEqual(["./skills"]);
+      } else if (target === "opencode") {
+        const openCodeConfig = JSON.parse(
+          await readFile(join(plugin.targetHome, "opencode.json"), "utf8")
+        );
+        expect(Object.keys(openCodeConfig.mcp.servers)).toEqual(["ui-design"]);
       } else {
         const mcpConfig = JSON.parse(
           await readFile(join(plugin.installedFolder, ".mcp.json"), "utf8")

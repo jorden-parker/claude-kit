@@ -25,7 +25,7 @@ const storedNoteTexts = async (storePath: string) =>
 const portableCommandPath = (target: TargetName, installedFolder: string) =>
   join(
     installedFolder,
-    target === "qwen" ? "commands" : "prompts",
+    target === "pi" ? "prompts" : "commands",
     "notes.md"
   );
 

@@ -7,11 +7,19 @@ import { installPlugin, startPlugin, TARGET_NAMES, type TargetName } from "../te
 const COMMAND_PATH_BY_TARGET: Record<TargetName, string> = {
   qwen: join("commands", "handoff.md"),
   pi: join("prompts", "handoff.md"),
+  opencode: join("commands", "handoff.md"),
 };
 
 const ARGUMENTS_PLACEHOLDER_BY_TARGET: Record<TargetName, string> = {
   qwen: "{{args}}",
   pi: "$ARGUMENTS",
+  opencode: "$ARGUMENTS",
+};
+
+const RUN_TOOL_NAME_BY_TARGET: Record<TargetName, string> = {
+  qwen: "mcp__handoff__run_handoff",
+  pi: "mcp__handoff__run_handoff",
+  opencode: "handoff_run_handoff",
 };
 
 const readStoredHandoffs = async (storePath: string) =>
@@ -33,7 +41,7 @@ for (const target of TARGET_NAMES) {
       join(installedFolder, COMMAND_PATH_BY_TARGET[target]),
       "utf8"
     );
-    expect(commandText).toContain("`mcp__handoff__run_handoff`");
+    expect(commandText).toContain(`\`${RUN_TOOL_NAME_BY_TARGET[target]}\``);
     expect(commandText).toContain(ARGUMENTS_PLACEHOLDER_BY_TARGET[target]);
   });
 

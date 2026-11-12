@@ -148,13 +148,34 @@ asks you to trust the project before it loads them.
 
 `qwen extensions link` does not work here: it wants a `qwen-extension.json` in the source folder.
 
+### OpenCode
+
+`./sync-opencode` installs the plugins into [OpenCode](https://opencode.ai), for your
+user. `./sync-opencode tdd guards` syncs only those. It needs `opencode`, `jq`, `rsync`,
+`bun` and `node`. `OPENCODE_CONFIG_DIR` overrides `~/.config/opencode`.
+
+- **Skills, commands and agents** are copied to `skills/`, `commands/` and `agents/`
+  of the config folder. Claude Code tool names such as `mcp__brainstorm__run_brainstorm`
+  become OpenCode's `brainstorm_run_brainstorm`. Agents become subagents: the Claude-only
+  `model` is dropped, and a `tools` list becomes `edit`, `bash` and `webfetch` denials.
+- **register.ts plugins** run as an MCP server, built like Qwen Code's and declared in
+  `opencode.json` under `mcp.servers` (directly under `mcp` for OpenCode 1.x). The
+  store is `~/.config/opencode/claude-kit-store/<plugin>.json`.
+- **Command hooks** (`tdd`, `guards`, `quality-gates`, and `code-style`'s hooks) and
+  **output styles** (`adhd-style`) are not ported and are reported as skipped.
+- `claude-kit/<plugin>.files` records what each sync wrote. The next sync deletes those
+  files first, and a full sync removes plugins that left the repo. A file it did not
+  write is never overwritten: that plugin fails until you move the file away.
+- `opencode.jsonc` is never rewritten, since it may hold comments; rename it to
+  `opencode.json` or add the MCP server by hand.
+
 ## Layout
 
 ```
 .claude-plugin/marketplace.json   lists every plugin and its folder
 plugins/<name>/                   one plugin: its own plugin.json, README, package.json and tests
 plugin-host/                      runs register.ts plugins outside Claude Code (engine, MCP server, pi extension, build)
-sync-qwen, sync-pi                install the plugins into Qwen Code and pi
+sync-qwen, sync-pi, sync-opencode install the plugins into Qwen Code, pi and OpenCode
 ```
 
 ## Rules for plugins

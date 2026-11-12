@@ -39,6 +39,7 @@ Limits keep the store small: the latest 100 sessions, 100 entries per list, 500 
 session-notes list                           # every session, newest first, notes numbered
 session-notes delete <session> <note>        # e.g. session-notes delete 1 2
 session-notes amend <session> <note> <text>  # e.g. session-notes amend 1 2 Deploy moved to Monday
+session-notes completion zsh                 # print the zsh completion script
 ```
 
 Session and note numbers are the ones `list` prints. A number with no note, or empty text, is refused with a message and the store is left unchanged.
@@ -51,7 +52,7 @@ bash "$(jq -r '.plugins["session-notes@claude-kit"][0].installPath' ~/.claude/pl
 
 Or from a checkout: `bash ~/src/claude-kit/plugins/session-notes/install.sh`.
 
-It links `~/.local/bin/session-notes` to the plugin's `bin/session-notes` and, in zsh, adds `~/.local/bin` to your PATH in `~/.zshrc` if it is not there yet. Nothing is downloaded. If another program's file is already at that path, it stops and says so.
+It links `~/.local/bin/session-notes` to the plugin's `bin/session-notes` and, in zsh, adds `~/.local/bin` to your PATH in `~/.zshrc` if it is not there yet. In zsh it also adds tab completion to `~/.zshrc`: subcommands, then session numbers and note numbers with their text, read from `list`. Nothing is downloaded. If another program's file is already at that path, it stops and says so.
 
 After that, each Claude Code session start points `~/.local/bin/session-notes` at the current plugin version. A file of your own at that path, or a link to another program, is left alone. Set `SESSION_NOTES_LINK_DIR` to link into another directory.
 

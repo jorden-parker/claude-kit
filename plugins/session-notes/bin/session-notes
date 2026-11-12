@@ -3,7 +3,8 @@ set -euo pipefail
 
 usage="Usage: session-notes list
        session-notes delete <session> <note>
-       session-notes amend <session> <note> <text>"
+       session-notes amend <session> <note> <text>
+       session-notes completion zsh"
 
 fail() {
   printf '%s\n' "$1" >&2
@@ -62,7 +63,69 @@ replace_note() {
   mv "$updated_store" "$store_path"
 }
 
+print_zsh_completion() {
+  cat <<'ZSH'
+_session_notes() {
+  local -a candidates
+  local subcommand=$words[2]
+  case $CURRENT in
+    2)
+      candidates=(
+        'list:list every session and its notes'
+        'delete:delete a note'
+        'amend:replace the text of a note'
+        'completion:print the shell completion script'
+      )
+      _describe command candidates
+      ;;
+    3)
+      case $subcommand in
+        delete|amend)
+          candidates=(${(f)"$(session-notes list 2>/dev/null | awk '
+            /^\[[0-9]+\] / {
+              number = substr($1, 2, length($1) - 2)
+              sub(/^[^ ]+ /, "")
+              gsub(/:/, "\\:")
+              print number ":" $0
+            }')"})
+          _describe session candidates
+          ;;
+        completion)
+          candidates=(zsh)
+          _describe shell candidates
+          ;;
+      esac
+      ;;
+    4)
+      case $subcommand in
+        delete|amend)
+          candidates=(${(f)"$(session-notes list 2>/dev/null | awk -v session="$words[3]" '
+            /^\[[0-9]+\] / { current_session = substr($1, 2, length($1) - 2); next }
+            current_session == session && $1 == "note" {
+              number = $2
+              sub(/^ *note [0-9]+ /, "")
+              gsub(/:/, "\\:")
+              print number ":" $0
+            }')"})
+          _describe note candidates
+          ;;
+      esac
+      ;;
+  esac
+}
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit; }
+compdef _session_notes session-notes
+ZSH
+}
+
 [ "$#" -ge 1 ] || fail "$usage" 2
+
+if [ "$1" = "completion" ]; then
+  [ "$#" -eq 2 ] && [ "$2" = "zsh" ] || fail "$usage" 2
+  print_zsh_completion
+  exit 0
+fi
+
 store_path="$(find_store)"
 [ -f "$store_path" ] || fail "No session notes yet."
 

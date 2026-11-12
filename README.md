@@ -51,6 +51,38 @@ To remove the marketplace and every plugin from it:
 claude plugin marketplace remove claude-kit
 ```
 
+## Qwen Code
+
+`./sync-qwen` installs the plugins into [Qwen Code](https://github.com/QwenLM/qwen-code).
+Run it again after any change here. It uninstalls each earlier sync and installs it fresh,
+since `qwen extensions update` skips local plugins whose version did not change.
+
+```
+./sync-qwen              # every plugin
+./sync-qwen tdd guards   # only these
+```
+
+It needs `qwen`, `jq` and `rsync`. `QWEN_HOME` overrides `~/.qwen`.
+
+Qwen Code reads `.claude-plugin/plugin.json` itself (its docs call the file
+`claude-plugin.json`, but the converter reads `.claude-plugin/plugin.json`) and
+converts skills, agents, hooks and MCP servers on install. Checked against
+`qwen` 0.25.0. Per plugin, the script:
+
+- **Installs** hook and skill plugins: `tdd`, `code-style`, `quality-gates`, `guards`.
+  Hooks that read Claude Code's transcript format may never block in Qwen Code;
+  the script warns for each.
+- **Installs part of** `brainstorm`, `design` and `draft-pr`: skills and agents
+  work, but their slash commands and tools come from `register.ts`, Claude Code's
+  plugin-module API, which Qwen Code cannot load. The script drops their
+  `hooks/hooks.json` so Qwen Code does not warn about an invalid `modules` hook event.
+- **Skips** `handoff`, `prompt-optimizer` and `session-notes`, which are built
+  only on `register.ts`, and removes any earlier sync of them.
+- **Copies** output styles (`adhd-style`) to `~/.qwen/output-styles/`, since Qwen
+  Code drops them on install. Pick one with `/output-style`.
+
+`qwen extensions link` does not work here: it wants a `qwen-extension.json` in the source folder.
+
 ## Layout
 
 ```

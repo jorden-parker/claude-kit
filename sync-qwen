@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="Usage: ./sync-qwen [plugin...]
+Installs this repo's plugins into Qwen Code, replacing earlier syncs. Run it again after changes.
+Without arguments it syncs every plugin under plugins/. QWEN_HOME overrides ~/.qwen."
+
+case "${1:-}" in -h | --help) echo "$usage"; exit 0 ;; esac
+
+repository_root="$(cd "$(dirname "$0")" && pwd)"
+qwen_home="${QWEN_HOME:-$HOME/.qwen}"
+staging_root="$qwen_home/claude-kit"
+failed_plugins=()
+
+if [ "$#" -gt 0 ]; then
+  plugin_folders=()
+  for plugin_name in "$@"; do plugin_folders+=("$repository_root/plugins/$plugin_name"); done
+else
+  plugin_folders=("$repository_root"/plugins/*/)
+fi
+
+uses_module_api() {
+  [ -f "$1/hooks/hooks.json" ] && jq -e 'has("modules")' "$1/hooks/hooks.json" >/dev/null
+}
+
+has_qwen_loadable_parts() {
+  [ -d "$1/skills" ] || [ -d "$1/agents" ] || [ -d "$1/commands" ] || [ -f "$1/.mcp.json" ] ||
+    { [ -f "$1/hooks/hooks.json" ] && ! uses_module_api "$1"; }
+}
+
+remove_earlier_install() {
+  [ -d "$qwen_home/extensions/$1" ] && qwen extensions uninstall "$1" >/dev/null
+  return 0
+}
+
+stage_plugin() {
+  local plugin_folder="$1" staged_folder="$2"
+  mkdir -p "$staged_folder"
+  rsync -a --delete --exclude node_modules --exclude tests --exclude .git --exclude output-styles \
+    "$plugin_folder/" "$staged_folder/"
+  if uses_module_api "$plugin_folder"; then rm "$staged_folder/hooks/hooks.json"; fi
+}
+
+install_plugin() {
+  local plugin_folder="$1" plugin_name="$2" staged_folder="$staging_root/$2"
+  stage_plugin "$plugin_folder" "$staged_folder"
+  remove_earlier_install "$plugin_name"
+  if ! qwen extensions install "$staged_folder" --consent >/dev/null; then
+    echo "$plugin_name: FAILED to install"
+    failed_plugins+=("$plugin_name")
+    return 1
+  fi
+}
+
+sync_plugin() {
+  local plugin_folder="${1%/}" plugin_name
+  plugin_name="$(jq -r .name "$plugin_folder/.claude-plugin/plugin.json")"
+
+  if [ -d "$plugin_folder/output-styles" ]; then
+    mkdir -p "$qwen_home/output-styles"
+    cp "$plugin_folder"/output-styles/*.md "$qwen_home/output-styles/"
+    echo "$plugin_name: output style copied to $qwen_home/output-styles; pick it with /output-style"
+  fi
+
+  if ! has_qwen_loadable_parts "$plugin_folder"; then
+    remove_earlier_install "$plugin_name"
+    if uses_module_api "$plugin_folder"; then
+      echo "$plugin_name: skipped. It is built only on Claude Code's register.ts module API, which Qwen Code cannot load"
+    fi
+    return 0
+  fi
+
+  install_plugin "$plugin_folder" "$plugin_name" || return 0
+
+  if uses_module_api "$plugin_folder"; then
+    echo "$plugin_name: partial. Skills and agents installed; its slash commands and tools come from register.ts and are missing in Qwen Code"
+  elif grep -rqs transcript_path "$plugin_folder/hooks"; then
+    echo "$plugin_name: installed. Warning: some hooks read Claude Code's transcript format and may never block in Qwen Code"
+  else
+    echo "$plugin_name: installed"
+  fi
+}
+
+command -v qwen >/dev/null || { echo "qwen not found on PATH" >&2; exit 1; }
+for plugin_folder in "${plugin_folders[@]}"; do sync_plugin "$plugin_folder"; done
+rm -rf "$staging_root"
+
+if [ "${#failed_plugins[@]}" -gt 0 ]; then
+  echo "Failed: ${failed_plugins[*]}" >&2
+  exit 1
+fi

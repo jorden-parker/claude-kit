@@ -418,3 +418,15 @@ test("the example in the prompt sets no look, font or corners, so a model does n
   expect(exampleText).not.toContain('"headingFont"');
   expect(exampleText).not.toContain('"corners"');
 });
+
+test("renderSpecToHtml shows no caption for a picture a model described with a link", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["photo"] },
+      photo: { type: "Image", props: { alt: "https://images.example.com/photo-1?w=2600" } },
+    },
+  });
+  expect(html).not.toContain("images.example.com");
+  expect(html).toContain('aria-label="Picture"');
+});

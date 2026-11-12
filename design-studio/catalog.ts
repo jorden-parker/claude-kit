@@ -170,10 +170,12 @@ const PLACEMENT_CLASS_STEMS: Record<string, string> = {
 const renderArtFrame = (alt: string, ratio: string, frameClass: string, svgClass: string, drawing: string) =>
   `<div class="image image-art${frameClass} ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}"><svg class="graphic${svgClass}" viewBox="0 0 ${ART_WIDTHS[ratio]} ${ART_HEIGHT}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${drawing}</svg></div>`;
 
-const renderImage = (alt: string, ratio: string, art = "") =>
-  ART_DRAWINGS[art]
+const renderImage = (givenAlt: string, ratio: string, art = "") => {
+  const alt = /^\w+:\/\//.test(givenAlt) ? "Picture" : givenAlt;
+  return ART_DRAWINGS[art]
     ? renderArtFrame(alt, ratio, "", ` art-${art}`, ART_DRAWINGS[art])
-    : `<div class="image ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}">${IMAGE_ICON}<span>${escapeHtml(alt)}</span></div>`;
+    : `<div class="image ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}">${IMAGE_ICON}<span>${alt === givenAlt ? escapeHtml(alt) : ""}</span></div>`;
+};
 
 const renderIcon = (icon: string) =>
   `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_SHAPES[icon] ?? ICON_SHAPES.check}</svg>`;
@@ -991,7 +993,7 @@ export const buildCatalogPrompt = (tokens: StyleToken[]) =>
       "RULES FOR THE DESIGN",
       "- The root is a Page. A Nav, when the screen has one, is its first child.",
       "- One Hero or one Heading of level 1, never both. One primary Button per group of buttons.",
-      "- An Image is a real picture such as a product photo. A person is an Avatar.",
+      "- A picture is described in a few words, never with a link. A person is an Avatar.",
       "- Put things that belong side by side in a Grid or a Row, not in a long column.",
       "- Write real content for this product: real names, numbers and labels. No lorem ipsum and no placeholders.",
       "- Things side by side never repeat each other: every card, plan, stat and row has its own title and its own content.",

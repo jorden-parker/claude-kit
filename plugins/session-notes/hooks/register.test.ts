@@ -103,14 +103,28 @@ test("notes never reach the system prompt", async ($, on) => {
   expect(JSON.stringify(composed)).not.toContain("secret plan");
 });
 
-test("a long note keeps its lines and up to 2000 characters", async ($, on) => {
+test("a long note is kept whole", async ($, on) => {
   const store = mockEngine(on, "session-a");
-  const longNote = `## Left to do\n- [ ] ${"a".repeat(2100)}`;
+  const longNote = `## Left to do\n- [ ] ${"a".repeat(6000)}`;
 
   await $.tool.call({ tool: WRITE_NOTE_TOOL, text: longNote } as never);
 
   const [note] = store.get("notes") as Array<{ notes: string[] }>;
-  expect(note?.notes[0]).toBe(longNote.slice(0, 2000));
+  expect(note?.notes[0]).toBe(longNote);
+});
+
+test("a long note can be amended by its full text", async ($, on) => {
+  const longNote = `## Done\n- ${"b".repeat(6000)}`;
+  const store = mockEngine(on, "session-a", sessionWithNote(longNote));
+
+  await $.tool.call({
+    tool: AMEND_NOTE_TOOL,
+    old: longNote,
+    text: "Shorter note",
+  } as never);
+
+  const [note] = store.get("notes") as Array<{ notes: string[] }>;
+  expect(note?.notes).toEqual(["Shorter note", "Deploy is on Friday"]);
 });
 
 test("the pane shows formatted notes and no session data", async ($, on) => {
@@ -307,6 +321,31 @@ test("delete_note removes an existing note", async ($, on) => {
   expect(outcome).toEqual({
     result: "Note deleted and the notes pane opened.",
   });
+});
+
+test("deleting the last note of a session removes the session", async ($, on) => {
+  const store = mockEngine(on, "session-a", {
+    notes: [
+      { sessionId: "session-a", cwd: "/repo", startedAt: "", notes: ["Only"] },
+      { sessionId: "session-b", cwd: "/old", startedAt: "", notes: ["Kept"] },
+    ],
+  });
+
+  await $.tool.call({ tool: DELETE_NOTE_TOOL, text: "Only" } as never);
+
+  const sessions = store.get("notes") as Array<{ sessionId: string }>;
+  expect(sessions.map((session) => session.sessionId)).toEqual(["session-b"]);
+});
+
+test("writing a note drops older sessions that have no notes", async ($, on) => {
+  const store = mockEngine(on, "session-a", {
+    notes: [{ sessionId: "session-old", cwd: "/old", startedAt: "" }],
+  });
+
+  await $.tool.call({ tool: WRITE_NOTE_TOOL, text: "New note" } as never);
+
+  const sessions = store.get("notes") as Array<{ sessionId: string }>;
+  expect(sessions.map((session) => session.sessionId)).toEqual(["session-a"]);
 });
 
 test("delete_note refuses a note that does not exist", async ($, on) => {

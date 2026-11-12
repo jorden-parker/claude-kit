@@ -35,7 +35,7 @@ require_number() {
 
 list_notes() {
   jq -r '
-    (.notes // []) | to_entries | map(
+    [(.notes // [])[] | select((.notes // []) | length > 0)] | to_entries | map(
       .key as $session_index | .value as $session |
       ($session.startedAt // "") as $started_at |
       ["[\($session_index + 1)] \($started_at[0:10]) \($started_at[11:16]) UTC · \($session.cwd // "")"]
@@ -49,19 +49,22 @@ list_notes() {
   ' "$store_path"
 }
 
+keep_noted_sessions='map(select((.notes // []) | length > 0))'
+noted_sessions="(.notes // []) | $keep_noted_sessions"
+
 replace_note() {
   local session_number="$1" note_number="$2" replacement_json="$3"
   local session_index=$((session_number - 1)) note_index=$((note_number - 1))
-  jq -e --argjson session_index "$session_index" '.notes[$session_index] != null' \
+  jq -e --argjson session_index "$session_index" "$noted_sessions | .[\$session_index] != null" \
     "$store_path" > /dev/null || fail "No session $session_number."
   jq -e --argjson session_index "$session_index" --argjson note_index "$note_index" \
-    '(.notes[$session_index].notes // [])[$note_index] != null' \
+    "$noted_sessions | (.[\$session_index].notes // [])[\$note_index] != null" \
     "$store_path" > /dev/null || fail "No note $note_number in session $session_number."
   local updated_store
   updated_store="$(mktemp "$store_path.XXXXXX")"
   jq --argjson session_index "$session_index" --argjson note_index "$note_index" \
     --argjson replacement "$replacement_json" \
-    '.notes[$session_index].notes |= (.[:$note_index] + $replacement + .[$note_index + 1:])' \
+    ".notes = ($noted_sessions | .[\$session_index].notes |= (.[:\$note_index] + \$replacement + .[\$note_index + 1:]) | $keep_noted_sessions)" \
     "$store_path" > "$updated_store"
   mv "$updated_store" "$store_path"
 }
@@ -174,7 +177,7 @@ case "$1" in
     shift 3
     note_text="$(printf '%s' "$*" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
     [ -n "$note_text" ] || fail "The note needs some text."
-    replace_note "$session_number" "$note_number" "$(jq -cn --arg text "${note_text:0:500}" '[$text]')"
+    replace_note "$session_number" "$note_number" "$(jq -cn --arg text "$note_text" '[$text]')"
     printf 'Amended note %s in session %s.\n' "$note_number" "$session_number"
     ;;
   *)

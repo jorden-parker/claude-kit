@@ -110,7 +110,7 @@ func isQuit(command tea.Cmd) bool {
 	return isQuitMessage
 }
 
-func TestRowsListEverySessionWithItsNotesIndented(t *testing.T) {
+func TestRowsListEverySessionWithNotesWithItsNotesIndented(t *testing.T) {
 	store, _ := loadStore(writeStore(t, fixtureStore))
 	rowTexts := []string{}
 	for _, row := range buildRows(store.sessions()) {
@@ -121,7 +121,6 @@ func TestRowsListEverySessionWithItsNotesIndented(t *testing.T) {
 		"    Login bug was a stale cookie",
 		"    Deploy is on Friday",
 		"    Left to do …",
-		"2026-11-01 10:00  /old",
 	}, rowTexts)
 }
 
@@ -170,8 +169,8 @@ func TestDeleteAsksBeforeDeleting(t *testing.T) {
 
 func TestDeleteOnASessionRemovesTheWholeSession(t *testing.T) {
 	storePath := writeStore(t, fixtureStore)
-	pressKeys(openBrowser(t, storePath), "j", "j", "j", "j", "d", "y")
-	expectStrings(t, "sessions", []string{"session-b"}, storedSessionIds(t, storePath))
+	pressKeys(openBrowser(t, storePath), "d", "y")
+	expectStrings(t, "sessions", []string{}, storedSessionIds(t, storePath))
 }
 
 func TestEnterOpensTheSessionWithAVisibleWayBack(t *testing.T) {
@@ -240,8 +239,17 @@ func TestEmptiedNoteIsLeftAsItWas(t *testing.T) {
 	expectStrings(t, "notes", []string{"Login bug was a stale cookie", "Deploy is on Friday", "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test"}, storedNotes(t, storePath, 0))
 }
 
-func TestNoteTextIsCutAt2000Characters(t *testing.T) {
-	if length := len([]rune(normalizeNoteText(strings.Repeat("é", 2100)))); length != 2000 {
-		t.Errorf("expected 2000 characters, got %d", length)
+func TestLongNoteTextIsKeptWhole(t *testing.T) {
+	if length := len([]rune(normalizeNoteText(strings.Repeat("é", 6000)))); length != 6000 {
+		t.Errorf("expected 6000 characters, got %d", length)
 	}
+}
+
+func TestDeletingTheLastNoteRemovesTheSession(t *testing.T) {
+	storePath := writeStore(t, `{"notes": [
+  {"sessionId": "only-note", "notes": ["Only"]},
+  {"sessionId": "kept", "notes": ["Kept"]}
+]}`)
+	pressKeys(openBrowser(t, storePath), "j", "d", "y")
+	expectStrings(t, "sessions", []string{"kept"}, storedSessionIds(t, storePath))
 }

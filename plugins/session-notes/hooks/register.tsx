@@ -12,7 +12,6 @@ const NOTES_PANE = "session-notes";
 const PANE_TITLE = "Session notes";
 const MAX_SESSIONS = 100;
 const MAX_ENTRIES_PER_LIST = 100;
-const MAX_ENTRY_LENGTH = 2000;
 const WRITE_NOTE_TOOL_NAME = "write_note";
 const QUALIFIED_WRITE_NOTE_TOOL_NAME = `mcp__session-notes__${WRITE_NOTE_TOOL_NAME}`;
 const WRITE_NOTE_TOOL_SCHEMA = {
@@ -59,19 +58,19 @@ const SESSION_SUMMARY_TOPIC = `a short summary of this session, in exactly this 
 ## Done
 - each result of the session: what changed, what was decided and why`;
 const NOTE_WRITING_RULES =
-  "Lead with anything still to do. Write outcomes in plain words, one idea per bullet, under 1500 characters. Leave out tool calls, commands, file reads, logs, code and step-by-step narration.";
+  "Lead with anything still to do. Write outcomes in plain words, one idea per bullet, kept short. Leave out tool calls, commands, file reads, logs, code and step-by-step narration.";
 
 const readNotes = async (engine: EngineInterface): Promise<SessionNote[]> => {
   const storedNotes = await engine.store.get(NOTES_KEY);
   return Array.isArray(storedNotes) ? (storedNotes as SessionNote[]) : [];
 };
 
+const hasNotes = (session: SessionNote) => (session.notes ?? []).length > 0;
+
 const appendEntries = (existing: string[], additions: string[] = []) =>
   [
     ...existing,
-    ...additions
-      .map((entry) => entry.slice(0, MAX_ENTRY_LENGTH))
-      .filter((entry) => !existing.includes(entry)),
+    ...additions.filter((entry) => !existing.includes(entry)),
   ].slice(-MAX_ENTRIES_PER_LIST);
 
 let pendingWrite: Promise<void> = Promise.resolve();
@@ -88,7 +87,9 @@ const addToSessionNote = (engine: EngineInterface, noteText: string) => {
         cwd: await engine.session.cwd(),
         startedAt: new Date().toISOString(),
       };
-      const otherNotes = notes.filter((note) => note.sessionId !== sessionId);
+      const otherNotes = notes.filter(
+        (note) => note.sessionId !== sessionId && hasNotes(note)
+      );
       await engine.store.set(
         NOTES_KEY,
         [
@@ -116,18 +117,17 @@ const replaceSessionNote = (
       const notes = await readNotes(engine);
       const currentNote = notes.find((note) => note.sessionId === sessionId);
       const sessionNotes = currentNote?.notes ?? [];
-      const storedOldText = oldText.slice(0, MAX_ENTRY_LENGTH);
-      if (!sessionNotes.includes(storedOldText)) return false;
+      if (!sessionNotes.includes(oldText)) return false;
       const amendedNotes = sessionNotes.flatMap((noteText) =>
-        noteText === storedOldText
-          ? replacementNotes.map((entry) => entry.slice(0, MAX_ENTRY_LENGTH))
-          : [noteText]
+        noteText === oldText ? replacementNotes : [noteText]
       );
       await engine.store.set(
         NOTES_KEY,
-        notes.map((note) =>
-          note === currentNote ? { ...note, notes: amendedNotes } : note
-        )
+        notes
+          .map((note) =>
+            note === currentNote ? { ...note, notes: amendedNotes } : note
+          )
+          .filter(hasNotes)
       );
       engine.ui.invalidate("ui.render");
       return true;
@@ -269,9 +269,7 @@ export const register: Register = (on) => {
     { component: "Pane", requestId: NOTES_PANE },
     async ($, e) => {
       const { Box, Text } = $.ui.resolve(e);
-      const notedSessions = (await readNotes($)).filter(
-        (session) => (session.notes ?? []).length > 0
-      );
+      const notedSessions = (await readNotes($)).filter(hasNotes);
       if (notedSessions.length === 0)
         return (
           <Text dimColor>

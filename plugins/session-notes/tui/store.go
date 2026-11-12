@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const maxNoteLength = 2000
-
 type session struct {
 	StartedAt        string            `json:"startedAt"`
 	WorkingDirectory string            `json:"cwd"`
@@ -40,6 +38,7 @@ func loadStore(storePath string) (*noteStore, error) {
 			return nil, err
 		}
 	}
+	store.dropSessionsWithoutNotes()
 	return store, nil
 }
 
@@ -66,11 +65,7 @@ func normalizeNoteText(text string) string {
 	for i, line := range lines {
 		lines[i] = strings.TrimRight(line, " \t")
 	}
-	normalized := []rune(strings.Trim(strings.Join(lines, "\n"), "\n "))
-	if len(normalized) > maxNoteLength {
-		normalized = normalized[:maxNoteLength]
-	}
-	return string(normalized)
+	return strings.Trim(strings.Join(lines, "\n"), "\n ")
 }
 
 func (store *noteStore) deleteSession(sessionIndex int) error {
@@ -100,7 +95,18 @@ func (store *noteStore) replaceNote(sessionIndex, noteIndex int, replacement []s
 	return store.save()
 }
 
+func (store *noteStore) dropSessionsWithoutNotes() {
+	notedSessions := []json.RawMessage{}
+	for i, parsedSession := range store.sessions() {
+		if len(parsedSession.Notes) > 0 {
+			notedSessions = append(notedSessions, store.rawSessions[i])
+		}
+	}
+	store.rawSessions = notedSessions
+}
+
 func (store *noteStore) save() error {
+	store.dropSessionsWithoutNotes()
 	encodedSessions, _ := json.Marshal(store.rawSessions)
 	store.document["notes"] = encodedSessions
 	encodedDocument, _ := json.Marshal(store.document)

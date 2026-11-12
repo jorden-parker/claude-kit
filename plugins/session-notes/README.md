@@ -30,7 +30,7 @@ Notes live in this plugin's own store (`$.store`, key `notes`), which persists a
 
 The plugin never adds saved notes to the system prompt, the context or a tool result, so they cost Claude no tokens and Claude cannot read them back unless you paste them in. Claude only sees the notes it writes itself, at the moment it writes them.
 
-Limits keep the store small: the latest 100 sessions, 100 notes per session, 2000 characters per note. Repeated entries are kept once.
+Limits keep the store small: the latest 100 sessions with notes, 100 notes per session. Notes are kept whole, however long. Repeated entries are kept once. Sessions without notes, such as ones left by older versions or emptied by deleting their last note, are never shown and are dropped from the store on the next change.
 
 ## Outside Claude Code
 

@@ -36,10 +36,8 @@ stored_notes_of_first_session() {
 write_fixture_store
 expected_listing='[1] 2026-11-12 09:30 UTC · /repo
   note 1 Login bug was a stale cookie
-  note 2 Deploy is on Friday
-
-[2] 2026-11-01 10:00 UTC · /old'
-expect_equal "list shows sessions newest first with numbered notes and no session data" \
+  note 2 Deploy is on Friday'
+expect_equal "list shows sessions with notes, newest first, numbered, and no session data" \
   "$expected_listing" "$(bash "$cli_path" list)"
 
 printf '%s' '{"notes": [{"sessionId": "s", "cwd": "/repo", "startedAt": "2026-11-12T09:30:00.000Z", "notes": ["## Left to do\nnote the deploy"]}]}' \
@@ -53,7 +51,7 @@ write_fixture_store
 output="$(bash "$cli_path" delete 1 1)"
 expect_equal "delete reports the deleted note" "Deleted note 1 from session 1." "$output"
 expect_equal "delete removes only that note" '["Deploy is on Friday"]' "$(stored_notes_of_first_session)"
-expect_equal "delete keeps the other sessions" '"session-a"' "$(jq -c '.notes[1].sessionId' "$SESSION_NOTES_STORE")"
+expect_equal "delete drops sessions without notes" '["session-b"]' "$(jq -c '[.notes[].sessionId]' "$SESSION_NOTES_STORE")"
 
 write_fixture_store
 output="$(bash "$cli_path" delete 1 3 2>&1)"
@@ -65,7 +63,23 @@ expect_equal "delete of a missing note changes nothing" \
 
 write_fixture_store
 output="$(bash "$cli_path" delete 2 1 2>&1)"
-expect_equal "delete in a session without notes says why" "No note 1 in session 2." "$output"
+expect_equal "a session without notes has no number" "No session 2." "$output"
+
+printf '%s' '{"notes": [{"sessionId": "empty"}, {"sessionId": "noted", "notes": ["Only note"]}, {"sessionId": "other", "notes": ["Other"]}]}' \
+  > "$SESSION_NOTES_STORE"
+expect_equal "numbers skip sessions without notes" '[1]   UTC · 
+  note 1 Only note
+
+[2]   UTC · 
+  note 1 Other' "$(bash "$cli_path" list)"
+bash "$cli_path" delete 1 1 > /dev/null
+expect_equal "deleting the last note removes its session and empty ones" '["other"]' \
+  "$(jq -c '[.notes[].sessionId]' "$SESSION_NOTES_STORE")"
+
+long_note="$(printf 'x%.0s' $(seq 1 6000))"
+write_fixture_store
+bash "$cli_path" amend 1 1 "$long_note" > /dev/null
+expect_equal "amend keeps a long note whole" "6000" "$(jq -r '.notes[0].notes[0] | length' "$SESSION_NOTES_STORE")"
 
 write_fixture_store
 output="$(bash "$cli_path" delete 5 1 2>&1)"

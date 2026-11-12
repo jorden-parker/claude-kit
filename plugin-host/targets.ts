@@ -9,6 +9,8 @@ import {
   type HostedPlugin,
 } from "./pi-extension";
 
+export { createPiHookExtension } from "./pi-hooks";
+
 type BundledPlugin = Omit<HostedPlugin, "storeFolder">;
 
 const STORE_FOLDER = "claude-kit-store";

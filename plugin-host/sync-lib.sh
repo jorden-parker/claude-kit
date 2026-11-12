@@ -31,12 +31,16 @@ uses_module_api() {
   [ -f "$1/hooks/hooks.json" ] && jq -e 'has("modules")' "$1/hooks/hooks.json" >/dev/null
 }
 
+uses_command_hooks() {
+  [ -f "$1/hooks/hooks.json" ] && jq -e 'has("hooks")' "$1/hooks/hooks.json" >/dev/null
+}
+
 stage_plugin() {
   local target="$1" plugin_folder="$2" staged_folder="$3"
   mkdir -p "$staged_folder"
   rsync -a --delete --exclude node_modules --exclude tests --exclude .git --exclude output-styles \
     "$plugin_folder/" "$staged_folder/"
-  if uses_module_api "$plugin_folder"; then
+  if uses_module_api "$plugin_folder" || { [ "$target" = pi ] && uses_command_hooks "$plugin_folder"; }; then
     bun "$repository_root/plugin-host/build.ts" "$target" "$plugin_folder" "$staged_folder"
   fi
 }

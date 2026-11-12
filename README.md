@@ -60,7 +60,7 @@ any change here.
 ```
 ./sync-qwen              # every plugin
 ./sync-qwen tdd guards   # only these
-./sync-pi                # every register.ts plugin, for your user
+./sync-pi                # every plugin with a register.ts module or command hooks, for your user
 ./sync-pi --local        # for the project in the current folder only
 ```
 
@@ -110,10 +110,35 @@ servers on install.
 - **Output styles** (`adhd-style`) are copied to `~/.qwen/output-styles/`, since Qwen
   Code drops them on install. Pick one with `/output-style`.
 
-`sync-pi` builds each register.ts plugin as a local pi package under
-`~/.pi/agent/claude-kit/<plugin>/` and adds it with `pi install`. It skips hook-only
-and output-style plugins: pi runs no Claude Code hooks. pi has no subagents, so
-`/brainstorm build` and the plan clarity pass cannot delegate there.
+`sync-pi` builds each register.ts plugin and each plugin with Claude Code command
+hooks as a local pi package under `~/.pi/agent/claude-kit/<plugin>/` and adds it with
+`pi install`. It skips output-style plugins. pi has no subagents, so `/brainstorm build`
+and the plan clarity pass cannot delegate there.
+
+### How command hooks run in pi
+
+pi has no hook config, so `plugin-host/pi-hooks.ts` runs a plugin's unchanged
+`hooks/hooks.json` command hooks inside a pi extension, `pi-hooks-extension.js`. Each
+hook gets Claude Code's stdin JSON (`session_id`, `cwd`, `hook_event_name`,
+`tool_name`, `tool_input`, `tool_response`, `transcript_path`), and runs with
+`CLAUDE_PLUGIN_ROOT` and `CLAUDE_PROJECT_DIR` set.
+
+| Claude Code hook | pi event | What the bridge does |
+| --- | --- | --- |
+| `SessionStart` | `session_start`, injected by `before_agent_start` | stdout and `additionalContext` reach the first prompt |
+| `PreToolUse` | `tool_call` | exit 2 or a deny decision blocks; `additionalContext` is added to that call's result |
+| `PostToolUse` | `tool_result` | exit 2 or `decision: "block"` feeds the reason back; `updatedToolOutput` replaces the text |
+| `Stop` | `agent_before_settle` | exit 2 or a block decision asks for one more turn, and the follow-up sets `stop_hook_active` |
+
+- Tool names and inputs take Claude Code's shape: `bash` is `Bash`, `edit` is `Edit`
+  with `old_string`/`new_string` joined over all its edits, `read` is `Read`, `find` is
+  `Glob`, and paths become absolute `file_path`.
+- `transcript_path` is a temporary Claude Code-style JSONL of the current branch, with
+  user prompts and tool calls. It has no tool results, and bash commands do not count
+  as edits.
+- `SubagentStop` has no pi event and is skipped. `updatedInput` and `ask` decisions are
+  not reproduced. Matching hooks run in parallel and every one runs, even after another
+  blocks. When several replace a tool's output, the last replacement wins.
 
 `./sync-pi --local` builds the packages under `.pi/claude-kit/` of the current folder
 and lists them in its `.pi/settings.json`, so only that project gets them. This repo

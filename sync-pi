@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage="Usage: ./sync-pi [--local] [plugin...]
-Installs this repo's register.ts plugins into pi as local packages. Run it again after changes.
+Installs this repo's plugins into pi as local packages: register.ts modules and Claude Code command hooks. Run it again after changes.
 Without arguments it syncs every plugin under plugins/. PI_CODING_AGENT_DIR overrides ~/.pi/agent.
 --local installs into the current folder's .pi/settings.json instead, for that project only."
 
@@ -27,8 +27,8 @@ sync_plugin() {
   plugin_name="$(read_plugin_name "$plugin_folder")"
   package_folder="$package_root/$plugin_name"
 
-  if ! uses_module_api "$plugin_folder"; then
-    echo "$plugin_name: skipped. It has no register.ts module, and pi runs no Claude Code hooks or output styles"
+  if ! uses_module_api "$plugin_folder" && ! uses_command_hooks "$plugin_folder"; then
+    echo "$plugin_name: skipped. It has no register.ts module or Claude Code command hooks, and pi has no output styles"
     return 0
   fi
 
@@ -38,8 +38,14 @@ sync_plugin() {
     return 0
   fi
 
+  local hooks_note=""
+  if [ -f "$package_folder/pi-hooks-extension.js" ]; then
+    hooks_note=". Its command hooks run in a second pi extension, minus the events pi cannot run (see the README)"
+  fi
   if [ -f "$package_folder/plugin-host-extension.js" ]; then
-    echo "$plugin_name: $installed_where Its tools run in a pi extension and its slash commands as prompt templates; panes, autocomplete, composer fill and subagents stay in Claude Code"
+    echo "$plugin_name: $installed_where Its tools run in a pi extension and its slash commands as prompt templates; panes, autocomplete, composer fill and subagents stay in Claude Code$hooks_note"
+  elif [ -n "$hooks_note" ]; then
+    echo "$plugin_name: $installed_where Its command hooks run in a pi extension, minus the events pi cannot run (see the README)."
   else
     echo "$plugin_name: $installed_where Its slash commands run as prompt templates in pi"
   fi

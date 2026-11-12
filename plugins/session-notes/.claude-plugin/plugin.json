@@ -1,0 +1,5 @@
+{
+  "name": "session-notes",
+  "version": "0.1.0",
+  "description": "Notes each session's prompts, edited files and commands into the plugin store, never into Claude's context; /notes shows them in a pane"
+}

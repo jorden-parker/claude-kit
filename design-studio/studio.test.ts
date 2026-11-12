@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderStylesheet } from "./catalog";
+import { pickDesignMoves, renderStylesheet } from "./catalog";
 import {
   runStudio,
   type ChatMessage,
@@ -267,4 +267,18 @@ test("runStudio reports a failure and throws when every variant stays refused", 
     runStudio({ brief: "Recipe onboarding", variantCount: 1, projectFolder }, tools)
   ).rejects.toThrow("needs a name and html.");
   expect(events.at(-1)!.kind).toBe("failed");
+});
+
+test("runStudio gives each variant its own creative brief, drawn with the random source it is handed", async () => {
+  const projectFolder = await makeProject(SAVED_THEME);
+  const { tools, conversations } = makeTools(projectFolder, [OPENED_REPLY]);
+  const drawnNumbers = [0, 0, 0, 0, 0.99, 0.99, 0.99, 0.99];
+  await runStudio(
+    { brief: "Recipe onboarding", variantCount: 2, projectFolder },
+    { ...tools, random: () => drawnNumbers.shift() ?? 0.5 }
+  );
+  const [firstPrompt, secondPrompt] = [conversations[0]![1]!.content, conversations[1]![1]!.content];
+  expect(firstPrompt).toContain(pickDesignMoves(() => 0));
+  expect(secondPrompt).toContain(pickDesignMoves(() => 0.99));
+  expect(firstPrompt).not.toContain(pickDesignMoves(() => 0.99));
 });

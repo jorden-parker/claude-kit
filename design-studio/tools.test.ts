@@ -29,7 +29,11 @@ const TOKEN_SOURCE = [
 const SPEC = {
   root: "page",
   elements: {
-    page: { type: "Page", props: {}, children: ["title", "card", "field", "save"] },
+    page: { type: "Page", props: {}, children: ["logo", "title", "card", "field", "save", "picture", "drawing", "icon"] },
+    logo: { type: "Logo", props: { name: "Cook", shape: "hexagon", icon: "leaf" } },
+    picture: { type: "Image", props: { alt: "A sunrise", art: "sun" } },
+    drawing: { type: "Graphic", props: { alt: "Shapes", shapes: [{ shape: "ring", x: 30, y: 40, size: 50, tone: "accent" }] } },
+    icon: { type: "Icon", props: { icon: "bolt", size: "lg" } },
     title: { type: "Heading", props: { text: "Cook tonight", level: "1" } },
     card: { type: "Card", props: { tone: "accent" }, children: ["stat", "badge"] },
     stat: { type: "Stat", props: { label: "Recipes", value: "42", detail: "this week" } },

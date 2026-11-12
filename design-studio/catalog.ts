@@ -50,6 +50,72 @@ const ICON_SHAPES: Record<string, string> = {
   bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/>',
   gift: '<rect x="3" y="9" width="18" height="12"/><path d="M12 9v12M3 13h18M12 9c-2-4-7-3-5 0zM12 9c2-4 7-3 5 0z"/>',
 };
+const LOGO_SHAPES: Record<string, string> = {
+  circle: '<circle cx="20" cy="20" r="18"/>',
+  square: '<rect x="3" y="3" width="34" height="34" rx="8"/>',
+  diamond: '<rect x="6" y="6" width="28" height="28" rx="4" transform="rotate(45 20 20)"/>',
+  hexagon: '<path d="M20 2l15.6 9v18L20 38 4.4 29V11z"/>',
+  shield: '<path d="M20 2l15 5v12c0 10-6.5 15.5-15 19-8.5-3.5-15-9-15-19V7z"/>',
+  blob: '<path d="M21 2c9 0 17 6 17 16s-6 20-18 20S2 30 2 20 10 2 21 2z"/>',
+};
+const ART_HEIGHT = 100;
+const ART_WIDTHS: Record<string, number> = { square: 100, wide: 160, tall: 75 };
+const SHAPE_TONES = ["accent", "ink", "muted", "surface"];
+const countUp = (count: number) => Array.from({ length: count }, (_, index) => index);
+const ART_DRAWINGS: Record<string, string> = {
+  waves: [62, 74, 86]
+    .map(
+      (height, waveIndex) =>
+        `<path class="tone-accent" opacity="${0.25 + waveIndex * 0.25}" d="M0 ${height}q20-14 40 0t40 0 40 0 40 0V100H0z"/>`
+    )
+    .join(""),
+  dots: countUp(40)
+    .map(
+      (dotIndex) =>
+        `<circle class="tone-accent" opacity="${(0.2 + (dotIndex % 8) * 0.1).toFixed(1)}" cx="${10 + (dotIndex % 8) * 20}" cy="${10 + Math.floor(dotIndex / 8) * 20}" r="${2 + (dotIndex % 5)}"/>`
+    )
+    .join(""),
+  rings: countUp(6)
+    .map(
+      (ringIndex) =>
+        `<circle class="tone-accent outline" opacity="${(1 - ringIndex * 0.14).toFixed(2)}" cx="110" cy="60" r="${12 + ringIndex * 16}" stroke-width="3"/>`
+    )
+    .join(""),
+  sun: '<circle class="tone-accent" cx="80" cy="62" r="26"/><path class="tone-ink" opacity="0.85" d="M0 74q40-22 80-6t80-8v40H0z"/><path class="tone-accent outline" stroke-width="2" d="M80 22v-10M46 34l-8-7M114 34l8-7"/>',
+  hills:
+    '<circle class="tone-surface" cx="122" cy="26" r="10"/><path class="tone-accent" opacity="0.35" d="M0 70l40-34 36 26 30-20 54 34v24H0z"/><path class="tone-accent" opacity="0.7" d="M0 84q46-34 86-8t74-14v38H0z"/><path class="tone-ink" opacity="0.8" d="M0 94q60-18 160-4v10H0z"/>',
+  stripes: countUp(12)
+    .map(
+      (stripeIndex) =>
+        `<path class="tone-accent outline" opacity="${0.25 + (stripeIndex % 3) * 0.25}" stroke-width="7" d="M${-80 + stripeIndex * 24} 110l90-120"/>`
+    )
+    .join(""),
+  grid:
+    countUp(9)
+      .map((lineIndex) => `<path class="tone-accent outline" opacity="0.4" stroke-width="1" d="M${lineIndex * 20} 0v100M0 ${lineIndex * 20}h160"/>`)
+      .join("") + '<rect class="tone-accent" x="60" y="20" width="40" height="40"/><rect class="tone-ink" x="100" y="60" width="20" height="20"/>',
+};
+const STAR_POINTS = countUp(10)
+  .map((pointIndex) => {
+    const reach = pointIndex % 2 ? 0.2 : 0.5;
+    const angle = (pointIndex * Math.PI) / 5;
+    return `${(Math.sin(angle) * reach).toFixed(3)},${(-Math.cos(angle) * reach).toFixed(3)}`;
+  })
+  .join(" ");
+const DRAWN_SHAPES: Record<string, { isOutline?: boolean; draw: (size: number) => string }> = {
+  circle: { draw: (size) => `<circle r="${size / 2}"/>` },
+  ring: { isOutline: true, draw: (size) => `<circle r="${size / 2}" stroke-width="${size / 8}"/>` },
+  square: { draw: (size) => `<rect x="${-size / 2}" y="${-size / 2}" width="${size}" height="${size}"/>` },
+  diamond: { draw: (size) => `<rect x="${-size / 2}" y="${-size / 2}" width="${size}" height="${size}" transform="rotate(45)"/>` },
+  triangle: { draw: (size) => `<path d="M0 ${-size / 2}L${size / 2} ${size / 2}H${-size / 2}z"/>` },
+  half: { draw: (size) => `<path d="M${-size / 2} 0a${size / 2} ${size / 2} 0 0 1 ${size} 0z"/>` },
+  star: { draw: (size) => `<polygon points="${STAR_POINTS}" transform="scale(${size})"/>` },
+  line: { isOutline: true, draw: (size) => `<path d="M${-size / 2} 0H${size / 2}" stroke-width="3"/>` },
+  wave: {
+    isOutline: true,
+    draw: (size) => `<path d="M${-size / 2} 0q${size / 8}-${size / 4} ${size / 4} 0t${size / 4} 0 ${size / 4} 0 ${size / 4} 0" stroke-width="3"/>`,
+  },
+};
 const TRUTH_BY_WORD: Record<string, boolean> = { true: true, false: false };
 const IMAGE_ICON =
   '<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>';
@@ -101,11 +167,39 @@ const PLACEMENT_CLASS_STEMS: Record<string, string> = {
   maxWidth: "max-width",
 };
 
-const renderImage = (alt: string, ratio: string) =>
-  `<div class="image ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}">${IMAGE_ICON}<span>${escapeHtml(alt)}</span></div>`;
+const renderArtFrame = (alt: string, ratio: string, frameClass: string, svgClass: string, drawing: string) =>
+  `<div class="image image-art${frameClass} ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}"><svg class="graphic${svgClass}" viewBox="0 0 ${ART_WIDTHS[ratio]} ${ART_HEIGHT}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${drawing}</svg></div>`;
+
+const renderImage = (alt: string, ratio: string, art = "") =>
+  ART_DRAWINGS[art]
+    ? renderArtFrame(alt, ratio, "", ` art-${art}`, ART_DRAWINGS[art])
+    : `<div class="image ratio-${ratio}" role="img" aria-label="${escapeHtml(alt)}">${IMAGE_ICON}<span>${escapeHtml(alt)}</span></div>`;
 
 const renderIcon = (icon: string) =>
-  `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_SHAPES[icon]}</svg>`;
+  `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_SHAPES[icon] ?? ICON_SHAPES.check}</svg>`;
+
+const renderLogoMark = (name: string, shape: string, icon: string) =>
+  `<svg class="logo-mark logo-${shape}" viewBox="0 0 40 40" aria-hidden="true">${LOGO_SHAPES[shape]}${
+    ICON_SHAPES[icon]
+      ? `<g class="logo-icon" transform="translate(9 9) scale(0.92)">${ICON_SHAPES[icon]}</g>`
+      : `<text class="logo-letter" x="20" y="21" text-anchor="middle" dominant-baseline="central">${escapeHtml(name.trim().charAt(0).toUpperCase())}</text>`
+  }</svg>`;
+
+const shapeProps = z.object({
+  shape: defineOption(Object.keys(DRAWN_SHAPES), "circle"),
+  x: z.coerce.number().min(0).max(100).default(50),
+  y: z.coerce.number().min(0).max(100).default(50),
+  size: z.coerce.number().min(1).max(100).default(30),
+  tone: defineOption(SHAPE_TONES, "accent"),
+  rotate: z.coerce.number().default(0),
+});
+
+const renderShape = (givenShape: unknown, ratio: string) => {
+  if (!givenShape || typeof givenShape !== "object") return "";
+  const drawn = readProps(shapeProps, { type: "Shape", props: givenShape as Record<string, unknown> });
+  const { isOutline, draw } = DRAWN_SHAPES[drawn.shape]!;
+  return `<g transform="translate(${(drawn.x * ART_WIDTHS[ratio]!) / 100} ${drawn.y}) rotate(${drawn.rotate})" class="tone-${drawn.tone}${isOutline ? " outline" : ""}">${draw(drawn.size)}</g>`;
+};
 
 const renderHeading = (text: string, level: string) =>
   text ? `<h${level} class="heading heading-${level}">${escapeHtml(text)}</h${level}>` : "";
@@ -151,15 +245,22 @@ const components = {
       `<main class="page"><div class="page-inner page-${props.width} spacing-${props.spacing}">${children}</div></main>`
   ),
   Nav: defineComponent(
-    "The top bar: a brand, links, and one optional action button. The first child of the Page. Layout centered puts the brand in the middle.",
-    z.object({ brand: plainText, items: textList, action: plainText, layout: defineOption(["spread", "centered"], "spread") }),
+    "The top bar: a brand, links, and one optional action button. The first child of the Page. Layout centered puts the brand in the middle. logo draws a mark of that shape before the brand, holding the icon named in logoIcon or else the brand's first letter.",
+    z.object({
+      brand: plainText,
+      items: textList,
+      action: plainText,
+      layout: defineOption(["spread", "centered"], "spread"),
+      logo: defineOption(["none", ...Object.keys(LOGO_SHAPES)], "none"),
+      logoIcon: plainText,
+    }),
     (props) =>
-      `<nav class="nav nav-${props.layout}"><span class="nav-brand">${escapeHtml(props.brand)}</span><span class="nav-links">${props.items
+      `<nav class="nav nav-${props.layout}"><span class="nav-brand">${props.logo === "none" ? "" : renderLogoMark(props.brand, props.logo, props.logoIcon)}${escapeHtml(props.brand)}</span><span class="nav-links">${props.items
         .map((link: string) => `<a href="#">${escapeHtml(link)}</a>`)
         .join("")}</span>${renderButton(props.action, "primary")}</nav>`
   ),
   Hero: defineComponent(
-    "The opening of a landing, onboarding or pricing screen: a small badge, the level 1 title, a sentence, up to two buttons, and an optional picture described in image, which sits beside the text on the side you choose.",
+    "The opening of a landing, onboarding or pricing screen: a small badge, the level 1 title, a sentence, up to two buttons, and an optional picture described in image, which sits beside the text on the side you choose. imageArt draws that picture as one of the ARTWORK names.",
     z.object({
       badge: plainText,
       title: plainText,
@@ -168,12 +269,13 @@ const components = {
       secondaryAction: plainText,
       align: defineOption(["center", "start"], "center"),
       image: plainText,
+      imageArt: plainText,
       imageSide: defineOption(["right", "left"], "right"),
     }),
     (props) => {
       const copy = `${renderBadge(props.badge, "neutral")}<h1 class="heading heading-1">${escapeHtml(props.title)}</h1>${renderText(props.text, "text-muted text-lg")}<div class="row gap-sm items-center">${renderButton(props.primaryAction, "primary")}${renderButton(props.secondaryAction, "secondary")}</div>`;
       return props.image
-        ? `<header class="hero hero-split hero-image-${props.imageSide}"><div class="hero-copy">${copy}</div>${renderImage(props.image, "wide")}</header>`
+        ? `<header class="hero hero-split hero-image-${props.imageSide}"><div class="hero-copy">${copy}</div>${renderImage(props.image, "wide", props.imageArt)}</header>`
         : `<header class="hero hero-${props.align}">${copy}</header>`;
     }
   ),
@@ -320,13 +422,55 @@ const components = {
     (props) => renderAvatar(props.name, props.detail)
   ),
   Image: defineComponent(
-    "A picture placeholder with a description of the picture.",
-    z.object({ alt: plainText, ratio: defineOption(readKeys(IMAGE_RATIOS), "wide") }),
-    (props) => renderImage(props.alt, props.ratio)
+    "A picture. With art it is drawn artwork in the theme's colors; with art photo it is a placeholder for a photo, described in alt.",
+    z.object({
+      alt: plainText,
+      ratio: defineOption(readKeys(IMAGE_RATIOS), "wide"),
+      art: defineOption(["photo", ...Object.keys(ART_DRAWINGS)], "photo"),
+    }),
+    (props) => renderImage(props.alt, props.ratio, props.art)
+  ),
+  Graphic: defineComponent(
+    "A picture you draw yourself from shapes, such as a record, a sunrise, a coffee cup or an abstract pattern. Each shape has x and y from 0 to 100 (its center, from the left and from the top), size from 1 to 100, and rotate in degrees. Shapes later in the list lie on top. Use 4 to 10 shapes.",
+    z.object({
+      alt: plainText,
+      ratio: defineOption(readKeys(IMAGE_RATIOS), "wide"),
+      background: defineOption(["muted", "accent", "plain"], "muted"),
+      shapes: z.array(z.unknown()).default([]),
+    }),
+    (props) =>
+      renderArtFrame(
+        props.alt,
+        props.ratio,
+        ` graphic-${props.background}`,
+        "",
+        props.shapes.map((givenShape: unknown) => renderShape(givenShape, props.ratio)).join("")
+      )
+  ),
+  Logo: defineComponent(
+    "A brand mark you design: a shape holding an icon from ICONS, or the first letter of the name when icon is empty, beside the name and an optional tagline.",
+    z.object({
+      name: plainText,
+      shape: defineOption(Object.keys(LOGO_SHAPES), "circle"),
+      icon: plainText,
+      tagline: plainText,
+      size: defineOption(["sm", "md", "lg"], "md"),
+    }),
+    (props) =>
+      `<div class="logo logo-${props.size}">${renderLogoMark(props.name, props.shape, props.icon)}<span class="logo-text"><span class="logo-name">${escapeHtml(props.name)}</span>${props.tagline ? `<span class="logo-tagline">${escapeHtml(props.tagline)}</span>` : ""}</span></div>`
+  ),
+  Icon: defineComponent(
+    "One icon from ICONS on its own, as a decoration or a marker.",
+    z.object({
+      icon: plainText,
+      size: defineOption(["sm", "md", "lg"], "md"),
+      tone: defineOption(["accent", "ink", "muted"], "accent"),
+    }),
+    (props) => `<span class="icon icon-${props.size} icon-${props.tone}">${renderIcon(props.icon)}</span>`
   ),
   Feature: defineComponent(
-    "One benefit or fact: an icon, a short title and a sentence. Several sit in a Grid.",
-    z.object({ icon: defineOption(Object.keys(ICON_SHAPES), "check"), title: plainText, text: plainText }),
+    "One benefit or fact: an icon from ICONS, a short title and a sentence. Several sit in a Grid.",
+    z.object({ icon: plainText, title: plainText, text: plainText }),
     (props) =>
       `<div class="feature"><span class="feature-icon">${renderIcon(props.icon)}</span>${renderHeading(props.title, "3")}${renderText(props.text, "text-muted text-md")}</div>`
   ),
@@ -704,7 +848,33 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     ".nav .button{min-height:36px;padding:6px 14px}",
     `.image{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;max-height:240px;padding:16px;border-radius:${radius};background:linear-gradient(135deg,${muted},color-mix(in srgb,${accent} 24%,${muted}));font-size:14px;text-align:center;${quietStyle}}`,
     ...Object.entries(IMAGE_RATIOS).map(([name, ratio]) => `.ratio-${name}{aspect-ratio:${ratio}}`),
-    ".grid .image{aspect-ratio:4 / 3}",
+    ".grid .image:not(.image-art){aspect-ratio:4 / 3}",
+    ".image-art{position:relative;overflow:hidden;max-height:360px;padding:0}",
+    ".graphic{position:absolute;inset:0;width:100%;height:100%}",
+    ...Object.entries({ accent, ink, muted, surface }).map(([name, color]) => `.graphic .tone-${name}{fill:${color};stroke:${color}}`),
+    ".graphic :not(.outline):not(.outline *){stroke-width:0}",
+    ".graphic .outline{fill:none}",
+    ".graphic .outline{stroke-linecap:round}",
+    `.graphic-accent{background:${accent}}`,
+    ".graphic-plain{background:transparent}",
+    ".logo{display:flex;align-items:center;gap:12px}",
+    ".logo-mark{flex:none;width:40px;height:40px}",
+    ".logo-sm .logo-mark{width:28px;height:28px}",
+    ".logo-lg .logo-mark{width:72px;height:72px}",
+    `.logo-mark>:first-child{fill:${accent}}`,
+    `.logo-letter{fill:${onAccent};font-family:${heading};font-size:20px;font-weight:800}`,
+    `.logo-icon{fill:none;stroke:${onAccent};stroke-width:2;stroke-linecap:round;stroke-linejoin:round}`,
+    ".logo-text{display:flex;flex-direction:column}",
+    `.logo-name{font-family:${heading};font-size:20px;font-weight:700}`,
+    ".logo-lg .logo-name{font-size:32px}",
+    `.logo-tagline{font-size:13px;${quietStyle}}`,
+    ".nav-brand{display:inline-flex;align-items:center;gap:10px}",
+    ".nav-brand .logo-mark{width:30px;height:30px}",
+    ".icon{display:inline-grid;place-items:center}",
+    ".icon-md svg{width:32px;height:32px}",
+    ".icon-lg svg{width:64px;height:64px}",
+    `.icon-accent{color:${accent}}`,
+    `.icon-muted{${quietStyle}}`,
     ".hero-split .image,.split>.image{max-height:none}",
     ...renderLookCss({ ink, accent, onAccent, muted }),
     ...Object.entries(CORNER_RADII).map(
@@ -729,7 +899,7 @@ const EXAMPLE_REPLY = [
   "NAME: Order desk",
   "RATIONALE: Puts today's numbers first, then the orders that need a decision.",
   '{"op":"add","path":"/root","value":"page"}',
-  '{"op":"add","path":"/elements/page","value":{"type":"Page","props":{"width":"wide","look":"sharp","headingFont":"mono","corners":"square"},"children":["nav","intro","stats","orders-card"]}}',
+  '{"op":"add","path":"/elements/page","value":{"type":"Page","props":{"width":"wide"},"children":["nav","intro","stats","orders-card"]}}',
   '{"op":"add","path":"/elements/nav","value":{"type":"Nav","props":{"brand":"Spoke & Chain","items":["Orders","Parts","Customers"],"action":"New order"},"children":[]}}',
   '{"op":"add","path":"/elements/intro","value":{"type":"Stack","props":{"gap":"sm"},"children":["title","subtitle"]}}',
   '{"op":"add","path":"/elements/title","value":{"type":"Heading","props":{"text":"Repairs this week","level":"1"},"children":[]}}',
@@ -754,6 +924,50 @@ const LAYOUT_ADVICE = [
   "- Settings: Page with width wide, one Card per group of settings, each with a Heading level 3 and Toggles, Selects or Inputs.",
   "- Pricing: Nav, a Hero with no actions, then a Grid of Plans. One Plan has a badge.",
 ];
+
+const DESIGN_MOVES: Record<string, string[]> = {
+  Mood: [
+    "loud and playful: big type, filled color, pill corners",
+    "quiet luxury: serif headings, airy spacing, rules instead of boxes",
+    "technical and raw: mono headings, square corners, hard outlines, compact spacing",
+    "warm and friendly: rounded headings, soft shadows, generous corners",
+    "crisp and minimal: sans headings, thin borders, a lot of empty space",
+    "retro print: serif headings with square corners and thick outlines",
+    "bold poster: filled color blocks with mono headings and compact spacing",
+  ],
+  Opening: [
+    "a Hero whose picture sits on the left",
+    "a Split: a big Heading and Text on one side, a Card or a Graphic on the other",
+    "a start-aligned Hero with no picture, and a Row of Stats or Badges right under it",
+    "a centered Nav and a large centered Logo above a centered Hero",
+    "a Hero whose picture sits on the right, drawn as artwork",
+    "a wide Graphic you draw across the top, with the title under it",
+  ],
+  Body: [
+    "a bento Grid of 4 columns where the pieces mix span 2 and rowSpan 2",
+    "alternating Splits, every second one reversed, each with an Image or a Graphic",
+    "one dominant element beside a narrow side column: a Split with ratio wide-left",
+    "bands: plain, muted and accent Sections in turn",
+    "one narrow centered column: maxWidth lg, large type, Dividers between the parts",
+    "dense: a Grid of 4 columns of small pieces, then one wide piece under it",
+    "a Split with ratio wide-right: a narrow column of Stats or a List, then the main content",
+  ],
+  Artwork: [
+    "give the brand a logo with a shape and an icon that fit the product",
+    "draw one Graphic of 5 to 9 shapes that pictures the product",
+    "use Image art instead of photos, a different art each time",
+    "use large Icons as decoration beside the headings",
+    "a Logo with a tagline, and one Graphic with background accent",
+  ],
+};
+
+export const pickDesignMoves = (random: () => number) =>
+  [
+    "Creative brief for this design, drawn at random so that no two designs come out alike. It wins over the layouts to start from. Adapt it to this screen and make it your own:",
+    ...Object.entries(DESIGN_MOVES).map(
+      ([moveName, choices]) => `- ${moveName}: ${choices[Math.floor(random() * choices.length)]}.`
+    ),
+  ].join("\n");
 
 export const buildCatalogPrompt = (tokens: StyleToken[]) =>
   [
@@ -794,6 +1008,12 @@ export const buildCatalogPrompt = (tokens: StyleToken[]) =>
       "STYLE. You are the designer. On the Page, choose the look, headingFont, corners and spacing that suit this product and the design direction. Do not always pick the same.",
       "- look clean: quiet, thin borders. bold: a filled color hero, big type, filled cards. sharp: thick outlines, hard shadows, uppercase. editorial: large type, rules instead of boxes. soft: round, shadowed, friendly.",
       "- Give the screen rhythm: a Hero with an image on either side, a reversed Split, a Section with a muted or accent tone, a Card that spans two columns, a Quote, a Banner.",
+    ].join("\n"),
+    [
+      `ICONS: ${Object.keys(ICON_SHAPES).join(", ")}.`,
+      `ARTWORK names, for an Image's art and a Hero's imageArt: ${Object.keys(ART_DRAWINGS).join(", ")}.`,
+      `- A Graphic's shapes: {"shape":"${Object.keys(DRAWN_SHAPES).join(" | ")}","x":50,"y":50,"size":30,"tone":"${SHAPE_TONES.join(" | ")}","rotate":0}.`,
+      "- You make the pictures. Give the brand a logo: on the Nav, or as a Logo. Draw a Graphic from shapes when the product has a clear symbol. Use art for mood, and photo only for a real product photo.",
     ].join("\n"),
     ["LAYOUTS TO START FROM. Change them when the brief or your own idea calls for it.", ...LAYOUT_ADVICE].join("\n"),
     `TOKENS, an optional last line: TOKENS: [{"name":"<token>","value":"<new value>"}] gives theme tokens new values for this design only. Leave it out unless the brief asks for other colors. The tokens: ${tokens

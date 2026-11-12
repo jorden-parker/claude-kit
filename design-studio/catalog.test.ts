@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   buildCatalogPrompt,
   listStyleTokens,
+  pickDesignMoves,
   pickLook,
   catalog,
   findSpecProblems,
@@ -143,7 +144,7 @@ test("renderStylesheet puts the theme tokens on :root before the catalog styles"
 });
 
 test("the catalog holds the layout, content and data components", () => {
-  expect(catalog.componentNames).toHaveLength(31);
+  expect(catalog.componentNames).toHaveLength(34);
   expect(catalog.componentNames).toContain("Chart");
 });
 
@@ -155,7 +156,7 @@ test("buildCatalogPrompt lists the components and the reply shape, without json-
   expect(prompt).toContain("primary, primary-foreground");
   expect(prompt).not.toContain("$state");
   expect(prompt).not.toContain("```");
-  expect(prompt.length).toBeLessThan(12000);
+  expect(prompt.length).toBeLessThan(13500);
 });
 
 test("the example spec in the prompt renders with no problems", () => {
@@ -312,4 +313,108 @@ test("renderSpecToHtml places any element with the span, place, text align and w
   });
   expect(html).toContain('<h2 class="row-span-2 place-end text-align-center max-width-md heading heading-2">Cook</h2>');
   expect(html).toContain("spacing-airy");
+});
+
+test("renderSpecToHtml draws a logo mark from the shape and the letter or icon a model picks", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["nav", "logo", "plain"] },
+      nav: { type: "Nav", props: { brand: "Paw & Path", logo: "hexagon", logoIcon: "leaf" } },
+      logo: { type: "Logo", props: { name: "Ember", shape: "diamond", tagline: "Small batch coffee" } },
+      plain: { type: "Nav", props: { brand: "Plain" } },
+    },
+  });
+  expect(html).toContain('<span class="nav-brand"><svg class="logo-mark logo-hexagon"');
+  expect(html).toContain('<path d="M5 19c0-8');
+  expect(html).toContain('<div class="logo logo-md"><svg class="logo-mark logo-diamond"');
+  expect(html).toContain('<text class="logo-letter" x="20" y="21" text-anchor="middle" dominant-baseline="central">E</text>');
+  expect(html).toContain('<span class="logo-tagline">Small batch coffee</span>');
+  expect(html).toContain('<span class="nav-brand">Plain</span>');
+});
+
+test("renderSpecToHtml draws generated artwork for an image or a hero when a model names an art", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["hero", "art", "photo"] },
+      hero: { type: "Hero", props: { title: "Cook", image: "Hills at dawn", imageArt: "hills" } },
+      art: { type: "Image", props: { alt: "Sound waves", art: "waves", ratio: "square" } },
+      photo: { type: "Image", props: { alt: "A loaf", art: "nonsense" } },
+    },
+  });
+  expect(html).toContain('<div class="image image-art ratio-wide" role="img" aria-label="Hills at dawn"><svg class="graphic art-hills"');
+  expect(html).toContain('<div class="image image-art ratio-square" role="img" aria-label="Sound waves"><svg class="graphic art-waves"');
+  expect(html).toContain('<div class="image ratio-wide" role="img" aria-label="A loaf"><svg viewBox="0 0 24 24"');
+});
+
+test("renderSpecToHtml draws a graphic from the shapes a model places, and forgives bad shape values", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["drawing"] },
+      drawing: {
+        type: "Graphic",
+        props: {
+          alt: "A record",
+          background: "accent",
+          ratio: "square",
+          shapes: [
+            { shape: "circle", x: 50, y: 50, size: 80, tone: "ink" },
+            { shape: "ring", x: "50", y: 50, size: 40, tone: "surface", rotate: 30 },
+            { shape: "spiral", x: 900, tone: "pink" },
+            "oops",
+          ],
+        },
+      },
+    },
+  });
+  expect(html).toContain('<div class="image image-art graphic-accent ratio-square" role="img" aria-label="A record"><svg class="graphic" viewBox="0 0 100 100"');
+  expect(html).toContain('<g transform="translate(50 50) rotate(0)" class="tone-ink"><circle r="40"/></g>');
+  expect(html).toContain('<g transform="translate(50 50) rotate(30)" class="tone-surface outline"><circle r="20" stroke-width="5"/></g>');
+  expect(html).toContain('<g transform="translate(50 50) rotate(0)" class="tone-accent"><circle r="15"/></g>');
+  expect(html.match(/<g /g)).toHaveLength(3);
+});
+
+test("renderSpecToHtml draws a standalone icon, and a known icon for an unknown name", () => {
+  const html = renderSpecToHtml({
+    root: "page",
+    elements: {
+      page: { type: "Page", children: ["icon", "unknown"] },
+      icon: { type: "Icon", props: { icon: "bolt", size: "lg", tone: "accent" } },
+      unknown: { type: "Feature", props: { icon: "rocket", title: "Fast" } },
+    },
+  });
+  expect(html).toContain('<span class="icon icon-lg icon-accent"><svg');
+  expect(html).toContain('<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>');
+  expect(html).toContain('<span class="feature-icon"><svg');
+  expect(html).toContain('<path d="M5 12l5 5 9-10"/>');
+});
+
+test("the stylesheet colors drawn shapes from the theme, and the prompt lists the icons once", () => {
+  const css = renderCatalogCss(THEME_TOKENS);
+  expect(css).toContain(".graphic .tone-accent{");
+  expect(css).toContain(".graphic .outline{fill:none}");
+  const prompt = buildCatalogPrompt(THEME_TOKENS);
+  expect(prompt.match(/ICONS: check, star/g)).toHaveLength(1);
+  expect(prompt).toContain("ARTWORK");
+});
+
+test("pickDesignMoves draws a mood, an opening, a body and an asset idea, and differs with the numbers drawn", () => {
+  const firstMoves = pickDesignMoves(() => 0);
+  const lastMoves = pickDesignMoves(() => 0.99);
+  expect(firstMoves.split("\n")).toHaveLength(5);
+  expect(firstMoves).toContain("- Mood: ");
+  expect(firstMoves).toContain("- Opening: ");
+  expect(firstMoves).toContain("- Body: ");
+  expect(firstMoves).toContain("- Artwork: ");
+  const sharedLines = firstMoves.split("\n").slice(1).filter((line) => lastMoves.includes(line));
+  expect(sharedLines).toEqual([]);
+});
+
+test("the example in the prompt sets no look, font or corners, so a model does not copy them", () => {
+  const exampleText = buildCatalogPrompt(THEME_TOKENS).split("EXAMPLE of the format")[1]!;
+  expect(exampleText).not.toContain('"look"');
+  expect(exampleText).not.toContain('"headingFont"');
+  expect(exampleText).not.toContain('"corners"');
 });

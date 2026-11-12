@@ -4,6 +4,7 @@ import { readVariantLetter } from "../plugins/ui-design/hooks/design-page";
 import {
   buildCatalogPrompt,
   findSpecProblems,
+  pickDesignMoves,
   pickLook,
   renderStylesheet,
   type Look,
@@ -48,6 +49,7 @@ export type StudioTools = {
   ) => Promise<{ text: string; isError: boolean }>;
   findDirection: (brief: string, variance: number) => Promise<Direction>;
   emit: (event: StudioEvent) => void;
+  random?: () => number;
 };
 
 type StudioRequest = {
@@ -105,12 +107,14 @@ const describeDirection = (direction: Direction | undefined) =>
 const buildVariantPrompt = (
   { brief, variantCount }: StudioRequest,
   variantIndex: number,
-  direction: Direction | undefined
+  direction: Direction | undefined,
+  random: () => number
 ) =>
   [
     `Design brief: ${brief}`,
     `This is variant ${readVariantLetter(variantIndex)} of ${variantCount}. Variants differ in structure, not just in color.`,
     describeDirection(direction),
+    pickDesignMoves(random),
     variantIndex === 0 && variantCount > 1
       ? "Keep the theme's colors and fonts: write no TOKENS line."
       : "",
@@ -296,7 +300,7 @@ export const runStudio = async (request: StudioRequest, tools: StudioTools) => {
         const label = `Variant ${readVariantLetter(i)}`;
         const messages: ChatMessage[] = [
           { role: "system", content: systemPrompt },
-          { role: "user", content: buildVariantPrompt(request, i, directions[i]) },
+          { role: "user", content: buildVariantPrompt(request, i, directions[i], tools.random ?? Math.random) },
         ];
         const style = directions[i]?.style;
         const look = pickLook(`${style?.name} ${style?.keywords}`, brief, i);

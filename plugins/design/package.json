@@ -1,8 +1,8 @@
 {
   "name": "design",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "scripts": {
-    "test": "claude plugin test .",
+    "test": "claude plugin test . && node --test tests/",
     "typecheck": "tsc -p ."
   },
   "packageManager": "pnpm@10.15.0",

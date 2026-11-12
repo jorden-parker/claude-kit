@@ -83,7 +83,10 @@ const countOccurrences = (text: string, searchedText: string) =>
 test("the page names the project and counts findings per severity and per category", () => {
   const pageHtml = renderAuditPage(AUDIT);
 
-  expect(pageHtml).toContain("<title>Audit · acme &lt;notes&gt;</title>");
+  expect(pageHtml).toContain(
+    "<title>Design audit · acme &lt;notes&gt;</title>"
+  );
+  expect(pageHtml).toContain('<p class="eyebrow">Design audit</p>');
   expect(pageHtml).toContain("<h1>acme &lt;notes&gt;</h1>");
   expect(pageHtml).toContain("4 findings in 2 files");
   expect(pageHtml).toContain(
@@ -133,7 +136,7 @@ test("a finding shows its severity, title, detail, places, value and fix", () =>
   const pageHtml = renderAuditPage(AUDIT);
 
   expect(pageHtml).toContain(
-    '<article class="finding"><span class="number">#1</span><span class="pill error">error</span><h3 class="finding-title">Hardcoded color #2563EB</h3>'
+    '<article class="finding"><span class="number">#1</span><span class="pill error">Error</span><h3 class="finding-title">Hardcoded color #2563EB</h3>'
   );
   expect(pageHtml).toContain(
     "<p>It has the same value as the primary token.</p>"

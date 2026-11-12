@@ -6,6 +6,7 @@ import {
   type HardcodedValue,
   type LiteralKind,
 } from "./hardcoded-values";
+import { readFields } from "./input";
 import {
   readTokenSource,
   readTokenVariable,
@@ -39,17 +40,27 @@ export type AuditFinding = {
 
 export type NumberedFinding = AuditFinding & { number: number };
 
+type FindingIdentity = Pick<AuditFinding, "category" | "title" | "file">;
+
+export type AuditProgress = {
+  previousAudit: string;
+  fixed: number;
+  new: number;
+};
+
 export type Audit = {
   project: string;
   files: string[];
   theme: Theme;
   componentGroups: NumberedGroup[];
   findings: NumberedFinding[];
+  progress?: AuditProgress;
 };
 
 export type SourceFile = { path: string; text: string };
 
 const MINIMUM_CONTRAST = 4.5;
+const AUDIT_JSON_NAME = /^audit-\d{4}-\d{2}-\d{2}-\d{4}(\d{2})?\.json$/;
 const FOREGROUND_SUFFIX = "-foreground";
 const SOLID_HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -235,7 +246,7 @@ const findLowContrastPairs = (tokens: ThemeToken[]): AuditFinding[] => {
         category: "accessibility" as const,
         severity: "error" as const,
         title: `${foreground.name} on ${background?.name} is ${contrast.toFixed(2)}:1 in ${mode} mode`,
-        detail: `WCAG AA asks for ${MINIMUM_CONTRAST}:1 for body text.`,
+        detail: `WCAG AA asks for ${MINIMUM_CONTRAST}:1 for body text. Large text (24px, or 18.66px bold) needs only 3:1, so a pair used only for large text may stay at 3:1.`,
         fix: `Change one of the two until the pair reaches ${MINIMUM_CONTRAST}:1.`,
         ...readTokenPlace(foreground),
       }));
@@ -296,3 +307,61 @@ export const describeFindingCounts = (
   groupCount = 0
 ) =>
   `${describeCategoryCounts(findings)}${groupCount ? ` ${groupCount} component group${groupCount === 1 ? "" : "s"}.` : ""}`;
+
+const readFindingKey = ({ category, title, file }: FindingIdentity) =>
+  JSON.stringify([category, title, file ?? ""]);
+
+const filterUnseenFindings = (
+  findings: FindingIdentity[],
+  otherFindings: FindingIdentity[]
+) => {
+  const otherKeys = new Set(otherFindings.map(readFindingKey));
+  return findings.filter((finding) => !otherKeys.has(readFindingKey(finding)));
+};
+
+export const compareFindings = (
+  previousFindings: FindingIdentity[],
+  currentFindings: FindingIdentity[]
+) => ({
+  fixed: filterUnseenFindings(previousFindings, currentFindings).length,
+  new: filterUnseenFindings(currentFindings, previousFindings).length,
+});
+
+export const pickPreviousAuditName = (
+  fileNames: string[],
+  currentName: string
+) =>
+  fileNames
+    .filter(
+      (fileName) => AUDIT_JSON_NAME.test(fileName) && fileName !== currentName
+    )
+    .toSorted()
+    .at(-1);
+
+const isFindingIdentity = (value: unknown): value is FindingIdentity => {
+  const fields = readFields(value);
+  return (
+    typeof fields.category === "string" &&
+    typeof fields.title === "string" &&
+    (fields.file === undefined || typeof fields.file === "string")
+  );
+};
+
+export const readPreviousFindings = (
+  savedText: string | undefined
+): FindingIdentity[] | undefined => {
+  if (savedText === undefined) return undefined;
+  try {
+    const { findings } = readFields(JSON.parse(savedText));
+    return Array.isArray(findings) && findings.every(isFindingIdentity)
+      ? findings
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const describeProgress = (progress?: AuditProgress) =>
+  progress
+    ? `Since the last audit: ${progress.fixed} fixed, ${progress.new} new.`
+    : "";

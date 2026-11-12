@@ -1,24 +1,25 @@
 ---
 name: design
-description: Design UI as themed mockups in the browser, built from the project's own colors, type, spacing and components, or audit the project's theme and components for consistency. Use whenever the user asks to design, mock up or sketch a new screen, page or component, to redesign, restyle or rethink existing UI, to audit or check the theme, design system, design tokens, hardcoded colors, typography or component consistency, or to apply, build or implement a design variant. Changes no project code until the user picks a variant with apply.
-argument-hint: "new <brief> | redesign <target> [notes] | audit [scope] | apply <letter>"
+description: Design UI as themed mockups in the browser, built from the project's own colors, type, spacing and components, or audit the project's theme and components for consistency. Use whenever the user asks to design, mock up or sketch a new screen, page or component, to redesign, restyle or rethink existing UI, to audit or check the theme, design system, design tokens, hardcoded colors, typography or component consistency, or to apply, build or implement a design variant, or to fix audit findings. Changes no project code until the user picks a variant with apply, answers the go-ahead question after redesign, or names findings with fix.
+argument-hint: "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors>"
 ---
 
 # Design
 
-You design in mockups first. A mockup or an audit opens as a page in the browser. Project code changes only in `apply` mode.
+You design in mockups first. A mockup or an audit opens as a page in the browser. Project code changes only in `apply` and `fix` mode, and in `redesign` once the user picks a variant at the go-ahead question.
 
 ## Pick the mode
 
 The first word of the request picks the mode:
 
-| First word | Mode                                                                      |
-| ---------- | ------------------------------------------------------------------------- |
-| `new`      | Mockups of a screen or component that does not exist.                     |
-| `redesign` | Mockups of new looks for an existing file, route or component.            |
-| `audit`    | A check of the theme, the components and their consistency.               |
-| `apply`    | Builds the lettered variant of the newest saved design in project code.   |
-| none       | A target that exists in the project means `redesign`. Anything else: new. |
+| First word | Mode                                                                                                                  |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| `new`      | Mockups of a screen or component that does not exist yet.                                                             |
+| `redesign` | Mockups of new looks for an existing file, route or component. Asks for the go-ahead before any project code changes. |
+| `audit`    | Checks the theme, the components and their consistency.                                                               |
+| `apply`    | Builds the picked variant of a saved design in project code.                                                          |
+| `fix`      | Fixes numbered audit findings in project code.                                                                        |
+| none       | A target that exists in the project means `redesign`. Anything else: new.                                             |
 
 A request in plain words picks the mode by what it asks for.
 
@@ -28,9 +29,7 @@ In `new`, `redesign` and `audit`, the page is the only output.
 
 - Do not print the theme, the variants, the findings or a summary in the session, while you work or at the end.
 - Do not edit project files. The tools write to `.claude/design/` themselves.
-- Your last message is the tool's one-line result, and nothing else.
-
-A question the steps below allow is the one exception.
+- Your last message is the tool's one-line result, and nothing else. The one exception is a question the steps below allow, such as the go-ahead question that ends `redesign`.
 
 ## The tools
 
@@ -44,7 +43,7 @@ A tool that refuses a call replies with one problem per line. Fix every problem 
 
 The two render tools refuse with `No saved theme at <path>. Call save_design_theme first.` until a theme is saved.
 
-Pages are named by the minute: `design-YYYY-MM-DD-HHMM` and `audit-YYYY-MM-DD-HHMM`, in UTC. A second render in the same minute overwrites the first, so call a render tool once, with everything.
+Pages are named by the second: `design-YYYY-MM-DD-HHMMSS` and `audit-YYYY-MM-DD-HHMMSS`, in UTC. Call a render tool once, with everything.
 
 ## 1. Theme
 
@@ -52,7 +51,7 @@ Every mode starts here.
 
 ### Reuse a saved theme
 
-If `.claude/design/theme.json` exists, read it. Take the distinct paths of its tokens' `source` fields, without the `:line`, and run from the project root:
+If `.claude/design/theme.json` exists, read it. From the project root, take the distinct paths of its tokens' `source` fields, without the `:line`, and add the theme's config files that exist: `package.json`, `components.json`, `tailwind.config.{ts,js,cjs,mjs}`, the global CSS entry, and the other "Look here first" locations in `theme-sources.md`. Leave out any path that does not exist, since `find` fails on a missing one. Then run:
 
 ```
 find <path> <path> … -maxdepth 0 -newer .claude/design/theme.json
@@ -114,7 +113,7 @@ Save it with `mcp__design__save_design_theme`.
 
 Fewer than about five tokens, declared and inferred together, is not a theme.
 
-- In `new`, `redesign` and `apply`: stop and ask once, with `AskUserQuestion`, whether to propose a starter theme. Never invent tokens silently.
+- In `new`, `redesign`, `apply` and `fix`: stop and ask once, with `AskUserQuestion`, whether to propose a starter theme. Never invent tokens silently.
 - In `audit`: save what you found and report the missing theme as an `error` finding. The tool needs at least one token. With none at all, stop and say in one line that the project has no theme to audit.
 
 ## 2. Redesign
@@ -146,11 +145,11 @@ For every variant, in both modes:
 - Every color and every `font-family` is `var(--<token name>)`. The page defines one variable per token, named by the token's name in lower case with every other character run turned into a hyphen. The tool refuses a raw color or a raw font family, in the CSS and in inline styles.
 - In SVG, the `fill`, `stroke`, `stop-color`, `flood-color` and `color` attributes take `currentColor` or `var(--<token name>)`. The tool refuses a color literal there too.
 - The keywords `transparent`, `currentColor` and `inherit` are allowed. So are `initial`, `unset` and `revert` for `font-family`.
-- The tool sees only hex colors and color functions such as `rgb()` and `oklch()`. A named color such as `white` passes the tool and still breaks the rule. The rule holds where the tool cannot see.
+- The tool reads hex colors, color functions such as `rgb()` and `oklch()`, and named colors such as `white` when they are the value of a color property or a color attribute. The rule holds where the tool cannot see.
 - Text sizes, spacing, radii and shadows use the tokens too, wherever the theme has them.
 - Real content, in the project's own words and data shapes. No lorem ipsum.
 - Works from 390px wide to desktop.
-- Every control has a visible focus state. Text meets AA contrast: 4.5:1.
+- Every control has a visible focus state. Body text meets AA contrast: 4.5:1. Large text (24px, or 18.66px bold) may meet 3:1.
 - Show the states that matter to the design, such as an error under a field or an empty list.
 - `newTokens`: at most three per variant, and only when the theme truly lacks the value. Each has a `name`, a `kind` and a `value`, and a `darkValue` when the theme has dark values. It has no `source`.
 
@@ -177,7 +176,16 @@ Call `mcp__design__render_design` once, with every variant. It reads the saved t
 }
 ```
 
-When the tool succeeds, reply with its result line and stop.
+When the tool succeeds, reply with its result line.
+
+In `new`, stop there.
+
+In `redesign`, then ask for the go-ahead, once, with `AskUserQuestion`: which variant to build. Offer one option per variant, by letter and name, and a last option, `Not yet`.
+
+- A letter: that is the go-ahead. Build it as section 7 says, from the design just rendered.
+- `Not yet`, or any other answer: stop. Nothing in the project has changed. Say in one line that `/design apply <letter>` builds a variant later.
+
+Never edit a project file before the user picks a letter.
 
 ## 6. Audit
 
@@ -185,8 +193,8 @@ The audit reports. It fixes nothing.
 
 1. Load or extract the theme, as in section 1.
 2. Pick `files`: the UI source in scope, as paths relative to the project root. That is the components, the pages and the style sheets. Skip tests, stories, generated files, build output and vendored code. The scope is the words after `audit`. With none, it is the whole project. List files, never folders: the tool refuses a path it cannot read as a file.
-3. The tool finds the hardcoded values in `files` itself: hex colors and color functions, font families, font sizes, Tailwind arbitrary values, and `px` and `rem` spacing when the theme has space tokens. It skips the files the theme's tokens cite. It also checks the theme for tokens that share a value, tokens with no dark value where others of their kind have one, and contrast under 4.5:1 for each `x` on `x-foreground` pair and for `foreground` on `background`. Do not list any of these by hand.
-4. Report as `hardcoded` findings only what that scan cannot see: a named color such as `white`, the `font:` shorthand, a bare number in a style object such as `padding: 16`, and a declaration split over several lines.
+3. The tool finds the hardcoded values in `files` itself: hex colors, color functions and named colors, font families, font sizes, Tailwind arbitrary values, and `px` and `rem` spacing when the theme has space tokens. It skips the files the theme's tokens cite. It also checks the theme for tokens that share a value, tokens with no dark value where others of their kind have one, and contrast under 4.5:1 for each `x` on `x-foreground` pair and for `foreground` on `background`. The 4.5:1 bar is for body text: a pair used only for large text needs 3:1, and its finding says so. Do not list any of these by hand.
+4. Report as `hardcoded` findings only what that scan cannot see: the `font:` shorthand, a bare number in a style object such as `padding: 16`, and a declaration split over several lines.
 5. Find the components that share a purpose, as "Same-purpose components" below says.
 6. Read the files and write the findings that need judgment, as "Findings" below says.
 
@@ -354,9 +362,14 @@ When the tool succeeds, reply with its result line and stop.
 
 Apply builds one variant in the project's real code. This mode is not quiet.
 
-1. Find the newest design: the last `design-*.json` in `.claude/design/`, by name. It holds the `mode`, the `subject`, the `variants` in order, and the `theme` they were drawn with. With none, say so in one line and suggest `/design new` or `/design redesign`.
+1. Find the design. The words after `apply` are an optional design name, then the letter: `apply design-2026-11-12-153000 B`. The name is the file's name, with or without `.json`, and the file is in `.claude/design/`. Without a name, use the last `design-*.json` there, by name. The design holds the `mode`, the `subject`, the `variants` in order, and the `theme` they were drawn with. With no design at all, say so in one line and suggest `/design new` or `/design redesign`. With a name that matches no file, list the saved designs, one line each with its name, mode and subject, and ask which.
 2. Take the variant by its letter: A is the first. With no letter, or a letter the design lacks, list the variants and ask which.
-3. Load the theme, as in section 1.
+3. Check the theme for drift. Load the current theme, as in section 1, and compare it with the design's `theme`:
+   - A token whose name is gone is renamed when a current token of the same kind has the same value. Otherwise it is removed.
+   - A token with the same name whose `value` or `darkValue` differs has changed.
+
+   List these in a few short lines. If the variant uses a renamed, removed or changed token (a `var(--<name>)` in its `html` or `css`), say which, and build with the nearest current token: the renamed one, or the token of the same kind closest in value. Tell the user which token you used and why. Say nothing when nothing the variant uses has drifted.
+
 4. Build the variant with the project's own components and tokens, used the way the project uses them: its utility classes, its theme object, its variables. The mockup is a picture. Never copy its HTML or CSS into the project.
 5. `redesign`: edit the target in place. Everything in `kept` stays. Props, data and behavior do not change, so callers keep working.
 6. `new`: put the files where the project puts such files, named the way it names them.
@@ -364,3 +377,16 @@ Apply builds one variant in the project's real code. This mode is not quiet.
 8. Follow every hook the project has installed. Where a test must come first, write it first.
 9. Run the project's type check and tests.
 10. End with what to check in the browser: the route, the states, dark mode and the 390px width.
+
+## 8. Fix
+
+Fix changes the project's code for numbered findings of the newest audit. Like apply, it is not quiet.
+
+1. Find the audit: the last `audit-*.json` in `.claude/design/`, by name. It holds the `findings` and the `componentGroups`, each with its `number`. With none, say so in one line and suggest `/design audit`.
+2. Take the numbers the user gives: `fix 3 5 7`, `fix all` for every finding and group, or `fix errors` for every finding with severity `error`. With no numbers, or a number the audit lacks, list the valid numbers, one line each, and ask which to fix.
+3. Load the theme, as in section 1.
+4. Fix each number in turn, in the order given. Use the project's own tokens and components, as section 7 step 4 says. Add no token to the theme. A finding that needs a value no token holds is left as it is, and the reply says why.
+5. A finding is fixed at its `file` and `line`. A theme finding, such as duplicate tokens or a missing dark value, is fixed where the token is declared. Read the code first: the finding's `fix` is a suggestion.
+6. A component group is fixed by migrating its usages to the `recommended` member. First add what the group's `reasoning` says that member lacks, then move each other member's usages to it. Delete a member only when nothing imports it any more.
+7. Follow every hook the project has installed. Where a test must come first, write it first. Run the project's type check and tests.
+8. End with one line per number: what changed and in which files, or why it was left. Then what to check in the browser. Last, suggest running `/design audit` again to confirm the findings are gone.

@@ -1,4 +1,8 @@
-import type { On } from "claude-code";
+import type {
+  On,
+  PromptAutocompleteInput,
+  PromptAutocompleteResult,
+} from "claude-code";
 import { expect, test, type Engine } from "claude-code/testing";
 
 const THEME_TOOL = "mcp__design__save_design_theme";
@@ -6,8 +10,8 @@ const DESIGN_TOOL = "mcp__design__render_design";
 const AUDIT_TOOL = "mcp__design__render_design_audit";
 const DESIGN_FOLDER = "/repo/.claude/design";
 const THEME_PATH = `${DESIGN_FOLDER}/theme.json`;
-const DESIGN_PAGE_PATH = `${DESIGN_FOLDER}/design-2026-11-12-1200.html`;
-const AUDIT_PAGE_PATH = `${DESIGN_FOLDER}/audit-2026-11-12-1200.html`;
+const DESIGN_PAGE_PATH = `${DESIGN_FOLDER}/design-2026-11-12-120000.html`;
+const AUDIT_PAGE_PATH = `${DESIGN_FOLDER}/audit-2026-11-12-120000.html`;
 const NOVEMBER_TWELFTH_NOON = Date.UTC(2026, 10, 12, 12, 0, 0);
 
 const THEME_INPUT = {
@@ -105,8 +109,9 @@ const mockEngine = (
 ) => {
   const writes: FileWrite[] = [];
   const ranCommands: string[][] = [];
+  const clock = { milliseconds: NOVEMBER_TWELFTH_NOON };
   on("session.cwd", () => ({ value: "/repo" }));
-  on("clock.now", () => ({ value: NOVEMBER_TWELFTH_NOON }));
+  on("clock.now", () => ({ value: clock.milliseconds }));
   on("fs.write", (_, e) => {
     if (isReadOnly) return { deny: "EACCES: permission denied" };
     writes.push({ path: e.path, text: e.text });
@@ -118,6 +123,21 @@ const mockEngine = (
       ? { deny: `ENOENT: ${e.path}` }
       : { value: fileText };
   });
+  on("fs.list", (_, e) => ({
+    value: Object.keys(fileTexts)
+      .filter(
+        (filePath) =>
+          filePath.startsWith(`${e.path}/`) &&
+          !filePath.slice(e.path.length + 1).includes("/")
+      )
+      .map((filePath) => ({
+        name: filePath.slice(e.path.length + 1),
+        kind: "file" as const,
+        size: 0,
+        mtimeMs: 0,
+        isLink: false,
+      })),
+  }));
   on("process.run", (_, e) => {
     ranCommands.push([...e.argv]);
     return {
@@ -130,7 +150,7 @@ const mockEngine = (
       },
     };
   });
-  return { writes, ranCommands };
+  return { writes, ranCommands, clock };
 };
 
 const withoutFile = (missingPath: string) =>
@@ -254,7 +274,7 @@ test("the design tool saves the design with the theme, writes the page and opens
 
   expect(writes.map((write) => write.path)).toEqual([
     `${DESIGN_FOLDER}/.gitignore`,
-    `${DESIGN_FOLDER}/design-2026-11-12-1200.json`,
+    `${DESIGN_FOLDER}/design-2026-11-12-120000.json`,
     DESIGN_PAGE_PATH,
   ]);
   expect(readSavedJson(writes, ".json")).toEqual({
@@ -272,6 +292,22 @@ test("the design tool saves the design with the theme, writes the page and opens
   expect(readPage(writes)).toContain("<h3>Changed</h3>");
   expect(ranCommands).toEqual([["open", DESIGN_PAGE_PATH]]);
   expect(reply.result).toBe(`Opened ${DESIGN_PAGE_PATH} in the browser.`);
+});
+
+test("two renders in the same minute are saved under different names", async ($, on) => {
+  const { writes, clock } = mockEngine(on);
+
+  await callTool($, DESIGN_TOOL, DESIGN_INPUT);
+  clock.milliseconds += 1000;
+  await callTool($, DESIGN_TOOL, DESIGN_INPUT);
+
+  const pagePaths = writes
+    .map((write) => write.path)
+    .filter((writePath) => writePath.endsWith(".html"));
+  expect(pagePaths).toEqual([
+    DESIGN_PAGE_PATH,
+    `${DESIGN_FOLDER}/design-2026-11-12-120001.html`,
+  ]);
 });
 
 test("the design tool tries each opener, and says where the page is when none works", async ($, on) => {
@@ -411,7 +447,7 @@ test("the audit tool adds its own findings to the model's, numbers them, writes 
 
   expect(writes.map((write) => write.path)).toEqual([
     `${DESIGN_FOLDER}/.gitignore`,
-    `${DESIGN_FOLDER}/audit-2026-11-12-1200.json`,
+    `${DESIGN_FOLDER}/audit-2026-11-12-120000.json`,
     AUDIT_PAGE_PATH,
   ]);
   const savedAudit = readSavedJson(writes, ".json");
@@ -452,7 +488,9 @@ test("the audit tool adds its own findings to the model's, numbers them, writes 
       lines: [1],
     },
   ]);
-  expect(readPage(writes)).toContain("<title>Audit · acme-notes</title>");
+  expect(readPage(writes)).toContain(
+    "<title>Design audit · acme-notes</title>"
+  );
   expect(readPage(writes)).toContain("Three heading sizes");
   expect(ranCommands).toEqual([["open", AUDIT_PAGE_PATH]]);
   expect(reply.result).toBe(
@@ -513,6 +551,67 @@ test("the audit tool lists every broken finding and missing file, and writes not
   );
   expect(writes).toEqual([]);
   expect(ranCommands).toEqual([]);
+});
+
+const PREVIOUS_AUDIT_NAME = "audit-2026-11-11-093000.json";
+const PREVIOUS_AUDIT_PATH = `${DESIGN_FOLDER}/${PREVIOUS_AUDIT_NAME}`;
+const PREVIOUS_FINDINGS = [
+  {
+    category: "hardcoded",
+    title: "Hardcoded color #2563eb",
+    file: "src/ui/button.tsx",
+    number: 1,
+    lines: [1],
+  },
+  {
+    category: "typography",
+    title: "Three heading sizes",
+    file: "src/ui/button.tsx",
+    number: 2,
+    lines: [1],
+  },
+  {
+    category: "theme",
+    title: "Old warning",
+    file: "src/app/globals.css",
+    number: 3,
+    lines: [],
+  },
+];
+
+test("the audit tool says what is fixed and what is new since the last audit, on the page and in the saved json", async ($, on) => {
+  const { writes } = mockEngine(on, {
+    fileTexts: {
+      ...PROJECT_FILES,
+      [PREVIOUS_AUDIT_PATH]: JSON.stringify({ findings: PREVIOUS_FINDINGS }),
+    },
+  });
+
+  const reply = await callTool($, AUDIT_TOOL, AUDIT_INPUT);
+
+  expect(reply.result).toBe(
+    `Opened ${AUDIT_PAGE_PATH} in the browser. 3 findings: 2 hardcoded, 1 typography. Since the last audit: 1 fixed, 1 new.`
+  );
+  expect(readSavedJson(writes, ".json").progress).toEqual({
+    previousAudit: PREVIOUS_AUDIT_NAME,
+    fixed: 1,
+    new: 1,
+  });
+  expect(readPage(writes)).toContain("Since the last audit: 1 fixed, 1 new.");
+});
+
+test("an earlier audit that cannot be read is skipped, and the audit still renders", async ($, on) => {
+  const { writes } = mockEngine(on, {
+    fileTexts: { ...PROJECT_FILES, [PREVIOUS_AUDIT_PATH]: "{ not json" },
+  });
+
+  const reply = await callTool($, AUDIT_TOOL, AUDIT_INPUT);
+
+  expect(reply.result).toBe(
+    `Opened ${AUDIT_PAGE_PATH} in the browser. 3 findings: 2 hardcoded, 1 typography.`
+  );
+  expect(readSavedJson(writes, ".json")).not.toHaveProperty("progress");
+  expect(readPage(writes)).not.toContain("Since the last audit");
 });
 
 const FILTER_GROUP = {
@@ -674,4 +773,64 @@ test("the design tool does not read visible text as markup", async ($, on) => {
   );
 
   expect(reply.result).toBe(`Opened ${DESIGN_PAGE_PATH} in the browser.`);
+});
+
+const autocompleteAt = (text: string) => {
+  const start = text.search(/\S*$/);
+  return { text, cursor: text.length, token: text.slice(start), start };
+};
+
+type AutocompleteCall = {
+  autocomplete: (
+    input: PromptAutocompleteInput
+  ) => Promise<PromptAutocompleteResult>;
+};
+
+const autocomplete = ($: Engine, text: string) =>
+  ($.prompt as unknown as AutocompleteCall).autocomplete(autocompleteAt(text));
+
+const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
+  reply.suggestions.map((suggestion) => suggestion.text);
+
+test("the first word after /design suggests the matching modes", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const allReply = await autocomplete($, "/design ");
+  const auditReply = await autocomplete($, "/design au");
+
+  expect(suggestedTexts(allReply)).toEqual([
+    "new",
+    "redesign",
+    "audit",
+    "apply",
+    "fix",
+  ]);
+  expect(suggestedTexts(auditReply)).toEqual(["audit"]);
+  expect(auditReply.suggestions[0]!.description).toContain("consistency");
+});
+
+test("the menu form /design:design suggests the same modes", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const menuReply = await autocomplete($, "/design:design ");
+  const auditReply = await autocomplete($, "/design:design au");
+
+  expect(suggestedTexts(menuReply)).toEqual([
+    "new",
+    "redesign",
+    "audit",
+    "apply",
+    "fix",
+  ]);
+  expect(suggestedTexts(auditReply)).toEqual(["audit"]);
+});
+
+test("later words and other commands get no /design mode suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const laterReply = await autocomplete($, "/design new a");
+  const otherReply = await autocomplete($, "/handoff a");
+
+  expect(suggestedTexts(laterReply)).toEqual([]);
+  expect(suggestedTexts(otherReply)).toEqual([]);
 });

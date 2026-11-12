@@ -1,13 +1,14 @@
 # design
 
-One skill, `/design`, designs UI in the project's own theme and opens the result as a page in the browser. Project code changes only when you pick a variant.
+One skill, `/design`, designs UI in the project's own theme and opens the result as a page in the browser. Project code changes only when you pick a variant, through `apply` or the go-ahead after `redesign`, or when you name findings with `fix`.
 
-| Command                             | What it does                                                    |
-| ----------------------------------- | --------------------------------------------------------------- |
-| `/design new <brief>`               | Mockups of a screen or component that does not exist yet.       |
-| `/design redesign <target> [notes]` | Mockups of new looks for an existing file, route or component.  |
-| `/design audit [scope]`             | Checks the theme, the components and their consistency.         |
-| `/design apply <letter>`            | Builds the picked variant of the newest design in project code. |
+| Command                             | What it does                                                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `/design new <brief>`               | Mockups of a screen or component that does not exist yet.                                                             |
+| `/design redesign <target> [notes]` | Mockups of new looks for an existing file, route or component. Asks for the go-ahead before any project code changes. |
+| `/design audit [scope]`             | Checks the theme, the components and their consistency.                                                               |
+| `/design apply [design] <letter>`   | Builds the picked variant of a saved design in project code.                                                          |
+| `/design fix <numbers>`             | Fixes numbered audit findings in project code.                                                                        |
 
 With no mode word, a target that exists in the project means `redesign`, and anything else means `new`.
 
@@ -16,6 +17,8 @@ Plain words work too: "redesign the settings page", "mock up a pricing page", "a
 The menu lists the skill by its full name, `/design:design`. The plugin registers no command of its own: the engine serves the skill as a command.
 
 In `new`, `redesign` and `audit` the session stays quiet. Claude prints no theme, variant or finding: the result is on the page, and the last line in the session says the page opened.
+
+`redesign` then asks which variant to build, with a `Not yet` option. Picking a letter is the go-ahead: Claude builds it as `/design apply` does. Until then, no project file changes. Only `.claude/design/` is written, to hold the page, its `.json` and the theme.
 
 ## Usage
 
@@ -27,7 +30,9 @@ In `new`, `redesign` and `audit` the session stays quiet. Claude prints no theme
 
 `/design audit` checks the whole project. `/design audit src/components` checks one folder.
 
-`/design apply B` builds variant B of the newest design.
+`/design apply B` builds variant B of the newest design. `/design apply design-2026-11-12-153000 B` builds variant B of that saved design instead.
+
+`/design fix 3 5 7` fixes findings 3, 5 and 7 of the newest audit. `/design fix all` fixes every finding and group. `/design fix errors` fixes every finding with severity `error`.
 
 ## The theme
 
@@ -42,7 +47,7 @@ Declared tokens come first: a Tailwind config or `@theme` block, CSS custom prop
 
 The `save_design_theme` tool refuses a token whose source file is missing, or whose name and value both do not appear in that file. A token cannot be invented.
 
-The saved theme is reused until a file one of its tokens cites is newer than it. Then it is read again.
+The saved theme is reused until a file is newer than it. The files checked are the ones its tokens cite, plus the project's config files that exist: `package.json`, `components.json`, the Tailwind config, the global CSS entry and the other locations `theme-sources.md` lists. Then it is read again.
 
 With almost no theme to find, Claude stops and asks before it proposes one.
 
@@ -55,8 +60,9 @@ With almost no theme to find, Claude stops and asks before it proposes one.
 - **Desktop** and **Mobile** switch the frame's width. **Dark** appears when the theme has dark values.
 - Each variant has a name and a rationale. A redesign also lists what it **Kept** and what it **Changed**.
 - **Proposed additions**: up to three tokens a variant needs that the theme lacks.
-- **Use this** copies `/design apply <letter>`. The command is also shown beside the button.
+- **Use this** copies `/design apply <design> <letter>`, naming this page's own design, so a newer design cannot take its place. The command is also shown beside the button.
 - A **Theme** panel: the tokens by kind, with swatches, sources and an **inferred** mark, and the inconsistencies.
+- The browser tab reads `Redesign · <project>` or `New design · <project>`.
 
 The tool refuses a design with an unknown mode, or with no variant or more than four. It refuses a variant that:
 
@@ -67,7 +73,7 @@ The tool refuses a design with an unknown mode, or with no variant or more than 
 - proposes more than three tokens, or a token with no name, no value or an unknown kind;
 - is a redesign that lists nothing as changed.
 
-A raw color is a hex color or a color function such as `rgb()` or `oklch()`. `var(--token)`, `currentColor`, `transparent` and `inherit` pass.
+A raw color is a hex color, a color function such as `rgb()` or `oklch()`, or a named color such as `red` or `white`. `var(--token)`, `currentColor`, `transparent` and `inherit` pass.
 
 The tool names every problem, so a mockup cannot drift from the theme.
 
@@ -91,8 +97,11 @@ The page:
 - A tab per category, and **All**.
 - One card per finding: its number, its severity, what is there now, the value with a swatch, every `file:line` it sits on, and a **Fix**.
 - The **Theme** panel of the mockup page.
+- The browser tab reads `Design audit · <project>`.
 
 The session's last line gives the counts: `Opened <path> in the browser. 3 findings: 2 hardcoded, 1 typography. 2 component groups.`
+
+When an earlier audit is saved in `.claude/design/`, the tool compares the findings with the newest one. A finding is the same when its category, title and file match, so a moved line or a new number is not a change. The hero and the session's last line then add `Since the last audit: 3 fixed, 1 new.` With no earlier audit, or one that cannot be read, nothing is added.
 
 The tool checks these itself, in the files Claude hands it:
 
@@ -101,7 +110,7 @@ The tool checks these itself, in the files Claude hands it:
 - Hardcoded `px` and `rem` spacing, when the theme has space tokens.
 - Theme tokens of one kind with the same value, and the same dark value.
 - Tokens with no dark value, when other tokens of their kind have one.
-- Contrast under 4.5:1 between a token and its `-foreground` partner, and for `foreground` on `background`, in light and in dark mode.
+- Contrast under 4.5:1 between a token and its `-foreground` partner, and for `foreground` on `background`, in light and in dark mode. The 4.5:1 bar is for body text. A pair used only for large text (24px, or 18.66px bold) needs 3:1, and the finding says so.
 
 A hardcoded value is reported once per file, with every line it is on. When a token has that value, the finding is an error and its fix names the token. When several tokens have it, the fix names them all and says to use the one that fits the role. When none has it, the finding is a warning.
 
@@ -133,15 +142,27 @@ Groups are numbered first, in the order Claude lists them. The findings carry on
 
 ## Apply
 
-`/design apply B` reads the newest saved design and builds variant B with the project's real components and tokens. The mockup's HTML is never copied into the project. A redesign edits the target in place. A new design goes where the project puts such files. A proposed token is added to the theme only when the variant listed it. The hooks of the project still apply, so a test comes first where one is required.
+`/design apply B` reads the newest saved design and builds variant B with the project's real components and tokens. Name another saved design before the letter to build from it instead: `/design apply design-2026-11-12-153000 B`, or the file name with `.json`. An unknown name lists the saved designs and asks which.
+
+Before it builds, Apply compares the design's theme with the current one. It lists the tokens renamed, removed or changed since. If the variant uses one of them, it names the token and builds with the nearest current token, telling you which.
+
+The mockup's HTML is never copied into the project. A redesign edits the target in place. A new design goes where the project puts such files. A proposed token is added to the theme only when the variant listed it. The hooks of the project still apply, so a test comes first where one is required.
+
+## Fix
+
+`/design fix <numbers>` fixes numbered findings of the newest audit in project code. `fix all` takes every finding and group, and `fix errors` every finding with severity `error`. With no numbers, or an unknown one, it lists the valid numbers and asks.
+
+Each finding is fixed at its file and line, and a theme finding where its token is declared. A same-purpose group is fixed by moving its usages to the recommended member, after adding what that member lacks. Fix adds no token to the theme. Project hooks still apply, and the type check and tests run.
+
+It ends with one line per number and a suggestion to run `/design audit` again to confirm.
 
 ## Limits
 
 - Mockups are plain HTML and CSS. They approximate the project's components; they do not render them.
 - Mockups load no web fonts and no remote images. A project font falls back to the next family in its stack.
-- The scan for hardcoded values works on text patterns, one line at a time. It misses named colors such as `red`, the `font:` shorthand, bare numbers in style objects such as `padding: 16`, and a declaration split over several lines. Claude reports those it sees.
+- The scan for hardcoded values works on text patterns, one line at a time. It misses the `font:` shorthand, bare numbers in style objects such as `padding: 16`, and a declaration split over several lines. Claude reports those it sees.
 - The same scan reads any text like `#123` in a source file as a hex color.
-- The mockup check has the same blind spot: a named color passes it.
+- A named color counts only as the value of a color property or a color attribute. `const brand = "red"` passes both the scan and the mockup check.
 - Contrast is computed for pairs of solid hex colors only.
 - A listed path that is a folder, or a file over 4 MiB, reports as missing.
 - The pages were checked in Chrome only.
@@ -152,10 +173,8 @@ Groups are numbered first, in the order Claude lists them. The findings carry on
 Everything goes to `.claude/design/` in the project:
 
 - `theme.json`: the saved theme.
-- `design-YYYY-MM-DD-HHMM.html` (UTC): a mockup page. The `.json` beside it holds the project, the mode, the subject, the theme and the variants. `/design apply` reads the newest one.
-- `audit-YYYY-MM-DD-HHMM.html` (UTC): an audit page. The `.json` beside it holds the project, the files, the theme, the component groups and the findings, each with its `number`. A finding has its `lines` as a list, and the tool's own findings add the `value` they found.
-
-Two pages of one kind rendered in the same minute share a name: the second overwrites the first.
+- `design-YYYY-MM-DD-HHMMSS.html` (UTC): a mockup page. The `.json` beside it holds the project, the mode, the subject, the theme and the variants. `/design apply` reads the newest one.
+- `audit-YYYY-MM-DD-HHMMSS.html` (UTC): an audit page. The `.json` beside it holds the project, the files, the theme, the component groups and the findings, each with its `number`. A finding has its `lines` as a list, and the tool's own findings add the `value` they found. After an earlier audit, it also has `progress`: the earlier file's name as `previousAudit`, and the counts `fixed` and `new`.
 
 The folder gets a `.gitignore` of `*`, so pages stay out of git.
 
@@ -163,20 +182,21 @@ If no browser opens, the tool reports the page's path instead.
 
 ## Where things live
 
-| File                             | Holds                                                        |
-| -------------------------------- | ------------------------------------------------------------ |
-| `hooks/register.ts`              | The three tools and their checks.                            |
-| `hooks/theme.ts`                 | The theme's shape, and its tokens as CSS variables.          |
-| `hooks/design-page.ts`           | The HTML of the mockup page.                                 |
-| `hooks/hardcoded-values.ts`      | The finder of hardcoded colors, fonts, sizes and spacing.    |
-| `hooks/audit.ts`                 | The findings, the theme's self-checks, numbering and counts. |
-| `hooks/audit-page.ts`            | The HTML of the audit page.                                  |
-| `hooks/component-groups.ts`      | The same-purpose groups and their shape checks.              |
-| `hooks/input.ts`                 | The shared readers of tool input.                            |
-| `hooks/page-style.ts`            | The CSS of both pages.                                       |
-| `hooks/page-script.ts`           | The behaviour of both pages: tabs, width, dark and copy.     |
-| `skills/design/SKILL.md`         | How Claude reads the theme, designs, audits and applies.     |
-| `skills/design/theme-sources.md` | Where each stack keeps its theme.                            |
+| File                             | Holds                                                             |
+| -------------------------------- | ----------------------------------------------------------------- |
+| `hooks/register.ts`              | The three tools, the wiring of their checks and the autocomplete. |
+| `hooks/mockup-checks.ts`         | The checks on a variant's CSS, markup and proposed tokens.        |
+| `hooks/theme.ts`                 | The theme's shape, and its tokens as CSS variables.               |
+| `hooks/design-page.ts`           | The HTML of the mockup page.                                      |
+| `hooks/hardcoded-values.ts`      | The finder of hardcoded colors, fonts, sizes and spacing.         |
+| `hooks/audit.ts`                 | The findings, the theme's self-checks, numbering and counts.      |
+| `hooks/audit-page.ts`            | The HTML of the audit page.                                       |
+| `hooks/component-groups.ts`      | The same-purpose groups and their shape checks.                   |
+| `hooks/input.ts`                 | The shared readers and small checks of tool input.                |
+| `hooks/page-style.ts`            | The CSS of both pages.                                            |
+| `hooks/page-script.ts`           | The behavior of both pages: tabs, width, dark and copy.           |
+| `skills/design/SKILL.md`         | How Claude reads the theme, designs, audits and applies.          |
+| `skills/design/theme-sources.md` | Where each stack keeps its theme.                                 |
 
 ## Install
 
@@ -216,3 +236,5 @@ claude plugin uninstall design@claude-kit
 pnpm test
 pnpm typecheck
 ```
+
+`pnpm test` runs the hook tests, then `node --test tests/` for the page script, which needs `eval` and so cannot run in the hooks sandbox.

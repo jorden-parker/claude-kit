@@ -1,5 +1,5 @@
 {
   "name": "design",
-  "version": "0.1.0",
-  "description": "/design new and /design redesign open mockups in the browser, built from the project's own colors, type, spacing and components; /design audit checks the theme and components for hardcoded values and inconsistencies; /design apply builds the picked variant"
+  "version": "0.3.0",
+  "description": "/design new and /design redesign open mockups in the browser, built from the project's own colors, type, spacing and components; redesign asks for the go-ahead before it changes project code; /design audit checks the theme, the components and their consistency; /design apply builds the picked variant of a saved design in project code; /design fix fixes numbered audit findings in project code"
 }

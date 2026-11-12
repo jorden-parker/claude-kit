@@ -1,8 +1,12 @@
 import { expect, test } from "claude-code/testing";
 import {
   auditProject,
+  compareFindings,
   describeFindingCounts,
+  describeProgress,
   numberFindings,
+  pickPreviousAuditName,
+  readPreviousFindings,
   type AuditFinding,
 } from "./audit";
 import type { Theme, ThemeToken } from "./theme";
@@ -64,6 +68,33 @@ test("a literal that equals a token is an error whose fix names the token", () =
   expect(findings.map((finding) => finding.fix)).toContain(
     "Use the text-sm token (--text-sm)."
   );
+});
+
+test("a named color that equals a token is an error, and one that matches none is a warning", () => {
+  const namedTheme = buildTheme([
+    buildToken("ink", "color", "black", { source: "src/app/globals.css:3" }),
+  ]);
+  const cardFile = {
+    path: "src/components/card.tsx",
+    text: 'const cardStyle = { color: "black", background: "white" };',
+  };
+
+  const findings = auditProject(namedTheme, [cardFile]);
+
+  expect(
+    findings.map(({ title, severity, fix }) => ({ title, severity, fix }))
+  ).toEqual([
+    {
+      title: "Hardcoded color black",
+      severity: "error",
+      fix: "Use the ink token (--ink).",
+    },
+    {
+      title: "Hardcoded color white",
+      severity: "warning",
+      fix: "Add a color token for it, or use the nearest existing one.",
+    },
+  ]);
 });
 
 test("a literal that matches no token is a warning that asks for a token", () => {
@@ -177,7 +208,8 @@ test("a foreground pair under 4.5:1 is an accessibility error, in each mode it f
       category: "accessibility",
       severity: "error",
       title: "primary-foreground on primary is 4.48:1 in dark mode",
-      detail: "WCAG AA asks for 4.5:1 for body text.",
+      detail:
+        "WCAG AA asks for 4.5:1 for body text. Large text (24px, or 18.66px bold) needs only 3:1, so a pair used only for large text may stay at 3:1.",
       fix: "Change one of the two until the pair reaches 4.5:1.",
       file: "src/theme.css",
       lines: [9],
@@ -186,7 +218,8 @@ test("a foreground pair under 4.5:1 is an accessibility error, in each mode it f
       category: "accessibility",
       severity: "error",
       title: "foreground on background is 4.48:1 in light mode",
-      detail: "WCAG AA asks for 4.5:1 for body text.",
+      detail:
+        "WCAG AA asks for 4.5:1 for body text. Large text (24px, or 18.66px bold) needs only 3:1, so a pair used only for large text may stay at 3:1.",
       fix: "Change one of the two until the pair reaches 4.5:1.",
       file: "src/app/globals.css",
       lines: [1],
@@ -284,4 +317,99 @@ test("a literal that equals several tokens names them all, since only the role t
   expect(finding?.fix).toBe(
     "Use the one that fits its role: background (--background), card (--card) or primary-foreground (--primary-foreground)."
   );
+});
+
+const FIXED_FINDING = {
+  category: "accessibility" as const,
+  title: "muted on surface is 3.9:1 in light mode",
+  file: "src/app/globals.css",
+};
+const SHARED_FINDING = {
+  category: "hardcoded" as const,
+  title: "Hardcoded color #2563eb",
+  file: "src/ui/button.tsx",
+};
+
+test("a finding is the same finding when its number and lines moved, and a new title or file is a new one", () => {
+  const earlierCopy = { ...SHARED_FINDING, number: 1, lines: [4] };
+  const movedCopy = { ...SHARED_FINDING, number: 7, lines: [40] };
+
+  expect(compareFindings([earlierCopy], [movedCopy])).toEqual({
+    fixed: 0,
+    new: 0,
+  });
+  expect(
+    compareFindings(
+      [SHARED_FINDING],
+      [{ ...SHARED_FINDING, file: "src/ui/card.tsx" }]
+    )
+  ).toEqual({ fixed: 1, new: 1 });
+});
+
+test("compareFindings counts the earlier findings gone and the current ones not seen before", () => {
+  expect(
+    compareFindings(
+      [SHARED_FINDING, FIXED_FINDING],
+      [SHARED_FINDING, { ...SHARED_FINDING, title: "Hardcoded color #f0f" }]
+    )
+  ).toEqual({ fixed: 1, new: 1 });
+  expect(compareFindings([FIXED_FINDING], [])).toEqual({ fixed: 1, new: 0 });
+});
+
+test("pickPreviousAuditName takes the newest audit by name, whether its time has seconds or not", () => {
+  expect(
+    pickPreviousAuditName(
+      [
+        "audit-2026-11-10-235900.json",
+        "audit-2026-11-11-0930.json",
+        "audit-2026-11-11-093000.json",
+        "audit-2026-11-11-0930.html",
+        "design-2026-11-12-120000.json",
+        "theme.json",
+      ],
+      "audit-2026-11-12-120000.json"
+    )
+  ).toBe("audit-2026-11-11-093000.json");
+  expect(
+    pickPreviousAuditName(
+      ["audit-2026-11-11-0930.json", "audit-2026-11-11-093000.json"],
+      "audit-2026-11-12-120000.json"
+    )
+  ).toBe("audit-2026-11-11-093000.json");
+  expect(
+    pickPreviousAuditName(
+      ["audit-2026-11-12-120000.json"],
+      "audit-2026-11-12-120000.json"
+    )
+  ).toBeUndefined();
+});
+
+test("readPreviousFindings reads the saved findings, and gives nothing for a file it cannot use", () => {
+  expect(
+    readPreviousFindings(
+      JSON.stringify({ findings: [{ ...SHARED_FINDING, number: 1 }] })
+    )
+  ).toEqual([{ ...SHARED_FINDING, number: 1 }]);
+  expect(readPreviousFindings(undefined)).toBeUndefined();
+  expect(readPreviousFindings("{ not json")).toBeUndefined();
+  expect(readPreviousFindings("null")).toBeUndefined();
+  expect(readPreviousFindings(JSON.stringify({ findings: "none" }))).toBe(
+    undefined
+  );
+  expect(
+    readPreviousFindings(
+      JSON.stringify({ findings: [{ category: "hardcoded" }] })
+    )
+  ).toBeUndefined();
+});
+
+test("describeProgress says what changed since the last audit, and nothing without one", () => {
+  expect(describeProgress(undefined)).toBe("");
+  expect(
+    describeProgress({
+      previousAudit: "audit-2026-11-11-093000.json",
+      fixed: 3,
+      new: 1,
+    })
+  ).toBe("Since the last audit: 3 fixed, 1 new.");
 });

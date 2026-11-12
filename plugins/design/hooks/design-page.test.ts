@@ -170,7 +170,7 @@ test("proposed tokens are variables of their own variant only, three at most", (
 test("every other model string is HTML-escaped", () => {
   const pageHtml = renderDesignPage(REDESIGN);
 
-  expect(pageHtml).toContain("<title>Design · acme &lt;notes&gt;</title>");
+  expect(pageHtml).toContain("<title>Redesign · acme &lt;notes&gt;</title>");
   expect(pageHtml).toContain("<h1>acme &lt;notes&gt;</h1>");
   expect(pageHtml).toContain(
     "src/app/settings/page.tsx &quot;&lt;main&gt;&quot;"
@@ -201,20 +201,21 @@ test("a new design names its brief and has no kept or changed lists", () => {
   const pageHtml = renderDesignPage(NEW_DESIGN);
 
   expect(pageHtml).toContain('<p class="eyebrow">New design</p>');
+  expect(pageHtml).toContain("<title>New design · acme &lt;notes&gt;</title>");
   expect(pageHtml).toContain("Brief");
   expect(pageHtml).toContain("A pricing page with three plans");
   expect(pageHtml).not.toContain("<h3>Kept</h3>");
   expect(pageHtml).not.toContain("<h3>Changed</h3>");
 });
 
-test("Use this carries the apply command of its variant letter", () => {
-  const pageHtml = renderDesignPage(REDESIGN);
+test("Use this carries the apply command of its own design and variant letter", () => {
+  const pageHtml = renderDesignPage(REDESIGN, "design-2026-11-12-153000");
 
   expect(pageHtml).toContain(
-    '<code id="command-a">/design apply A</code><button type="button" class="button primary" data-copies="command-a">Use this</button>'
+    '<code id="command-a">/design apply design-2026-11-12-153000 A</code><button type="button" class="button primary" data-copies="command-a">Use this</button>'
   );
   expect(pageHtml).toContain(
-    '<code id="command-b">/design apply B</code><button type="button" class="button primary" data-copies="command-b">Use this</button>'
+    '<code id="command-b">/design apply design-2026-11-12-153000 B</code><button type="button" class="button primary" data-copies="command-b">Use this</button>'
   );
 });
 
@@ -238,16 +239,17 @@ test("the width toggle is always there, the dark toggle only with dark values", 
 test("the theme panel groups tokens by kind with value, source and an inferred mark", () => {
   const pageHtml = renderDesignPage(REDESIGN);
 
-  expect(pageHtml).toContain("<h3>color</h3>");
-  expect(pageHtml).toContain("<h3>radius</h3>");
-  expect(pageHtml).not.toContain("<h3>shadow</h3>");
-  expect(pageHtml.indexOf("<h3>color</h3>")).toBeLessThan(
-    pageHtml.indexOf("<h3>radius</h3>")
+  expect(pageHtml).toContain("<h3>Color</h3>");
+  expect(pageHtml).toContain("<h3>Radius</h3>");
+  expect(pageHtml).not.toContain("<h3>Shadow</h3>");
+  expect(pageHtml.indexOf("<h3>Color</h3>")).toBeLessThan(
+    pageHtml.indexOf("<h3>Radius</h3>")
   );
   expect(pageHtml).toContain("<code>--radius-md</code>");
   expect(pageHtml).toContain("<td>8px</td>");
   expect(pageHtml).toContain("<td><code>src/app/globals.css:9</code></td>");
-  expect(countOccurrences(pageHtml, '<span class="pill">inferred</span>')).toBe(
+  expect(pageHtml).toContain('<span class="muted">· Dark</span>');
+  expect(countOccurrences(pageHtml, '<span class="pill">Inferred</span>')).toBe(
     1
   );
   expect(pageHtml).toContain(

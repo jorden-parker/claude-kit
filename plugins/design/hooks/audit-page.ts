@@ -2,6 +2,7 @@ import {
   AUDIT_CATEGORIES,
   AUDIT_SEVERITIES,
   countFindings,
+  describeProgress,
   type Audit,
   type AuditCategory,
   type AuditFinding,
@@ -42,6 +43,13 @@ const ASPECT_LABELS: Record<DiscrepancyAspect, string> = {
   implementation: "Implementation",
 };
 
+const SEVERITY_NAMES: Record<AuditSeverity, string> = {
+  error: "Error",
+  warning: "Warning",
+  note: "Note",
+};
+
+const AUDIT_EYEBROW = "Design audit";
 const GROUPS_SLUG = "groups";
 const GROUPS_LABEL = "Same-purpose components";
 const BARE_WORD = /^[a-z]+$/i;
@@ -135,7 +143,7 @@ const renderValue = (value: string | undefined) =>
     : "";
 
 const renderFinding = (finding: NumberedFinding) =>
-  `<article class="finding"><span class="number">#${finding.number}</span><span class="pill ${finding.severity}">${finding.severity}</span><h3 class="finding-title">${escapeHtml(finding.title)}</h3><p>${escapeHtml(finding.detail)}</p>${renderValue(finding.value)}${renderPlaces(finding)}<p><strong>Fix:</strong> ${escapeHtml(finding.fix)}</p></article>`;
+  `<article class="finding"><span class="number">#${finding.number}</span><span class="pill ${finding.severity}">${SEVERITY_NAMES[finding.severity]}</span><h3 class="finding-title">${escapeHtml(finding.title)}</h3><p>${escapeHtml(finding.detail)}</p>${renderValue(finding.value)}${renderPlaces(finding)}<p><strong>Fix:</strong> ${escapeHtml(finding.fix)}</p></article>`;
 
 const renderSectionPanel =
   ({ componentGroups, findings }: Audit) =>
@@ -151,7 +159,7 @@ const renderSectionPanel =
     );
 
 export const renderAuditPage = (audit: Audit) => {
-  const { project, files, theme, componentGroups, findings } = audit;
+  const { project, files, theme, componentGroups, findings, progress } = audit;
   const sections = listSections(componentGroups.length, findings);
   const groupSummary = componentGroups.length
     ? ` and ${pluralize(componentGroups.length, "component group")}`
@@ -162,15 +170,16 @@ export const renderAuditPage = (audit: Audit) => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}">
-<title>Audit · ${escapeHtml(project)}</title>
+<title>${AUDIT_EYEBROW} · ${escapeHtml(project)}</title>
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
 <main>
 <header class="hero">
-<p class="eyebrow">Audit</p>
+<p class="eyebrow">${AUDIT_EYEBROW}</p>
 <h1>${escapeHtml(project)}</h1>
 <p class="muted">${pluralize(findings.length, "finding")}${groupSummary} in ${pluralize(files.length, "file")}</p>
+${progress ? `<p class="muted">${describeProgress(progress)}</p>` : ""}
 </header>
 ${sections.length ? `${renderCounts(findings, sections)}\n${renderTabs(sections)}` : ""}
 ${sections.map(renderSectionPanel(audit)).join("\n")}

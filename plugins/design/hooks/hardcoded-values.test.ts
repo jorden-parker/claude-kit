@@ -18,6 +18,32 @@ test("hex colors and color functions are found, with every line that uses them",
   ]);
 });
 
+test("named colors are found where a color is the value, in CSS, style objects and SVG attributes", () => {
+  const sourceText = [
+    ".card{color:white;border:1px solid rebeccapurple}",
+    'const badge = { backgroundColor: "red", label: "Red" };',
+    "<rect fill=\"navy\" stroke='transparent'/>",
+  ].join("\n");
+
+  expect(findHardcodedValues(sourceText, ["color"])).toEqual([
+    { kind: "color", value: "white", lines: [1] },
+    { kind: "color", value: "rebeccapurple", lines: [1] },
+    { kind: "color", value: "red", lines: [2] },
+    { kind: "color", value: "navy", lines: [3] },
+  ]);
+});
+
+test("named colors that are class names, prose, keywords or variables are not colors", () => {
+  const sourceText = [
+    '<p className="text-white bg-black" class="red">White rabbits, black cats</p>',
+    ".keyword{color:transparent;background:currentColor}.inherits{color:inherit}",
+    ".variable{color:var(--red);background:var(--navy)}",
+    ".other{color:redirect;background:url(gold.png)}",
+  ].join("\n");
+
+  expect(findHardcodedValues(sourceText, ["color"])).toEqual([]);
+});
+
 test("a value used twice on one line lists that line once", () => {
   const foundValues = findHardcodedValues(".card{color:#111;background:#111}", [
     "color",

@@ -7,6 +7,7 @@ import {
   renderThemeCss,
   type Theme,
   type ThemeToken,
+  type TokenKind,
 } from "./theme";
 
 export type DesignMode = "redesign" | "new";
@@ -34,6 +35,15 @@ export const MAX_NEW_TOKENS = 3;
 const MODE_LABELS: Record<DesignMode, { eyebrow: string; subject: string }> = {
   redesign: { eyebrow: "Redesign", subject: "Target" },
   new: { eyebrow: "New design", subject: "Brief" },
+};
+
+const TOKEN_KIND_LABELS: Record<TokenKind, string> = {
+  color: "Color",
+  font: "Font",
+  "text-size": "Text size",
+  space: "Space",
+  radius: "Radius",
+  shadow: "Shadow",
 };
 
 const PLAIN_COLOR =
@@ -76,10 +86,10 @@ const renderTokenValue = (token: ThemeToken, tokenValue: string) =>
 
 const renderTokenRow = (token: ThemeToken) => {
   const inferredMark = token.isInferred
-    ? `<span class="pill">inferred</span>`
+    ? `<span class="pill">Inferred</span>`
     : "";
   const darkValue = token.darkValue
-    ? ` <span class="muted">· dark</span> ${renderTokenValue(token, token.darkValue)}`
+    ? ` <span class="muted">· Dark</span> ${renderTokenValue(token, token.darkValue)}`
     : "";
   return `<tr><td><code>${escapeHtml(readTokenVariable(token.name))}</code>${inferredMark}</td><td>${renderTokenValue(token, token.value)}${darkValue}</td><td><code>${escapeHtml(token.source)}</code></td></tr>`;
 };
@@ -97,7 +107,7 @@ const renderTab = (variant: DesignVariant, variantIndex: number) => {
 };
 
 const renderPanel =
-  ({ mode, theme }: Design) =>
+  ({ mode, theme }: Design, designName: string) =>
   (variant: DesignVariant, variantIndex: number) => {
     const letter = readVariantLetter(variantIndex);
     const slug = letter.toLowerCase();
@@ -107,7 +117,7 @@ const renderPanel =
         ? `${renderList("Kept", variant.kept)}${renderList("Changed", variant.changed)}`
         : "";
     return `<section role="tabpanel" id="panel-${slug}" aria-labelledby="tab-${slug}"${variantIndex ? " hidden" : ""}>
-<div class="variant-head"><h2>${letter} · ${name}</h2><div class="apply"><code id="command-${slug}">/design apply ${letter}</code><button type="button" class="button primary" data-copies="command-${slug}">Use this</button></div></div>
+<div class="variant-head"><h2>${letter} · ${name}</h2><div class="apply"><code id="command-${slug}">/design apply ${designName ? `${escapeHtml(designName)} ` : ""}${letter}</code><button type="button" class="button primary" data-copies="command-${slug}">Use this</button></div></div>
 <p class="muted">${escapeHtml(variant.rationale)}</p>
 <div class="stage"><iframe sandbox="" title="Variant ${letter}: ${name}" srcdoc="${escapeHtml(renderVariantDocument(theme, variant))}"></iframe></div>
 <div class="notes">${redesignNotes}${renderTokenTable("Proposed additions", readProposedTokens(variant))}</div>
@@ -121,12 +131,12 @@ export const renderThemePanel = ({ tokens, inconsistencies }: Theme) =>
   `<section class="theme" aria-labelledby="theme-heading"><h2 id="theme-heading">Theme</h2>${TOKEN_KINDS.map(
     (kind) =>
       renderTokenTable(
-        kind,
+        TOKEN_KIND_LABELS[kind],
         tokens.filter((token) => token.kind === kind)
       )
   ).join("")}${renderList("Inconsistencies", inconsistencies)}</section>`;
 
-export const renderDesignPage = (design: Design) => {
+export const renderDesignPage = (design: Design, designName = "") => {
   const labels = MODE_LABELS[design.mode];
   const darkToggle = hasDarkValues(design.theme.tokens)
     ? `<button type="button" class="button secondary" id="toggle-dark" aria-pressed="false">Dark</button>`
@@ -137,7 +147,7 @@ export const renderDesignPage = (design: Design) => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}">
-<title>Design · ${escapeHtml(design.project)}</title>
+<title>${labels.eyebrow} · ${escapeHtml(design.project)}</title>
 <style>${PAGE_STYLE}</style>
 </head>
 <body data-frame-width="desktop">
@@ -149,7 +159,7 @@ export const renderDesignPage = (design: Design) => {
 </header>
 <div class="toolbar"><div role="tablist" aria-label="Variants">${design.variants.map(renderTab).join("")}</div><div class="toggles" role="group" aria-label="Preview">${renderWidthButton("desktop", "Desktop", true)}${renderWidthButton("mobile", "Mobile", false)}${darkToggle}</div></div>
 <p class="muted" id="copy-status" role="status"></p>
-${design.variants.map(renderPanel(design)).join("\n")}
+${design.variants.map(renderPanel(design, designName)).join("\n")}
 ${renderThemePanel(design.theme)}
 </main>
 <script>${PAGE_SCRIPT}</script>

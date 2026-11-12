@@ -3,11 +3,16 @@ import {
   AUDIT_CATEGORIES,
   AUDIT_SEVERITIES,
   auditProject,
+  compareFindings,
   describeFindingCounts,
+  describeProgress,
   numberFindings,
+  pickPreviousAuditName,
+  readPreviousFindings,
   type Audit,
   type AuditCategory,
   type AuditFinding,
+  type AuditProgress,
   type AuditSeverity,
 } from "./audit";
 import { renderAuditPage } from "./audit-page";
@@ -24,7 +29,11 @@ import {
   type DesignMode,
   type DesignVariant,
 } from "./design-page";
-import { findHardcodedValues, type LiteralKind } from "./hardcoded-values";
+import {
+  listMarkupProblems,
+  listNewTokenProblems,
+  listRawCssProblems,
+} from "./mockup-checks";
 import {
   listProblemUnless,
   listUnknownValue,
@@ -50,13 +59,28 @@ const QUALIFIED_THEME_TOOL_NAME = `mcp__design__${THEME_TOOL_NAME}`;
 const QUALIFIED_DESIGN_TOOL_NAME = `mcp__design__${DESIGN_TOOL_NAME}`;
 const QUALIFIED_AUDIT_TOOL_NAME = `mcp__design__${AUDIT_TOOL_NAME}`;
 const DESIGN_MODES: readonly DesignMode[] = ["redesign", "new"];
+const DESIGN_COMMAND_PREFIXES = ["/design ", "/design:design "];
+const DESIGN_MODE_SUGGESTIONS = [
+  {
+    text: "new",
+    description: "Mockups of a screen or component that does not exist yet",
+  },
+  {
+    text: "redesign",
+    description:
+      "Mockups of new looks for an existing file, route or component",
+  },
+  {
+    text: "audit",
+    description: "Checks the theme, the components and their consistency",
+  },
+  {
+    text: "apply",
+    description: "Builds the picked variant of a saved design in project code",
+  },
+  { text: "fix", description: "Fixes numbered audit findings in project code" },
+];
 const MAX_VARIANTS = 4;
-const RAW_KINDS = ["color", "font"] as const;
-const HTML_TAG = /<[a-z][^>]*>/gi;
-const STYLE_ELEMENT = /<style[\s>]/i;
-const STYLE_ATTRIBUTE = /\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-const COLOR_ATTRIBUTE =
-  /\s(?:fill|stroke|stop-color|flood-color|color)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
 
 declare module "claude-code" {
   interface McpToolInputs {
@@ -330,7 +354,7 @@ const formatFileStamp = (milliseconds: number) => {
     padTwoDigits(stampDate.getUTCMonth() + 1),
     padTwoDigits(stampDate.getUTCDate()),
   ].join("-");
-  return `${datePart}-${padTwoDigits(stampDate.getUTCHours())}${padTwoDigits(stampDate.getUTCMinutes())}`;
+  return `${datePart}-${padTwoDigits(stampDate.getUTCHours())}${padTwoDigits(stampDate.getUTCMinutes())}${padTwoDigits(stampDate.getUTCSeconds())}`;
 };
 
 const BROWSER_OPENERS = [
@@ -415,11 +439,12 @@ const writeAndOpenPage = async (
   engine: EngineInterface,
   workingDirectory: string,
   pageKind: string,
+  fileStamp: string,
   saved: unknown,
   pageHtml: string
 ) => {
   const designFolder = readDesignFolder(workingDirectory);
-  const pathWithoutExtension = `${designFolder}/${pageKind}-${formatFileStamp(await engine.clock.now())}`;
+  const pathWithoutExtension = `${designFolder}/${pageKind}-${fileStamp}`;
   const pagePath = `${pathWithoutExtension}.html`;
   await engine.fs.write(`${designFolder}/.gitignore`, "*\n");
   await engine.fs.write(`${pathWithoutExtension}.json`, serialize(saved));
@@ -478,21 +503,6 @@ const saveTheme = async (
   return { result: `Saved ${theme.tokens.length} tokens to ${themePath}.` };
 };
 
-const readAttributeValues = (html: string, attribute: RegExp) =>
-  [...(html.match(HTML_TAG) ?? []).join("\n").matchAll(attribute)]
-    .map((match) => match[1] ?? match[2] ?? "")
-    .join("\n");
-
-const describeRawValues = (
-  sourceText: string,
-  place: string,
-  searchedKinds: readonly LiteralKind[] = RAW_KINDS
-) =>
-  findHardcodedValues(sourceText, searchedKinds).map(
-    ({ kind, value }) =>
-      `raw ${kind} ${value} in its ${place}. Use var(--token).`
-  );
-
 const readVariant =
   (mode: string) => (rawVariant: unknown, variantIndex: number) => {
     const fields = readFields(rawVariant);
@@ -514,29 +524,13 @@ const readVariant =
         variant.name && variant.html,
         "needs a name and html."
       ),
-      ...listProblemUnless(
-        newTokens.length <= MAX_NEW_TOKENS,
-        `at most three newTokens, and it has ${newTokens.length}.`
-      ),
-      ...tokenProblems,
+      ...listNewTokenProblems(newTokens, tokenProblems),
       ...listProblemUnless(
         mode !== "redesign" || variant.changed.length,
         "a redesign lists at least one thing under changed."
       ),
-      ...describeRawValues(variant.css, "css"),
-      ...listProblemUnless(
-        !STYLE_ELEMENT.test(variant.html),
-        "a <style> element in its html. Styles belong in css."
-      ),
-      ...describeRawValues(
-        readAttributeValues(variant.html, STYLE_ATTRIBUTE),
-        "html style attributes"
-      ),
-      ...describeRawValues(
-        readAttributeValues(variant.html, COLOR_ATTRIBUTE),
-        "html color attributes",
-        ["color"]
-      ),
+      ...listRawCssProblems(variant.css),
+      ...listMarkupProblems(variant.html),
     ].map(
       (problem) => `Variant ${readVariantLetter(variantIndex)}: ${problem}`
     );
@@ -568,13 +562,15 @@ const renderDesign = async (
     theme,
     variants: readings.map((reading) => reading.variant),
   };
+  const fileStamp = formatFileStamp(await engine.clock.now());
   return {
     result: await writeAndOpenPage(
       engine,
       workingDirectory,
       "design",
+      fileStamp,
       design,
-      renderDesignPage(design)
+      renderDesignPage(design, `design-${fileStamp}`)
     ),
   };
 };
@@ -600,6 +596,30 @@ const readFinding = (rawFinding: unknown) => {
     ),
   ];
   return { finding, problems };
+};
+
+const readProgress = async (
+  engine: EngineInterface,
+  designFolder: string,
+  currentFileName: string,
+  findings: AuditFinding[]
+): Promise<AuditProgress | undefined> => {
+  try {
+    const entries = await engine.fs.list(designFolder);
+    const previousAudit = pickPreviousAuditName(
+      entries.map((entry) => entry.name),
+      currentFileName
+    );
+    if (!previousAudit) return undefined;
+    const previousFindings = readPreviousFindings(
+      await readFileText(engine, `${designFolder}/${previousAudit}`)
+    );
+    return previousFindings
+      ? { previousAudit, ...compareFindings(previousFindings, findings) }
+      : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 const renderAudit = async (
@@ -646,6 +666,13 @@ const renderAudit = async (
     ],
     groups.length
   );
+  const fileStamp = formatFileStamp(await engine.clock.now());
+  const progress = await readProgress(
+    engine,
+    readDesignFolder(workingDirectory),
+    `audit-${fileStamp}.json`,
+    findings
+  );
   const audit: Audit = {
     project: readText(fields.project) || "This project",
     files: scannedPaths,
@@ -655,16 +682,24 @@ const renderAudit = async (
       number: groupIndex + 1,
     })),
     findings,
+    ...(progress ? { progress } : {}),
   };
   const openedLine = await writeAndOpenPage(
     engine,
     workingDirectory,
     "audit",
+    fileStamp,
     audit,
     renderAuditPage(audit)
   );
   return {
-    result: `${openedLine} ${describeFindingCounts(findings, groups.length)}`,
+    result: [
+      openedLine,
+      describeFindingCounts(findings, groups.length),
+      describeProgress(progress),
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 };
 
@@ -696,6 +731,20 @@ export const register: Register = (on) => {
       isDeferred: false,
     });
     return next(e);
+  });
+
+  on("prompt.autocomplete", async (_, e, next) => {
+    const isFirstDesignArgument = DESIGN_COMMAND_PREFIXES.some(
+      (prefix) =>
+        e.text.startsWith(prefix) &&
+        e.text.slice(prefix.length, e.start).trim() === ""
+    );
+    if (!isFirstDesignArgument) return next(e);
+    const { suggestions } = await next(e);
+    const matchingModes = DESIGN_MODE_SUGGESTIONS.filter((mode) =>
+      mode.text.startsWith(e.token)
+    );
+    return { suggestions: [...suggestions, ...matchingModes] };
   });
 
   on("tool.call", { tool: QUALIFIED_THEME_TOOL_NAME }, async ($, e) => {

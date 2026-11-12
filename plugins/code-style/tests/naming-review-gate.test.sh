@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
 
 hook_directory="$(cd "$(dirname "$0")/../hooks" && pwd)"
 fixture_directory="$(mktemp -d)"
@@ -80,6 +81,18 @@ expect_stderr_omits() {
   fi
 }
 
+qwen_prompt_line() {
+  printf '{"type":"user","uuid":"%s","provenance":"real_user","message":{"role":"user","parts":[{"text":"%s"}]}}' "$1" "$2"
+}
+
+qwen_call_line() {
+  printf '{"type":"assistant","uuid":"%s","provenance":"assistant_output","message":{"role":"model","parts":[{"functionCall":{"id":"%s","name":"%s","args":{"file_path":"%s","old_string":"1","new_string":"2"}}}]}}' "$1" "$1" "$2" "$3"
+}
+
+qwen_tool_result_line() {
+  printf '{"type":"tool_result","uuid":"%s","provenance":"tool_result","message":{"role":"user","parts":[{"functionResponse":{"id":"%s","name":"edit","response":{"output":"ok"}}}]}}' "$1" "$1"
+}
+
 no_edit_transcript="$fixture_directory/no-edit.jsonl"
 write_transcript "$no_edit_transcript" "$(user_prompt_line u1 'what does app.py do')"
 
@@ -122,6 +135,35 @@ expect_stderr_mentions "naming gate lists the Bash-edited file" 'other.py'
 
 run_hook naming-review-gate.sh "$outside_repository_transcript" naming-outside; status=$?
 expect_exit "naming gate skips edits outside the repository" 0 "$status"
+
+qwen_edit_transcript="$fixture_directory/qwen-edit.jsonl"
+write_transcript "$qwen_edit_transcript" \
+  "$(qwen_prompt_line u1 'change app.py')" \
+  "$(qwen_call_line a1 edit "$repository/app.py")" \
+  "$(qwen_tool_result_line r1)"
+
+qwen_write_transcript="$fixture_directory/qwen-write.jsonl"
+write_transcript "$qwen_write_transcript" \
+  "$(qwen_prompt_line u1 'write other.py')" \
+  "$(qwen_call_line a1 write_file "$repository/other.py")" \
+  "$(qwen_tool_result_line r1)"
+
+qwen_earlier_turn_transcript="$fixture_directory/qwen-earlier-turn.jsonl"
+write_transcript "$qwen_earlier_turn_transcript" \
+  "$(qwen_prompt_line u1 'change app.py')" \
+  "$(qwen_call_line a1 edit "$repository/app.py")" \
+  "$(qwen_prompt_line u2 'thanks, what next')"
+
+run_hook naming-review-gate.sh "$qwen_edit_transcript" naming-qwen-edit; status=$?
+expect_exit "naming gate blocks a Qwen Code edit to a changed source file" 2 "$status"
+expect_stderr_mentions "naming gate lists the file a Qwen Code edit changed" 'app.py'
+
+run_hook naming-review-gate.sh "$qwen_write_transcript" naming-qwen-write; status=$?
+expect_exit "naming gate counts a Qwen Code write_file this turn" 2 "$status"
+expect_stderr_mentions "naming gate lists the file a Qwen Code write_file changed" 'other.py'
+
+run_hook naming-review-gate.sh "$qwen_earlier_turn_transcript" naming-qwen-earlier-turn; status=$?
+expect_exit "naming gate ignores Qwen Code edits from earlier turns" 0 "$status"
 
 rm -rf "$fixture_directory"
 rm -f /tmp/claude-naming-review-naming-*

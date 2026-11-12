@@ -1,5 +1,5 @@
-import { closeSync, openSync, readSync, statSync } from "node:fs";
-import { basename } from "node:path";
+import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { EDIT_TOOLS, type HookEvent, type HookResult } from "./types.ts";
 
 const UI_FILE = /\.(?:[jt]sx|vue|svelte|astro|html|css|scss|sass|less)$/;
@@ -23,9 +23,15 @@ const readsConsole = (use: ToolUse) =>
   CONSOLE_TOOL.test(use.name ?? "") ||
   (use.name === "Bash" && AGENT_BROWSER_CONSOLE.test(use.input?.command ?? ""));
 
+const isPluginHooksModule = (path: string) =>
+  basename(dirname(path)) === "hooks" &&
+  existsSync(join(dirname(dirname(path)), ".claude-plugin"));
+
 const editedUiFile = (use: ToolUse): string | null => {
   const path = use.input?.file_path;
-  return EDIT_TOOLS.includes(use.name ?? "") && UI_FILE.test(path ?? "")
+  return EDIT_TOOLS.includes(use.name ?? "") &&
+    UI_FILE.test(path ?? "") &&
+    !isPluginHooksModule(path)
     ? path
     : null;
 };

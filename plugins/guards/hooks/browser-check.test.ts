@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decide, decideFromTranscript } from "./browser-check.ts";
@@ -80,3 +80,17 @@ test("decideFromTranscript reads only the end of a long transcript", () => {
   expect(decideFromTranscript(event)?.exitCode).toBe(2);
   expect(decideFromTranscript(event, 500)).toBeNull();
 });
+
+test("passes an edit to a plugin's hooks module, which has no page", () => {
+  const pluginFolder = mkdtempSync(join(tmpdir(), "plugin-"));
+  mkdirSync(join(pluginFolder, ".claude-plugin"));
+  const editHooksModule = toolUse("Edit", {
+    file_path: join(pluginFolder, "hooks", "register.tsx"),
+  });
+  expect(blocks([editHooksModule])).toBe(false);
+});
+
+test("blocks an edit to a React hooks folder outside a plugin", () =>
+  expect(
+    blocks([toolUse("Edit", { file_path: "/app/src/hooks/useCart.tsx" })])
+  ).toBe(true));

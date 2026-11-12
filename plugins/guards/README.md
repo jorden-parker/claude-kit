@@ -17,6 +17,8 @@ hook is a pure `decide(event)` function in `hooks/`, run through
   lines of long output.
 - **browser-check** (Stop): blocks once when a UI file was edited after the last
   browser console read (`agent-browser console`, Playwright or Claude in Chrome).
+  A plugin's own hooks module (`hooks/*.tsx` beside `.claude-plugin/`) is not a
+  page and is skipped.
 
 Hook events are logged to `~/.cache/guards/hooks.log`.
 

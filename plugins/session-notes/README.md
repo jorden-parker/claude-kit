@@ -43,15 +43,17 @@ session-notes amend <session> <note> <text>  # e.g. session-notes amend 1 2 Depl
 
 Session and note numbers are the ones `list` prints. A number with no note, or empty text, is refused with a message and the store is left unchanged.
 
-Install it on any machine with one line:
+Install it from the installed plugin with one line:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/jorden-parker/claude-kit/main/plugins/session-notes/install.sh | bash
+bash "$(jq -r '.plugins["session-notes@claude-kit"][0].installPath' ~/.claude/plugins/installed_plugins.json)/install.sh"
 ```
 
-It copies the command to `~/.local/bin/session-notes` and, in zsh, adds `~/.local/bin` to your PATH in `~/.zshrc` if it is not there yet. Run it again to update.
+Or from a checkout: `bash ~/src/claude-kit/plugins/session-notes/install.sh`.
 
-Without that, each Claude Code session start links it to `~/.local/bin/session-notes`, so it is on your PATH once `~/.local/bin` is. The link follows the plugin to each new version. A file of your own at that path, or a link to another program, is left alone. Set `SESSION_NOTES_LINK_DIR` to link into another directory.
+It links `~/.local/bin/session-notes` to the plugin's `bin/session-notes` and, in zsh, adds `~/.local/bin` to your PATH in `~/.zshrc` if it is not there yet. Nothing is downloaded. If another program's file is already at that path, it stops and says so.
+
+After that, each Claude Code session start points `~/.local/bin/session-notes` at the current plugin version. A file of your own at that path, or a link to another program, is left alone. Set `SESSION_NOTES_LINK_DIR` to link into another directory.
 
 It finds the store at `~/.claude/plugins/store/session-notes_*.json` (under `$CLAUDE_CONFIG_DIR` when set). Set `SESSION_NOTES_STORE` to a file path to use another store.
 

@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cli_url="${SESSION_NOTES_CLI_URL:-https://raw.githubusercontent.com/jorden-parker/claude-kit/main/plugins/session-notes/bin/session-notes}"
-install_directory="$HOME/.local/bin"
-install_path="$install_directory/session-notes"
+plugin_root="$(cd "$(dirname "$0")" && pwd)"
+install_directory="${SESSION_NOTES_LINK_DIR:-$HOME/.local/bin}"
 
-mkdir -p "$install_directory"
-downloaded_cli="$(mktemp "$install_directory/.session-notes.XXXXXX")"
-trap 'rm -f "$downloaded_cli"' EXIT
-curl -fsSL "$cli_url" -o "$downloaded_cli"
-chmod 755 "$downloaded_cli"
-mv -f "$downloaded_cli" "$install_path"
-printf 'Installed %s\n' "$install_path"
+bash "$plugin_root/hooks/link-session-notes.sh"
+printf 'Linked %s/session-notes to %s/bin/session-notes\n' "$install_directory" "$plugin_root"
 
 case ":$PATH:" in
   *":$install_directory:"*) exit 0 ;;

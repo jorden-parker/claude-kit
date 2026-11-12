@@ -1,0 +1,15 @@
+{
+  "name": "guards",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc -p ."
+  },
+  "packageManager": "pnpm@10.15.0",
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2"
+  }
+}

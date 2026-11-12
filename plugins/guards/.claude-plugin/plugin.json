@@ -1,0 +1,5 @@
+{
+  "name": "guards",
+  "version": "0.1.0",
+  "description": "Command guards: denies unbounded git log, diff and find, trims long Bash output, blocks commits that skip hooks or fail the project's checks, limits Reads of large files, and asks for a browser check after UI edits"
+}

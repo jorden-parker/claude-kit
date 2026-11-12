@@ -63,7 +63,7 @@ No output and no error: the theme is current. Use it and skip to the mode. Any o
 ### Extract the theme
 
 1. Find the stack: the framework, the styling method, how dark mode is switched and the icon set. `package.json` and the config files say.
-2. Read the declared tokens. `theme-sources.md`, beside this file, says where each stack keeps them and how to read them.
+2. Read the declared tokens, starting with the CSS. `theme-sources.md`, beside this file, lists the usual places in order under "Look here first", then says where each stack keeps them and how to read them.
 3. With no declared tokens for a kind, count usage: the colors, font families, text sizes, spacing, radii and shadows the UI code uses most. Keep the common ones and mark each `isInferred: true`.
 4. Read three to five core components: the button, the input, the card, the navigation, and one more the project leans on. Note their radius, borders, shadows, density, and their hover, focus, disabled and error states. A value they repeat that no token holds becomes an inferred token.
 5. List near-duplicates in `inconsistencies`, one plain sentence each, with both values and where they are: two grays a shade apart, two radii one pixel apart, a font size off the scale.

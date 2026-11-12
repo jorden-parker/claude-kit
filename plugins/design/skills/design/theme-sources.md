@@ -2,6 +2,17 @@
 
 Find the stack in `package.json`, then read the matching sections. A project can match several. Read the source of a token, never the build output.
 
+## Look here first
+
+Most themes live in CSS. Check these in order and stop once you have the tokens:
+
+1. `components.json`: its `tailwind.css` names the CSS file. Read that file.
+2. The CSS file with `@import "tailwindcss"`, often `src/app/globals.css`, `app/globals.css`, `src/index.css` or `src/styles/globals.css`. Read its `@theme` block and its `:root` and `.dark` variables.
+3. `:root` variables in `globals.css`, `index.css`, `app.css`, `theme.css` or `styles/tokens.css`.
+4. `tailwind.config.{ts,js,cjs,mjs}`. A value such as `hsl(var(--primary))` points at a CSS variable: read its value in the CSS file, and cite that file.
+
+Only when none of these hold tokens, search the rest of the project, as the sections below say.
+
 ## Tailwind v4
 
 - No config file by default. The theme is in CSS: the file with `@import "tailwindcss"`, often `src/app/globals.css`, `src/index.css` or `app/assets/css/main.css`.

@@ -433,7 +433,7 @@ const components = {
     (props) => renderImage(props.alt, props.ratio, props.art)
   ),
   Graphic: defineComponent(
-    "A picture you draw yourself from shapes, such as a record, a sunrise, a coffee cup or an abstract pattern. Each shape has x and y from 0 to 100 (its center, from the left and from the top), size from 1 to 100, and rotate in degrees. Shapes later in the list lie on top. Use 4 to 10 shapes.",
+    "A picture you draw yourself from shapes, such as a record, a sunrise, a coffee cup or an abstract pattern. Each shape has x and y from 0 to 100 (its center, from the left and from the top), size from 1 to 100, and rotate in degrees. Shapes later in the list lie on top. Use 5 to 10 shapes that overlap and touch, so they read as one picture.",
     z.object({
       alt: plainText,
       ratio: defineOption(readKeys(IMAGE_RATIOS), "wide"),
@@ -852,6 +852,8 @@ export const renderCatalogCss = (tokens: StyleToken[]) => {
     ...Object.entries(IMAGE_RATIOS).map(([name, ratio]) => `.ratio-${name}{aspect-ratio:${ratio}}`),
     ".grid .image:not(.image-art){aspect-ratio:4 / 3}",
     ".image-art{position:relative;overflow:hidden;max-height:360px;padding:0}",
+    ".page-inner>.image-art{max-height:280px}",
+    ".page-narrow:has(.nav,.hero,.grid,.split,.section){max-width:1120px}",
     ".graphic{position:absolute;inset:0;width:100%;height:100%}",
     ...Object.entries({ accent, ink, muted, surface }).map(([name, color]) => `.graphic .tone-${name}{fill:${color};stroke:${color}}`),
     ".graphic :not(.outline):not(.outline *){stroke-width:0}",
@@ -943,14 +945,14 @@ const DESIGN_MOVES: Record<string, string[]> = {
     "a start-aligned Hero with no picture, and a Row of Stats or Badges right under it",
     "a centered Nav and a large centered Logo above a centered Hero",
     "a Hero whose picture sits on the right, drawn as artwork",
-    "a wide Graphic you draw across the top, with the title under it",
+    "a Split: the title, a Text and a Button on one side, a square Graphic you draw on the other",
   ],
   Body: [
     "a bento Grid of 4 columns where the pieces mix span 2 and rowSpan 2",
     "alternating Splits, every second one reversed, each with an Image or a Graphic",
     "one dominant element beside a narrow side column: a Split with ratio wide-left",
     "bands: plain, muted and accent Sections in turn",
-    "one narrow centered column: maxWidth lg, large type, Dividers between the parts",
+    "one centered column on a wide Page: each part with maxWidth lg and place center, large type, Dividers between the parts",
     "dense: a Grid of 4 columns of small pieces, then one wide piece under it",
     "a Split with ratio wide-right: a narrow column of Stats or a List, then the main content",
   ],

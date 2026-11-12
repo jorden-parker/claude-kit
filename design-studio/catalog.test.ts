@@ -430,3 +430,10 @@ test("renderSpecToHtml shows no caption for a picture a model described with a l
   expect(html).not.toContain("images.example.com");
   expect(html).toContain('aria-label="Picture"');
 });
+
+test("a narrow page widens when a model fills it with a nav, hero, grid or split", () => {
+  const css = renderCatalogCss(THEME_TOKENS);
+  expect(css).toContain(".page-narrow:has(.nav,.hero,.grid,.split,.section){max-width:1120px}");
+  expect(css).toContain(".page-inner>.image-art{max-height:280px}");
+  expect(pickDesignMoves(() => 0.7)).not.toContain("narrow centered column");
+});

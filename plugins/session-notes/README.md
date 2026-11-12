@@ -43,11 +43,7 @@ session-notes amend <session> <note> <text>  # e.g. session-notes amend 1 2 Depl
 
 Session and note numbers are the ones `list` prints. A number with no note, or empty text, is refused with a message and the store is left unchanged.
 
-Put it on your PATH once, for example:
-
-```
-ln -s ~/src/claude-kit/plugins/session-notes/bin/session-notes ~/.local/bin/session-notes
-```
+Each Claude Code session start links it to `~/.local/bin/session-notes`, so it is on your PATH once `~/.local/bin` is. The link follows the plugin to each new version. A file of your own at that path, or a link to another program, is left alone. Set `SESSION_NOTES_LINK_DIR` to link into another directory.
 
 It finds the store at `~/.claude/plugins/store/session-notes_*.json` (under `$CLAUDE_CONFIG_DIR` when set). Set `SESSION_NOTES_STORE` to a file path to use another store.
 

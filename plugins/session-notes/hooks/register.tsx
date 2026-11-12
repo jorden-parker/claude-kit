@@ -240,6 +240,9 @@ export const register: Register = (on) => {
       inputSchema: DELETE_NOTE_TOOL_SCHEMA,
       isDeferred: false,
     });
+    await $.process
+      .run(["bash", `${$.plugin.root}/hooks/link-session-notes.sh`])
+      .catch(() => undefined);
     return next(e);
   });
 

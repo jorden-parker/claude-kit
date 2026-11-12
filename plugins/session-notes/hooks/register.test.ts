@@ -320,6 +320,30 @@ test("delete_note refuses a note that does not exist", async ($, on) => {
   expect(note?.notes).toEqual(["Real note", "Deploy is on Friday"]);
 });
 
+test("session start links the session-notes shell command", async ($, on) => {
+  mockEngine(on, "session-a");
+  const ranCommands: string[][] = [];
+  on("session.start", (_, e) => ({ cwd: e.cwd }));
+  on("command.register", (_, e) => ({ value: { command: e.name } }));
+  on("tool.register", (_, e) => ({
+    value: { tool: `mcp__session-notes__${e.name}` },
+  }));
+  on("process.run", (_, e) => {
+    ranCommands.push([...e.argv]);
+    return { value: { exitCode: 0, stdout: "", stderr: "" } } as never;
+  });
+
+  await $.session.start({
+    cwd: "/repo",
+    surface: "terminal",
+    isInteractive: true,
+  });
+
+  expect(ranCommands).toHaveLength(1);
+  expect(ranCommands[0]?.[0]).toBe("bash");
+  expect(ranCommands[0]?.[1]).toEndWith("/hooks/link-session-notes.sh");
+});
+
 const runNoteCommand = async ($: Engine, on: On, commandArguments: string) => {
   const clock = mock.clock(on);
   const recorded = { openedPanes: [], submittedPrompts: [] as string[] };

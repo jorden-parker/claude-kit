@@ -23,6 +23,18 @@ tdd_last_result() {
   awk '{print $1}' "$state_file" 2>/dev/null
 }
 
+tdd_record_test_written() {
+  local state_directory
+  state_directory="$(tdd_state_directory "$1")"
+  mkdir -p "$state_directory" 2>/dev/null || return 0
+  : > "$state_directory/test-written" 2>/dev/null
+  return 0
+}
+
+tdd_test_written() {
+  [ -f "$(tdd_state_directory "$1")/test-written" ]
+}
+
 tdd_enforcement_disabled() {
   local project_directory="$1" config_file="$1/.claude/tdd.json"
   [ -n "${TDD_SKIP:-}" ] && return 0
@@ -107,23 +119,4 @@ tdd_path_is_implementation() {
     *.config.*|conftest.py|setup.py|__init__.py|index.ts|main.go) return 1 ;;
   esac
   return 0
-}
-
-tdd_sibling_test_exists() {
-  local path="$1" project_directory="$2" directory name base extension search_directory candidate
-  directory="$(dirname "$path")"
-  name="$(basename "$path")"
-  base="${name%.*}"
-  extension="${name##*.}"
-  for search_directory in \
-    "$directory" "$directory/__tests__" "$directory/tests" "$directory/test" "$directory/spec" \
-    "$project_directory/tests" "$project_directory/test" "$project_directory/spec" "$project_directory/__tests__"; do
-    [ -d "$search_directory" ] || continue
-    for candidate in \
-      "$base.test.$extension" "$base.spec.$extension" "test_$base.py" "${base}_test.py" \
-      "${base}_test.go" "${base}_spec.rb"; do
-      [ -f "$search_directory/$candidate" ] && return 0
-    done
-  done
-  return 1
 }

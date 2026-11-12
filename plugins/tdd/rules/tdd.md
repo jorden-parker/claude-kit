@@ -12,5 +12,5 @@ Features and fixes follow red, green, refactor.
 
 - Never write implementation before its test.
 - Never edit a test to make it pass; fix the code, or change the test only when the requirement itself changed.
-- Hooks enforce this: implementation edits are blocked until a failing run is recorded, and finishing is blocked while tests fail.
+- Hooks enforce this: new implementation files are blocked until a test is written or fails, edits to existing code get a reminder, and finishing is blocked while tests fail.
 - The test command is detected from the repo (package.json, pytest, go.mod, Cargo.toml, rspec). Pin it in `.claude/tdd.json` as `{"testCommand": "..."}`.

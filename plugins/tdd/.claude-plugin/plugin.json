@@ -1,0 +1,5 @@
+{
+  "name": "tdd",
+  "version": "0.1.0",
+  "description": "Red, green, refactor: the TDD rules at session start; hooks block implementation edits until a failing test run is recorded and block finishing while tests fail"
+}

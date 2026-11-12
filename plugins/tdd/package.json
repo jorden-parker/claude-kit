@@ -1,0 +1,13 @@
+{
+  "name": "tdd",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "for test_file in tests/*.test.sh; do bash \"$test_file\" || exit 1; done",
+    "typecheck": "for hook_file in hooks/*.sh; do bash -n \"$hook_file\" || exit 1; done"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "devDependencies": {
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10"
+  }
+}

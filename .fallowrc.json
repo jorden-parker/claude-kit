@@ -2,6 +2,7 @@
   // Each plugin is installed as a copy of its own folder, so hooks modules cannot import across plugins.
   // Fallow cannot see that hooks.json loads register.ts, so the hooks files are declared as entry points.
   // draft-pr starts its server script with node, which fallow cannot see either.
+  // turn-edits-lib.sh is copied into plugins/code-style/hooks and plugins/tdd/hooks on purpose: each plugin is self-contained.
   "entry": ["plugins/*/hooks/register.ts", "plugins/*/hooks/*.test.ts", "plugins/*/server/*.mjs"],
   "duplicates": {
     // describeRecentMessages is copied between prompt-optimizer and handoff on purpose: plugins must be self-contained.

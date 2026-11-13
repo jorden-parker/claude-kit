@@ -144,3 +144,24 @@ test.each([
 ])("denies hook skipping in %s", (command) =>
   expect(reason(decideWith({}, command))).toContain("fix the failing check")
 );
+
+test("queries an https dev server at the url in its lock", () => {
+  const httpsLock = {
+    "/repo/.next/dev/lock": JSON.stringify({
+      pid: 1,
+      port: 3000,
+      appUrl: "https://localhost:3000",
+    }),
+  };
+  const { run, readText } = harness({
+    files: { ...nextProject, ...httpsLock },
+  });
+  const curlCommands: string[][] = [];
+  const recordingRun = (command: string[]) => {
+    if (command[0] === "curl") curlCommands.push(command);
+    return command[0] === "curl" ? mcpReply({ issues: [] }) : run(command);
+  };
+  expect(decide(commitEvent(), recordingRun, readText)).toBeNull();
+  expect(curlCommands[0]).toContain("https://localhost:3000/_next/mcp");
+  expect(curlCommands[0]).toContain("-k");
+});

@@ -102,7 +102,8 @@ function nextDevServerProblem(
   if (!lock?.port) {
     return "Start `next dev` in the background, open the pages you changed in a browser, then commit again.";
   }
-  const url = `http://localhost:${lock.port}/_next/mcp`;
+  const appUrl = lock.appUrl ?? `http://localhost:${lock.port}`;
+  const url = `${appUrl}/_next/mcp`;
   const headers = [
     "Content-Type: application/json",
     "Accept: application/json, text/event-stream",
@@ -111,6 +112,7 @@ function nextDevServerProblem(
     [
       "curl",
       "-s",
+      "-k",
       "-m",
       "60",
       "-X",

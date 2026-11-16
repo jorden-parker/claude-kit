@@ -39,7 +39,7 @@ The page:
 
 ## The review draft
 
-Every comment is a [Conventional Comment](https://conventionalcomments.org): a label, optional decorations, a subject and a discussion.
+Every comment is a [Conventional Comment](https://conventionalcomments.org): a label, optional decorations, a subject and a discussion. The skill writes each one in plain, everyday words, so the author understands it on the first read.
 
 ```
 **issue (blocking, security):** The token is logged.

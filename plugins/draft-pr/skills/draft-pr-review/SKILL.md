@@ -93,6 +93,33 @@ Rules for every comment:
 - For a concrete replacement of the commented lines, put a GitHub suggestion block in the discussion: a code fence whose language is `suggestion`.
 - Write to the author as a colleague: say "we" and "this", not "you".
 
+How every comment reads. The format above does not change: the label, the decorations, the subject and the discussion stay as they are. These rules are for the words in the subject, the discussion and the summary. The author must understand each comment fully on the first read, with no other file open.
+
+- Write it the way you would say it to a colleague across the desk: everyday words and whole sentences.
+- Keep sentences short, with one idea in each. Use the active voice and name who or what acts: "`parseToken` throws", not "an exception may be thrown".
+- Say the concrete thing: what happens, on which input, and what the user or the caller then sees. Never "this may cause issues".
+- Pick the simplest word that is right: "use", not "utilize"; "so", not "consequently"; "about", not "with regard to".
+- Use a technical term only when the author needs it. When it is not a name from the code or the project's docs, say what it means in a few words.
+- Leave nothing to decode: no arrows, no "w/", no dropped words, and no abbreviation the code does not use.
+- Give the reason in plain words, so the author sees why it matters and not only what to change.
+- Cut filler and stiff phrases: "it should be noted that", "consider leveraging", "in order to". Say how sure you are once, not in every sentence.
+- Be kind and direct. No sarcasm, and no "just", "simply" or "obviously": they make a hard thing sound easy.
+- Before the page opens, read each comment once as the author would, knowing nothing of your review. Rewrite any sentence that needs a second read.
+
+Not this:
+
+```text
+issue (blocking): Insufficient null handling in the token parsing logic may lead to runtime exceptions.
+```
+
+This:
+
+```text
+issue (blocking): `parseToken` crashes when the `Authorization` header is missing.
+
+A request with no header reaches `header.split(" ")`, which throws, so the user gets a 500 instead of a 401. Can we return `undefined` first when `header` is empty?
+```
+
 Evidence for a UX/UI finding. The `discussion` of every UX/UI comment holds these three, in this order. This is not optional and does not depend on the notes:
 
 1. The screenshot: a Markdown image on its own line, `![<what it shows>](<absolute path of the file>)`. That line is the whole embed. The tool takes no file and nothing is uploaded: the page reads the file from that path and shows it in the comment.
@@ -116,7 +143,7 @@ Where a comment goes:
 
 ## 5. Open the page
 
-Write a `summary` of one to three sentences: the overall state of the PR, and what blocks it if anything does. Code-like text goes in backticks here too.
+Write a `summary` of one to three sentences: the overall state of the PR, and what blocks it if anything does. Code-like text goes in backticks here too, and it reads like the comments: plain words, short sentences.
 
 Leave `event` out, so the page starts on Comment. Set `APPROVE` or `REQUEST_CHANGES` only when the user asked for that verdict. The user picks the verdict on the page.
 

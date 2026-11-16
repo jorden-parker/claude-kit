@@ -272,14 +272,76 @@
         font-size: 12px;
       }
       .note-body {
-        white-space: pre-wrap;
         overflow-wrap: anywhere;
         margin-top: 6px;
+        line-height: 1.55;
       }
-      .note-heading {
+      .note-body > :first-child {
+        margin-top: 0;
+      }
+      .note-body > :last-child {
+        margin-bottom: 0;
+      }
+      .note-body :is(p, ul, ol, pre, blockquote, table) {
+        margin: 0 0 8px;
+      }
+      .note-body :is(h1, h2, h3, h4, h5, h6) {
+        font-size: 14px;
         font-weight: 600;
         color: var(--heading);
-        margin-top: 4px;
+        margin: 12px 0 4px;
+      }
+      .note-body h1 {
+        font-size: 16px;
+      }
+      .note-body :is(ul, ol) {
+        padding-left: 20px;
+      }
+      .note-body li:has(> input[type="checkbox"]) {
+        list-style: none;
+        margin-left: -20px;
+      }
+      .note-body input[type="checkbox"] {
+        margin: 0 6px 0 0;
+        vertical-align: -1px;
+        accent-color: var(--focus);
+      }
+      .note-body li:has(> input:checked) {
+        color: var(--muted);
+      }
+      .note-body code {
+        font-family: "Geist Mono", ui-monospace, monospace;
+        font-size: 0.9em;
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: var(--hover);
+      }
+      .note-body pre {
+        padding: 10px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--sidebar);
+        overflow-x: auto;
+      }
+      .note-body pre code {
+        padding: 0;
+        background: none;
+      }
+      .note-body a {
+        color: var(--focus);
+      }
+      .note-body blockquote {
+        padding-left: 12px;
+        border-left: 3px solid var(--border-strong);
+        color: var(--muted);
+      }
+      .note-body table {
+        border-collapse: collapse;
+      }
+      .note-body :is(th, td) {
+        padding: 4px 8px;
+        border: 1px solid var(--border);
+        text-align: left;
       }
       .actions {
         display: flex;
@@ -458,8 +520,7 @@
       }
 
       function notePreview(note) {
-        const firstLine = note.lines.find((line) => line.text.trim());
-        return firstLine ? firstLine.text.trim() : "Empty note";
+        return note.preview || "Empty note";
       }
 
       function noteElementId(session, note) {
@@ -581,14 +642,10 @@
         );
         renderConfirm(actions, key, "Delete this note", path);
         const body = createElement("div", "note-body");
-        for (const line of note.lines) {
-          body.append(
-            createElement(
-              "div",
-              line.isHeading ? "note-heading" : null,
-              line.text || " "
-            )
-          );
+        body.innerHTML = note.html;
+        for (const link of body.querySelectorAll("a")) {
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
         }
         noteElement.append(body);
         return noteElement;

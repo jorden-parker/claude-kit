@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/renderer/html"
 )
 
 //go:embed index.html
@@ -18,6 +23,7 @@ var indexPage []byte
 var (
 	headingPattern = regexp.MustCompile(`^(?:#{1,6}\s+(.*)|\*\*(.+?)\*\*:?)$`)
 	bulletPattern  = regexp.MustCompile(`^(\s*)[-*+]\s+(?:\[( |x|X)\]\s+)?(.*)$`)
+	markdown       = goldmark.New(goldmark.WithExtensions(extension.GFM), goldmark.WithRendererOptions(html.WithHardWraps()))
 )
 
 type noteLine struct {
@@ -26,9 +32,10 @@ type noteLine struct {
 }
 
 type noteView struct {
-	Number int        `json:"number"`
-	Text   string     `json:"text"`
-	Lines  []noteLine `json:"lines"`
+	Number  int    `json:"number"`
+	Text    string `json:"text"`
+	Preview string `json:"preview"`
+	Html    string `json:"html"`
 }
 
 type sessionView struct {
@@ -68,17 +75,30 @@ func formatNoteLine(line string) noteLine {
 	return noteLine{bullet[1] + marker + " " + bullet[3], false}
 }
 
+func notePreview(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if preview := strings.TrimSpace(formatNoteLine(line).Text); preview != "" {
+			return preview
+		}
+	}
+	return ""
+}
+
+func renderMarkdown(text string) string {
+	var rendered bytes.Buffer
+	if err := markdown.Convert([]byte(text), &rendered); err != nil {
+		return ""
+	}
+	return rendered.String()
+}
+
 func viewSessions(sessions []session) []sessionView {
 	views := []sessionView{}
 	for sessionIndex, entry := range sessions {
 		notes := []noteView{}
 		for noteIndex, rawNote := range entry.Notes {
 			text := noteText(rawNote)
-			lines := []noteLine{}
-			for _, line := range strings.Split(text, "\n") {
-				lines = append(lines, formatNoteLine(line))
-			}
-			notes = append(notes, noteView{noteIndex + 1, text, lines})
+			notes = append(notes, noteView{noteIndex + 1, text, notePreview(text), renderMarkdown(text)})
 		}
 		views = append(views, sessionView{sessionIndex + 1, sessionTitle(entry), entry.WorkingDirectory, notes})
 	}

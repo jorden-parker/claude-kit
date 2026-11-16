@@ -38,7 +38,7 @@ Limits keep the store small: the latest 100 sessions with notes, 100 notes per s
 
 Run `session-notes` with no arguments to open every session in your browser. It starts a small local web server (a Go program, built on first run, so it needs Go once: `brew install go`), prints its address and opens the page. `Ctrl+C` stops it.
 
-- Each session shows its number, start time (UTC) and working directory, then every note in full, formatted as in the pane
+- Each session shows its number, start time (UTC) and working directory, then every note in full, rendered as Markdown: headings, checkboxes, bold, `code`, links, code blocks, quotes, numbered lists and tables. Raw HTML in a note is not rendered
 - **Edit** opens a note in a text box; saving it empty is refused and leaves the note as it was
 - **Delete** removes a note, or the whole session, after you confirm
 - The sidebar groups every note by project (the session's working directory). Click a project to show only its sessions, or a note to jump to it

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -128,20 +129,35 @@ func TestSessionsNameTheirProjectForTheSidebar(t *testing.T) {
 	expectStrings(t, "projects", []string{"/repo", "/other"}, []string{sessions[0].Project, sessions[1].Project})
 }
 
-func TestNotesCarryTheirTextAndFormattedLines(t *testing.T) {
+func TestNotesCarryTheirTextAndPreview(t *testing.T) {
 	note := listedSessions(t, writeStore(t, fixtureStore))[0].Notes[2]
 	if note.Text != "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test" {
 		t.Errorf("text: %q", note.Text)
 	}
-	formatted := []string{}
-	for _, line := range note.Lines {
-		prefix := ""
-		if line.IsHeading {
-			prefix = "# "
-		}
-		formatted = append(formatted, prefix+line.Text)
+	if note.Preview != "Left to do" {
+		t.Errorf("preview: %q", note.Preview)
 	}
-	expectStrings(t, "lines", []string{"# Left to do", "○ Ship the fix", "# Done", "✓ Wrote the test"}, formatted)
+}
+
+func TestNotesRenderMarkdownAsHtml(t *testing.T) {
+	markdown := "## Left to do\n- [ ] Ship **the** fix in `login.ts`\n- [x] Wrote the test\nsee [docs](https://example.com)\nnext line\n\n<script>alert(1)</script>\n[bad](javascript:alert(1))"
+	store := `{"notes": [{"sessionId": "s", "notes": [` + strconv.Quote(markdown) + `]}]}`
+	rendered := listedSessions(t, writeStore(t, store))[0].Notes[0].Html
+	for _, expected := range []string{
+		"<h2>Left to do</h2>",
+		`<input disabled="" type="checkbox"> Ship <strong>the</strong> fix in <code>login.ts</code>`,
+		`<input checked="" disabled="" type="checkbox"> Wrote the test`,
+		`<a href="https://example.com">docs</a><br>`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Errorf("html lacks %q:\n%s", expected, rendered)
+		}
+	}
+	for _, unsafe := range []string{"<script>", "javascript:"} {
+		if strings.Contains(rendered, unsafe) {
+			t.Errorf("html keeps %q:\n%s", unsafe, rendered)
+		}
+	}
 }
 
 func TestSessionsTolerateMissingFields(t *testing.T) {

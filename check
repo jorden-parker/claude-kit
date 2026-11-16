@@ -12,6 +12,10 @@ should_check() {
   [ "$is_staged_only" = false ] || ! git diff --cached --quiet -- "$@"
 }
 
+is_missing_generated_types() {
+  grep -qs "claude-plugin/types" "$1/tsconfig.json" && [ ! -d "$1/.claude-plugin/types" ]
+}
+
 for manifest in plugins/*/package.json; do
   plugin_folder="$(dirname "$manifest")"
   should_check "$plugin_folder" || continue
@@ -19,7 +23,12 @@ for manifest in plugins/*/package.json; do
   if [ "$is_staged_only" = true ]; then
     (cd "$plugin_folder" && pnpm exec lint-staged)
   fi
-  (cd "$plugin_folder" && pnpm run typecheck && pnpm run test)
+  if is_missing_generated_types "$plugin_folder"; then
+    echo "check: skipping the $plugin_folder typecheck, Claude Code has not generated .claude-plugin/types there"
+  else
+    (cd "$plugin_folder" && pnpm run typecheck)
+  fi
+  (cd "$plugin_folder" && pnpm run test)
 done
 
 for bun_folder in plugin-host design-studio; do

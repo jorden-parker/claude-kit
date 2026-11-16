@@ -15,9 +15,9 @@ The page is the only output.
 - Do not print a comment, a finding, the summary or a verdict in the session, while you work or at the end.
 - Do not run `gh pr review`, `gh pr comment`, a `gh api` call that writes, or any other command that changes GitHub.
 - Do not check out the PR or change the working tree.
-- Your last message is the tool's one-line result, and nothing else. The one exception: the notes asked for screenshots and you could take none. Then add one line that says why.
+- Your last message is the tool's one-line result, and nothing else. The one exception: a UX/UI finding went without a screenshot. Then add one line that says why.
 
-The notes are the words after the command, or the request that led here. They can name the PR, say what to focus on, and ask for screenshots.
+The notes are the words after the command, or the request that led here. They can name the PR and say what to focus on. Evidence needs no asking: every finding carries its own, as steps 3 and 4 say.
 
 ## 1. Find the PR
 
@@ -46,7 +46,9 @@ Look for, most important first:
 
 Check each finding against the code before you write it. Drop what you cannot show. Prefer a few comments that matter over many that do not.
 
-When the PR changes UX or UI, or the notes ask for screenshots, take the screenshots now, as step 4 says, before you write the comments.
+Every finding carries its evidence, on every review, whether or not the notes ask for it. Never wait to be asked for evidence, and never offer to add it later.
+
+A UX/UI finding is any finding about what a user sees or does: layout, spacing, colour, contrast, copy, a state, a flow, keyboard or screen-reader use. Test each one in the running app and take its screenshot now, as step 4 says, before you write the comments.
 
 ## 4. Write Conventional Comments
 
@@ -85,18 +87,24 @@ Rules for every comment:
 
 - One point per comment.
 - The subject is one sentence that stands alone.
-- The discussion gives the reason and the next step. Leave it empty when the subject says it all.
+- The discussion gives the evidence, the reason and the next step. The evidence is what shows the finding is real: the code, the command and its output, or the input that breaks it. Leave the discussion empty only when the subject and the commented lines show it all.
 - Put every identifier, file name, path, command and flag in backticks, in the subject and in the discussion, so it renders as inline code: `parseToken`, `src/auth.ts`, `pnpm test`.
 - Put other code of more than one line in a fenced code block that names its language.
 - For a concrete replacement of the commented lines, put a GitHub suggestion block in the discussion: a code fence whose language is `suggestion`.
 - Write to the author as a colleague: say "we" and "this", not "you".
 
-Screenshots as evidence, when the PR changes UX or UI, or the notes ask for them:
+Evidence for a UX/UI finding. The `discussion` of every UX/UI comment holds these three, in this order. This is not optional and does not depend on the notes:
 
-- Embed a screenshot next to the comment it supports: a Markdown image on its own line of the `discussion`, `![<what it shows>](<absolute path of the file>)`. That line is the whole embed. The tool takes no file and nothing is uploaded: the page reads the file from that path and shows it in the comment.
+1. The screenshot: a Markdown image on its own line, `![<what it shows>](<absolute path of the file>)`. That line is the whole embed. The tool takes no file and nothing is uploaded: the page reads the file from that path and shows it in the comment.
+2. The code that produced the screenshot, in a fenced code block that names its language: the script, the browser tool calls or the commands, in the order you ran them. Make it complete enough that the author runs it and gets the same picture: the command that started the app, the URL, the viewport size, and any change you made to the page.
+3. The steps you took to test the finding and to take the screenshot, as a numbered list a person can follow by hand: where you started, what you clicked or typed, what you saw, and what you expected instead.
+
+When the work is tracked in Shortcut, all three still go in the comment. That is the case when the branch name holds `sc-<number>`, the PR's body links an `app.shortcut.com` story, or the session has Shortcut tools. Never leave the steps out because the story describes the feature: the story says what was asked for, and the steps say what you did. Name the story in the first step.
+
 - Never leave a screenshot out because the tool cannot upload files, or because GitHub cannot read a local path. The user attaches the file on GitHub after posting.
-- Do it whenever a UX/UI problem, issue or fix is clearer seen than described: a broken layout, an overlap, poor contrast, a wrong state, or a suggested fix before and after. When the notes ask for screenshots, they are required: every UX/UI comment a screenshot can show gets one.
-- Take the screenshot yourself, with the session's browser or screenshot tools, from the PR's code: the working tree when it is at the PR's head, or a preview deployment the PR links. To show a fix, change the page in the browser, not the files. When you cannot take one, write the comment without it.
+- Take the screenshot yourself, with the session's browser or screenshot tools, from the PR's code: the working tree when it is at the PR's head, or a preview deployment the PR links. To show a fix, change the page in the browser, not the files, and put that change in the code block. A suggested fix gets two screenshots: before and after.
+- When you cannot take a screenshot, because the session has no browser tool, the app does not start, or the PR's code is neither in the working tree nor on a preview: keep the finding only when the code shows it by itself. Say in its discussion that it has no screenshot and why, and give the code and the steps you did run.
+- Never embed a screenshot you did not take, and never write code or steps you did not run.
 - One screenshot shows one point. Frame it so the problem is the first thing seen, and say what it shows in the alt text.
 - Save every screenshot as a PNG, with no space in its path, in a folder outside the repository, such as `$TMPDIR/draft-pr-review-<number>/`. Never write one into the working tree, never `git add`, commit or push one, and never send one to an image host or any other service.
 

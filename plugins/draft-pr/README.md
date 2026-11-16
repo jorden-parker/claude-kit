@@ -49,6 +49,8 @@ Anyone with log access can replay the session. Log the token id instead.
 
 The `render_pr_review_draft` tool refuses a comment with an unknown label, an empty subject, or a line that the PR's diff does not show, and lists every problem, so the review GitHub receives is one it accepts.
 
+Every finding carries its evidence without being asked. A comment about UX or UI always holds a screenshot, the code that produced it, and the numbered steps Claude took to test it, also when the work is tracked in Shortcut.
+
 The page:
 
 - One card per comment, grouped by file, with the diff lines it sits on.

@@ -135,7 +135,7 @@ const REVIEW_TOOL_SCHEMA = {
           discussion: {
             type: "string",
             description:
-              "The reasoning and the suggested next step, in Markdown. May be empty. A screenshot goes here as a Markdown image of a local file, on its own line: ![what it shows](/absolute/path.png). The page shows it from that path, and nothing is uploaded.",
+              "The evidence, the reasoning and the suggested next step, in Markdown. May be empty when the subject and the commented lines show it all. A screenshot goes here as a Markdown image of a local file, on its own line: ![what it shows](/absolute/path.png). The page shows it from that path, and nothing is uploaded. A UX/UI comment always holds its screenshot, then the code that produced it in a fenced code block, then the numbered steps taken to test it.",
           },
         },
         required: ["label", "subject"],

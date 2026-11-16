@@ -87,6 +87,7 @@ textarea.source{font-size:13px;line-height:1.65;tab-size:2}
 .markdown pre{margin:0 0 12px;padding:12px 14px;border-radius:8px;background:var(--surface);border:1px solid var(--line);overflow:auto}
 .markdown pre code{padding:0;border:0;background:none;line-height:1.6}
 .markdown blockquote{margin:0 0 12px;padding:2px 14px;border-left:3px solid var(--line-strong);color:var(--muted)}
+.markdown img{max-width:100%;border:1px solid var(--line);border-radius:8px}
 .markdown hr{border:0;border-top:1px solid var(--line);margin:16px 0}
 .markdown table{border-collapse:collapse;margin:0 0 12px;display:block;overflow:auto}
 .markdown th,.markdown td{padding:6px 12px;border:1px solid var(--line);text-align:left}

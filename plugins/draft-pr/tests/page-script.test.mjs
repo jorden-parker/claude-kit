@@ -43,6 +43,22 @@ test("a code span inside a link label is still rendered", () => {
   );
 });
 
+test("an image of a local file is loaded through the draft server", () => {
+  assert.equal(
+    renderMarkdown("![The `Save` button overlaps](/tmp/review/save&close.png)"),
+    '<p><img src="screenshot?path=%2Ftmp%2Freview%2Fsave%26close.png" alt="The Save button overlaps" loading="lazy"></p>'
+  );
+});
+
+test("an image on another host is linked, not loaded", () => {
+  const remoteUrl = "https://a.example/shot.png";
+
+  assert.equal(
+    renderMarkdown(`![x](${remoteUrl})`),
+    `<p>!${renderLink(remoteUrl, "x")}</p>`
+  );
+});
+
 test("the whole page script parses", () => {
   assert.doesNotThrow(() => new Function(PAGE_SCRIPT));
 });

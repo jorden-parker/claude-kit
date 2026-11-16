@@ -21,6 +21,10 @@ export const PAGE_SCRIPT = String.raw`
   function buildLinkHtml(url, labelHtml){
     return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + labelHtml + "</a>";
   }
+  function isLocalPath(target){ return /^(\/|[A-Za-z]:[\\/])/.test(target); }
+  function unescapeHtml(html){
+    return html.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  }
   function renderInline(text){
     var finishedPieces = [];
     var codeSpanPattern = new RegExp(TICK + "([^" + TICK + "]+)" + TICK, "g");
@@ -31,6 +35,13 @@ export const PAGE_SCRIPT = String.raw`
     }
     var html = escapeHtml(text).replace(codeSpanPattern, function(match, code){
       return setAside("<code>" + code + "</code>");
+    });
+    html = html.replace(/!\[([^\]]*)\]\(([^)\s\x00]+)\)/g, function(match, altText, target){
+      if (!isLocalPath(target)) return match;
+      var plainAltText = altText.replace(placeholderPattern, function(placeholder, pieceIndex){
+        return finishedPieces[Number(pieceIndex)].replace(/<[^>]+>/g, "");
+      });
+      return setAside('<img src="screenshot?path=' + encodeURIComponent(unescapeHtml(target)) + '" alt="' + plainAltText + '" loading="lazy">');
     });
     html = html.replace(/\[([^\]]+)\]\(([^)\s\x00]+)\)/g, function(match, label, url){
       return isSafeUrl(url) ? setAside(buildLinkHtml(url, label)) : match;

@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { extname, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const LOOPBACK_ADDRESS = "127.0.0.1";
@@ -22,6 +23,14 @@ const REVIEW_EVENTS = [
   PENDING_EVENT,
 ];
 const URL_PATTERN = /https?:\/\/\S+/g;
+const SCREENSHOT_CONTENT_TYPES = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+const NETWORK_PATH_PATTERN = /^[\\/]{2}/;
 const PULL_REQUEST_NUMBER_PATTERN = /\/pull\/(\d+)/;
 
 const readText = (value) => (typeof value === "string" ? value : "");
@@ -288,6 +297,32 @@ export const createDraftServer = ({
     }
   };
 
+  const answerScreenshot = async (response, screenshotPath) => {
+    const contentType =
+      SCREENSHOT_CONTENT_TYPES[extname(screenshotPath).toLowerCase()];
+    if (
+      !contentType ||
+      !isAbsolute(screenshotPath) ||
+      NETWORK_PATH_PATTERN.test(screenshotPath)
+    ) {
+      sendEmpty(response, 404);
+      return;
+    }
+    try {
+      const screenshotBytes = await readFile(screenshotPath);
+      response.writeHead(200, {
+        "Content-Type": contentType,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      });
+      response.end(screenshotBytes);
+    } catch {
+      sendEmpty(response, 404);
+    }
+  };
+
+  const screenshotRoute = `GET /${token}/screenshot?`;
+
   return createServer((request, response) => {
     onRequest();
     if (!isOwnOrigin(request)) {
@@ -297,6 +332,14 @@ export const createDraftServer = ({
     const route = `${request.method} ${request.url}`;
     if (route === `GET /${token}/`) {
       void answerPage(response);
+      return;
+    }
+    if (route.startsWith(screenshotRoute)) {
+      const screenshotQuery = route.slice(screenshotRoute.length);
+      void answerScreenshot(
+        response,
+        new URLSearchParams(screenshotQuery).get("path") ?? ""
+      );
       return;
     }
     if (route === `POST /${token}/ping`) {

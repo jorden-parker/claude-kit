@@ -55,6 +55,7 @@ The page:
 - **Edit** on a card opens its label, decorations, subject and discussion. The rendered comment updates as you type. **Edit all** opens every card.
 - **Copy** on a card copies that one comment. Comments are copied one at a time.
 - **Include** leaves a comment out of the post without deleting it.
+- A screenshot in a discussion, written as `![what it shows](/absolute/path.png)`, is shown in the comment. The page's own server reads the file; nothing is uploaded, so on GitHub you drag the file into the posted comment.
 - Filter tabs per label, and counts of included and blocking comments.
 - A summary with a preview, and the review type: Comment, Approve, Request changes, or Pending (saved on GitHub for you to finish there).
 - **Post to GitHub**: asks once, then posts one review with the included comments through `gh api`. A review is posted once.

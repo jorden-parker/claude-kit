@@ -16,6 +16,7 @@ const SERVER_SCRIPT_PATH = fileURLToPath(
 );
 const TOKEN = "0123456789abcdef";
 const PAGE_HTML = "<!doctype html><title>Draft</title>";
+const SCREENSHOT_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 
 const PR_DRAFT = {
   kind: "pr",
@@ -253,6 +254,42 @@ test("the server serves the page under its token only", async (testContext) => {
   assert.match(pageResponse.headers.get("content-type"), /text\/html/);
   assert.equal(await pageResponse.text(), PAGE_HTML);
   assert.equal(strangerResponse.status, 404);
+});
+
+test("the server serves a local screenshot under its token only", async (testContext) => {
+  const { origin } = await startTestServer(testContext, REVIEW_DRAFT);
+  const screenshotFolder = await mkdtemp(join(tmpdir(), "draft-pr-shots-"));
+  const screenshotPath = join(screenshotFolder, "save & close.PNG");
+  const secretPath = join(screenshotFolder, "secret.txt");
+  await writeFile(screenshotPath, SCREENSHOT_BYTES);
+  await writeFile(secretPath, "secret");
+  const buildScreenshotUrl = (token, filePath) =>
+    `${origin}/${token}/screenshot?path=${encodeURIComponent(filePath)}`;
+
+  const screenshotResponse = await fetch(
+    buildScreenshotUrl(TOKEN, screenshotPath)
+  );
+  const refusedUrls = [
+    buildScreenshotUrl("wrong-token", screenshotPath),
+    buildScreenshotUrl(TOKEN, secretPath),
+    buildScreenshotUrl(TOKEN, "save & close.PNG"),
+    buildScreenshotUrl(TOKEN, join(screenshotFolder, "missing.png")),
+    `${origin}/${TOKEN}/screenshot`,
+  ];
+
+  assert.equal(screenshotResponse.status, 200);
+  assert.equal(screenshotResponse.headers.get("content-type"), "image/png");
+  assert.equal(
+    screenshotResponse.headers.get("x-content-type-options"),
+    "nosniff"
+  );
+  assert.deepEqual(
+    Buffer.from(await screenshotResponse.arrayBuffer()),
+    SCREENSHOT_BYTES
+  );
+  for (const refusedUrl of refusedUrls) {
+    assert.equal((await fetch(refusedUrl)).status, 404, refusedUrl);
+  }
 });
 
 test("posting runs the steps in the project and answers with the PR's URL", async (testContext) => {

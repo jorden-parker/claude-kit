@@ -160,9 +160,10 @@ test("a page loads nothing from outside itself", () => {
 
   for (const pageHtml of pages) {
     expect(pageHtml).not.toContain("<link");
-    expect(pageHtml).not.toContain(" src=");
+    expect(pageHtml).not.toMatch(/ src=["']?(https?:)?\/\//);
     expect(pageHtml).not.toContain("@import");
     expect(pageHtml).toContain("default-src 'none'");
+    expect(pageHtml).toContain("img-src 'self'");
   }
 });
 

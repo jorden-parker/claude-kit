@@ -1,14 +1,14 @@
 {
   "name": "prompt-optimizer",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "/optimize rewrites a draft prompt with repo context and fills it into the composer",
   "userConfig": {
     "model": {
       "type": "string",
       "title": "Rewrite model",
-      "description": "Which model rewrites the draft. sonnet is the default; haiku is faster but drifts from the draft more often; opus is the most careful.",
-      "default": "sonnet",
-      "options": ["haiku", "sonnet", "opus"]
+      "description": "Which model rewrites the draft. local (the default) uses the claude-lite default size on Ollama, read from cl ollama --print-config; haiku, sonnet and opus use the Claude API.",
+      "default": "local",
+      "options": ["local", "haiku", "sonnet", "opus"]
     },
     "instructions": {
       "type": "string",

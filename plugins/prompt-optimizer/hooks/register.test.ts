@@ -8,12 +8,14 @@ const USAGE = {
   cache_creation_input_tokens: 0,
 };
 
+const CLOUD_OPTIONS = { options: { model: "sonnet" } };
+
 const testWithEmptySession = (
   name: string,
   body: TestBody,
   selectedText?: string
 ) =>
-  test(name, ($, on) => {
+  test(name, CLOUD_OPTIONS, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: [] }));
     on("session.model", () => ({ value: "sonnet" }));
@@ -221,70 +223,78 @@ const buildSessionMessage = (role: "user" | "assistant", text: string) => ({
   toolUses: [],
 });
 
-test("the model prompt carries the working directory, the last six non-blank messages and the delimited draft", async ($, on) => {
-  const prompts: string[] = [];
-  const longText = "x".repeat(600);
-  on("session.cwd", () => ({
-    value: "/Users/jorden/src/claude-kit/plugins/prompt-optimizer",
-  }));
-  on("session.messages", () => ({
-    value: [
-      buildSessionMessage("user", "dropped"),
-      buildSessionMessage("assistant", "first kept"),
-      buildSessionMessage("user", longText),
-      buildSessionMessage("assistant", "The bug is in hooks/register.ts"),
-      buildSessionMessage("user", ""),
-      buildSessionMessage("assistant", "a"),
-      buildSessionMessage("user", "b"),
-      buildSessionMessage("assistant", "last kept"),
-    ],
-  }));
-  on("model.complete", (_, e) => {
-    prompts.push(e.prompt);
-    return {
-      value: { isAnswered: true, text: "Better prompt", usage: USAGE },
-    };
-  });
-  on("prompt.fill", () => ({ isFilled: true }));
+test(
+  "the model prompt carries the working directory, the last six non-blank messages and the delimited draft",
+  CLOUD_OPTIONS,
+  async ($, on) => {
+    const prompts: string[] = [];
+    const longText = "x".repeat(600);
+    on("session.cwd", () => ({
+      value: "/Users/jorden/src/claude-kit/plugins/prompt-optimizer",
+    }));
+    on("session.messages", () => ({
+      value: [
+        buildSessionMessage("user", "dropped"),
+        buildSessionMessage("assistant", "first kept"),
+        buildSessionMessage("user", longText),
+        buildSessionMessage("assistant", "The bug is in hooks/register.ts"),
+        buildSessionMessage("user", ""),
+        buildSessionMessage("assistant", "a"),
+        buildSessionMessage("user", "b"),
+        buildSessionMessage("assistant", "last kept"),
+      ],
+    }));
+    on("model.complete", (_, e) => {
+      prompts.push(e.prompt);
+      return {
+        value: { isAnswered: true, text: "Better prompt", usage: USAGE },
+      };
+    });
+    on("prompt.fill", () => ({ isFilled: true }));
 
-  await $.command.run(optimize("fix the bug"));
+    await $.command.run(optimize("fix the bug"));
 
-  const [prompt] = prompts;
-  expect(prompt).toContain(
-    "Working directory: /Users/jorden/src/claude-kit/plugins/prompt-optimizer"
-  );
-  expect(prompt).not.toContain("dropped");
-  expect(prompt).toContain("assistant: first kept");
-  expect(prompt).toContain("user: " + "x".repeat(500) + "…");
-  expect(prompt).not.toContain("x".repeat(501));
-  expect(prompt).toContain("assistant: The bug is in hooks/register.ts");
-  expect(prompt).not.toContain("user: \n");
-  expect(prompt).toContain("assistant: last kept");
-  expect(prompt).toContain("<draft>\nfix the bug\n</draft>");
-});
+    const [prompt] = prompts;
+    expect(prompt).toContain(
+      "Working directory: /Users/jorden/src/claude-kit/plugins/prompt-optimizer"
+    );
+    expect(prompt).not.toContain("dropped");
+    expect(prompt).toContain("assistant: first kept");
+    expect(prompt).toContain("user: " + "x".repeat(500) + "…");
+    expect(prompt).not.toContain("x".repeat(501));
+    expect(prompt).toContain("assistant: The bug is in hooks/register.ts");
+    expect(prompt).not.toContain("user: \n");
+    expect(prompt).toContain("assistant: last kept");
+    expect(prompt).toContain("<draft>\nfix the bug\n</draft>");
+  }
+);
 
-test("a long message cut at an emoji keeps the prompt valid UTF-16", async ($, on) => {
-  const prompts: string[] = [];
-  on("session.cwd", () => ({ value: "/repo" }));
-  on("session.messages", () => ({
-    value: [buildSessionMessage("assistant", "x".repeat(499) + "🤖 tail")],
-  }));
-  on("model.complete", (_, e) => {
-    prompts.push(e.prompt);
-    return {
-      value: { isAnswered: true, text: "Better prompt", usage: USAGE },
-    };
-  });
-  on("prompt.fill", () => ({ isFilled: true }));
+test(
+  "a long message cut at an emoji keeps the prompt valid UTF-16",
+  CLOUD_OPTIONS,
+  async ($, on) => {
+    const prompts: string[] = [];
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({
+      value: [buildSessionMessage("assistant", "x".repeat(499) + "🤖 tail")],
+    }));
+    on("model.complete", (_, e) => {
+      prompts.push(e.prompt);
+      return {
+        value: { isAnswered: true, text: "Better prompt", usage: USAGE },
+      };
+    });
+    on("prompt.fill", () => ({ isFilled: true }));
 
-  await $.command.run(optimize("fix the bug"));
+    await $.command.run(optimize("fix the bug"));
 
-  const [prompt] = prompts;
-  expect(prompt).not.toMatch(
-    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
-  );
-  expect(prompt).toContain("assistant: " + "x".repeat(499) + "🤖…");
-});
+    const [prompt] = prompts;
+    expect(prompt).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+    );
+    expect(prompt).toContain("assistant: " + "x".repeat(499) + "🤖…");
+  }
+);
 
 test("the command registers with an argument hint and does not run mid-turn", async ($, on) => {
   const registeredCommands: { argumentHint?: string; immediate?: true }[] = [];
@@ -389,29 +399,33 @@ const API_ERROR_REPLY = {
   usage: USAGE,
 } as const;
 
-test("an API error on the configured model retries once on the session's model", async ($, on) => {
-  const models: string[] = [];
-  on("session.cwd", () => ({ value: "/repo" }));
-  on("session.messages", () => ({ value: [] }));
-  on("session.model", () => ({ value: "claude-opus-5-5" }));
-  on("model.complete", (_, e) => {
-    models.push(e.model);
-    return {
-      value:
-        models.length === 1
-          ? API_ERROR_REPLY
-          : { isAnswered: true, text: "Better prompt", usage: USAGE },
-    };
-  });
-  on("prompt.fill", () => ({ isFilled: true }));
+test(
+  "an API error on the configured model retries once on the session's model",
+  CLOUD_OPTIONS,
+  async ($, on) => {
+    const models: string[] = [];
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: [] }));
+    on("session.model", () => ({ value: "claude-opus-5-5" }));
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return {
+        value:
+          models.length === 1
+            ? API_ERROR_REPLY
+            : { isAnswered: true, text: "Better prompt", usage: USAGE },
+      };
+    });
+    on("prompt.fill", () => ({ isFilled: true }));
 
-  const reply = await $.command.run(optimize("fix bug"));
+    const reply = await $.command.run(optimize("fix bug"));
 
-  expect(models).toEqual(["sonnet", "claude-opus-5-5"]);
-  expect(reply.text).toBe(
-    "Prompt filled into the composer. Edit it or press Enter."
-  );
-});
+    expect(models).toEqual(["sonnet", "claude-opus-5-5"]);
+    expect(reply.text).toBe(
+      "Prompt filled into the composer. Edit it or press Enter."
+    );
+  }
+);
 
 const RATE_LIMIT_REPLY = {
   isAnswered: false,
@@ -637,7 +651,7 @@ test(
 );
 
 testWithEmptySession(
-  "by default the rewrite uses sonnet and the rules end without extra instructions",
+  "with no extra instructions the rules end with the output rule",
   async ($, on) => {
     const requests: { model: string; system?: string }[] = [];
     on("model.complete", (_, e) => {
@@ -813,5 +827,138 @@ testWithEmptySession(
       "Attached images (the agent will see them; the rewriter does not): before.png (image/png)"
     );
     expect(prompts[1]).not.toContain("Attached images");
+  }
+);
+
+const CLAUDE_LITE_CONFIG = `FROM qwen3.5:9b-mtp-q4_K_M
+PARAMETER num_ctx 131072
+
+{
+  "model": "qwen3.5-9b-mtp-cc",
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:11434",
+    "ANTHROPIC_AUTH_TOKEN": "ollama",
+    "CLAUDE_CODE_EXTRA_BODY": "{\\"thinking\\":{\\"type\\":\\"disabled\\"}}"
+  }
+}
+`;
+
+const buildProcessResult = (exitCode: number, stdout: string, stderr = "") => ({
+  value: {
+    exitCode,
+    stdout,
+    stderr,
+    isStdoutTruncated: false,
+    isStderrTruncated: false,
+  },
+});
+
+const buildHttpResponse = (status: number, body: unknown) => ({
+  value: {
+    status,
+    ok: status < 400,
+    headers: {},
+    text: JSON.stringify(body),
+  },
+});
+
+const testLocalRewrite = (name: string, body: TestBody) =>
+  test(name, { options: {} }, ($, on) => {
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: [] }));
+    on("session.model", () => ({ value: "sonnet" }));
+    on("ui.selection", () => ({ value: undefined }));
+    return body($, on);
+  });
+
+testLocalRewrite(
+  "by default the rewrite goes to the claude-lite default Ollama model with its thinking setting",
+  async ($, on) => {
+    const commands: (readonly string[])[] = [];
+    const requests: {
+      url: string;
+      headers?: Record<string, string>;
+      body: Record<string, unknown>;
+    }[] = [];
+    let cloudCallCount = 0;
+    on("process.run", (_, e) => {
+      commands.push(e.argv);
+      return buildProcessResult(0, CLAUDE_LITE_CONFIG);
+    });
+    on("http.fetch", (_, e) => {
+      requests.push({
+        url: e.url,
+        headers: e.init?.headers,
+        body: JSON.parse(e.init?.body ?? "{}"),
+      });
+      return buildHttpResponse(200, {
+        content: [{ type: "text", text: "Better prompt" }],
+      });
+    });
+    on("model.complete", () => {
+      cloudCallCount += 1;
+      return { value: { isAnswered: true, text: "cloud", usage: USAGE } };
+    });
+    const filled: string[] = [];
+    on("prompt.fill", (_, e) => {
+      filled.push(e.text);
+      return { isFilled: true };
+    });
+
+    await $.command.run(optimize("fix bug"));
+
+    expect(commands).toEqual([["cl", "ollama", "--print-config"]]);
+    expect(requests[0]?.url).toBe("http://127.0.0.1:11434/v1/messages");
+    expect(requests[0]?.headers?.["x-api-key"]).toBe("ollama");
+    expect(requests[0]?.body.model).toBe("qwen3.5-9b-mtp-cc");
+    expect(requests[0]?.body.thinking).toEqual({ type: "disabled" });
+    expect(String(requests[0]?.body.system)).toContain(
+      "Output only the rewritten prompt"
+    );
+    expect(JSON.stringify(requests[0]?.body.messages)).toContain(
+      "<draft>\\nfix bug\\n</draft>"
+    );
+    expect(cloudCallCount).toBe(0);
+    expect(filled).toEqual(["Better prompt"]);
+  }
+);
+
+testLocalRewrite(
+  "a failing cl command names its error and does not fall back to a cloud model",
+  async ($, on) => {
+    let cloudCallCount = 0;
+    on("process.run", () => buildProcessResult(1, "", "no sizes fit\n"));
+    on("model.complete", () => {
+      cloudCallCount += 1;
+      return { value: { isAnswered: true, text: "cloud", usage: USAGE } };
+    });
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(reply.text).toBe(
+      "Could not optimize the prompt (cl ollama --print-config failed: no sizes fit)."
+    );
+    expect(reply.exitCode).toBe(1);
+    expect(cloudCallCount).toBe(0);
+  }
+);
+
+testLocalRewrite(
+  "an Ollama error reply names its status and message",
+  async ($, on) => {
+    on("process.run", () => buildProcessResult(0, CLAUDE_LITE_CONFIG));
+    on("http.fetch", () =>
+      buildHttpResponse(404, {
+        type: "error",
+        error: { type: "not_found_error", message: "model not found" },
+      })
+    );
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(reply.text).toBe(
+      "Could not optimize the prompt (Ollama error 404, model not found)."
+    );
+    expect(reply.exitCode).toBe(1);
   }
 );

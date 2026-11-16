@@ -195,13 +195,126 @@ const completeWithBackoff = async (
   return reply;
 };
 
+const LOCAL_MODEL = "local";
+const CLAUDE_LITE_CONFIG_COMMAND = ["cl", "ollama", "--print-config"];
+const LOCAL_MAX_TOKENS = 4096;
+const SETTINGS_START = /^\{/m;
+
+type RewriteReply =
+  { isAnswered: true; text: string } | { isAnswered: false; failure: string };
+
+type ClaudeLiteSettings = {
+  model: string;
+  env: {
+    ANTHROPIC_BASE_URL: string;
+    ANTHROPIC_AUTH_TOKEN?: string;
+    CLAUDE_CODE_EXTRA_BODY?: string;
+  };
+};
+
+type OllamaMessagesReply = {
+  content?: { type: string; text?: string }[];
+  error?: { message?: string };
+};
+
+const readClaudeLiteSettings = async (engine: EngineInterface) => {
+  const commandName = CLAUDE_LITE_CONFIG_COMMAND.join(" ");
+  try {
+    const { exitCode, stdout, stderr } = await engine.process.run(
+      CLAUDE_LITE_CONFIG_COMMAND
+    );
+    if (exitCode !== 0) {
+      return `${commandName} failed: ${stderr.trim() || `exit code ${exitCode}`}`;
+    }
+    return JSON.parse(
+      stdout.slice(stdout.search(SETTINGS_START))
+    ) as ClaudeLiteSettings;
+  } catch (error) {
+    return `${commandName} failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+};
+
+const rewriteLocally = async (
+  engine: EngineInterface,
+  system: string,
+  prompt: string
+): Promise<RewriteReply> => {
+  const settings = await readClaudeLiteSettings(engine);
+  if (typeof settings === "string") {
+    return { isAnswered: false, failure: settings };
+  }
+  const { ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_EXTRA_BODY } =
+    settings.env;
+  const response = await engine.http.fetch(
+    `${ANTHROPIC_BASE_URL}/v1/messages`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": ANTHROPIC_AUTH_TOKEN ?? "ollama",
+      },
+      body: JSON.stringify({
+        model: settings.model,
+        max_tokens: LOCAL_MAX_TOKENS,
+        system,
+        messages: [{ role: "user", content: prompt }],
+        ...JSON.parse(CLAUDE_CODE_EXTRA_BODY || "{}"),
+      }),
+    }
+  );
+  let reply: OllamaMessagesReply = {};
+  try {
+    reply = JSON.parse(response.text) as OllamaMessagesReply;
+  } catch {}
+  if (!response.ok) {
+    return {
+      isAnswered: false,
+      failure: `Ollama error ${response.status}, ${reply.error?.message ?? response.text.trim()}`,
+    };
+  }
+  const text = (reply.content ?? [])
+    .filter((block) => block.type === "text")
+    .map((block) => block.text ?? "")
+    .join("");
+  return { isAnswered: true, text };
+};
+
 const buildFailureResult = (text: string) => ({
   text,
   exitCode: FAILURE_EXIT_CODE,
 });
 
+const rewriteInTheCloud = async (
+  engine: EngineInterface,
+  optimizerModel: string,
+  system: string,
+  prompt: string
+): Promise<RewriteReply> => {
+  const rewriteWith = (model: string) =>
+    completeWithBackoff(engine, () =>
+      engine.model.complete({
+        model,
+        system,
+        prompt,
+        effort: "low",
+        timeoutMs: 15000,
+      })
+    );
+  let reply = await rewriteWith(optimizerModel);
+  if (!reply.isAnswered && reply.reason === "api-error") {
+    const sessionModel = await engine.session.model();
+    if (sessionModel !== optimizerModel) {
+      reply = await rewriteWith(sessionModel);
+    }
+  }
+  return reply.isAnswered
+    ? { isAnswered: true, text: reply.text }
+    : { isAnswered: false, failure: describeUnansweredReply(reply) };
+};
+
 export const register: Register = (on, options) => {
-  const optimizerModel = readStringOption(options, "model") || "sonnet";
+  const optimizerModel = readStringOption(options, "model") || LOCAL_MODEL;
   const optimizerRules = buildOptimizerRules(
     readStringOption(options, "instructions")
   );
@@ -229,27 +342,19 @@ export const register: Register = (on, options) => {
       draft,
       attachedImageList
     );
-    const rewriteWith = (model: string) =>
-      completeWithBackoff($, () =>
-        $.model.complete({
-          model,
-          system: optimizerRules,
-          prompt: optimizerPrompt,
-          effort: "low",
-          timeoutMs: 15000,
-        })
-      );
-    let reply = await rewriteWith(optimizerModel);
-    if (!reply.isAnswered && reply.reason === "api-error") {
-      const sessionModel = await $.session.model();
-      if (sessionModel !== optimizerModel) {
-        reply = await rewriteWith(sessionModel);
-      }
-    }
+    const reply =
+      optimizerModel === LOCAL_MODEL
+        ? await rewriteLocally($, optimizerRules, optimizerPrompt)
+        : await rewriteInTheCloud(
+            $,
+            optimizerModel,
+            optimizerRules,
+            optimizerPrompt
+          );
 
     if (!reply.isAnswered) {
       return buildFailureResult(
-        `Could not optimize the prompt (${describeUnansweredReply(reply)}).`
+        `Could not optimize the prompt (${reply.failure}).`
       );
     }
 

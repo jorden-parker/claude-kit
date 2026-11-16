@@ -16,6 +16,8 @@ test.each([
   "env git log",
   "command git diff",
   "GIT_PAGER=cat LESS=-R git diff HEAD~1",
+  "find . | xargs rm",
+  "find . -name x || tail -5 log",
 ])("denies %s", (command) => expect(denied(command)).toBe(true));
 
 test.each([
@@ -33,6 +35,8 @@ test.each([
   "PAGER=cat git log -n 5",
   "env git status",
   "echo PAGER=cat git log",
+  "find . -name '*.ts' | xargs wc -l | sort -n | tail -25",
+  "git log --stat | grep -v x | head -20",
 ])("allows %s", (command) => expect(denied(command)).toBe(false));
 
 test("denial messages never point at the denied Glob or Grep tools", () => {

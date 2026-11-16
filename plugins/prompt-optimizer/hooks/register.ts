@@ -217,6 +217,9 @@ type OllamaMessagesReply = {
   error?: { message?: string };
 };
 
+const describeError = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 const readClaudeLiteSettings = async (engine: EngineInterface) => {
   const commandName = CLAUDE_LITE_CONFIG_COMMAND.join(" ");
   try {
@@ -226,11 +229,15 @@ const readClaudeLiteSettings = async (engine: EngineInterface) => {
     if (exitCode !== 0) {
       return `${commandName} failed: ${stderr.trim() || `exit code ${exitCode}`}`;
     }
-    return JSON.parse(
+    const settings = JSON.parse(
       stdout.slice(stdout.search(SETTINGS_START))
-    ) as ClaudeLiteSettings;
+    ) as Partial<ClaudeLiteSettings>;
+    if (!settings.model || !settings.env?.ANTHROPIC_BASE_URL) {
+      return `${commandName} failed: no model or ANTHROPIC_BASE_URL in its output`;
+    }
+    return settings as ClaudeLiteSettings;
   } catch (error) {
-    return `${commandName} failed: ${error instanceof Error ? error.message : String(error)}`;
+    return `${commandName} failed: ${describeError(error)}`;
   }
 };
 
@@ -245,9 +252,9 @@ const rewriteLocally = async (
   }
   const { ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_EXTRA_BODY } =
     settings.env;
-  const response = await engine.http.fetch(
-    `${ANTHROPIC_BASE_URL}/v1/messages`,
-    {
+  let response: Awaited<ReturnType<EngineInterface["http"]["fetch"]>>;
+  try {
+    response = await engine.http.fetch(`${ANTHROPIC_BASE_URL}/v1/messages`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -261,8 +268,13 @@ const rewriteLocally = async (
         messages: [{ role: "user", content: prompt }],
         ...JSON.parse(CLAUDE_CODE_EXTRA_BODY || "{}"),
       }),
-    }
-  );
+    });
+  } catch (error) {
+    return {
+      isAnswered: false,
+      failure: `Ollama at ${ANTHROPIC_BASE_URL} did not answer: ${describeError(error)}`,
+    };
+  }
   let reply: OllamaMessagesReply = {};
   try {
     reply = JSON.parse(response.text) as OllamaMessagesReply;

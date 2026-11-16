@@ -962,3 +962,34 @@ testLocalRewrite(
     expect(reply.exitCode).toBe(1);
   }
 );
+
+testLocalRewrite(
+  "an unreachable Ollama server returns the error line instead of dropping the command",
+  async ($, on) => {
+    on("process.run", () => buildProcessResult(0, CLAUDE_LITE_CONFIG));
+    on("http.fetch", () => {
+      throw new Error("connect ECONNREFUSED 127.0.0.1:11434");
+    });
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(reply.text).toContain(
+      "Could not optimize the prompt (Ollama at http://127.0.0.1:11434 did not answer:"
+    );
+    expect(reply.exitCode).toBe(1);
+  }
+);
+
+testLocalRewrite(
+  "cl output without settings returns the error line instead of dropping the command",
+  async ($, on) => {
+    on("process.run", () => buildProcessResult(0, "FROM qwen\n"));
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(reply.text).toContain(
+      "Could not optimize the prompt (cl ollama --print-config failed:"
+    );
+    expect(reply.exitCode).toBe(1);
+  }
+);

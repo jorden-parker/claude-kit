@@ -16,6 +16,15 @@ import {
 const BRAINSTORM_COMMAND = "brainstorm";
 const PLAN_MODE = "plan";
 const BUILD_MODE = "build";
+const BRAINSTORM_COMMAND_PREFIX = "/brainstorm ";
+
+const BRAINSTORM_MODE_SUGGESTIONS = [
+  { text: PLAN_MODE, description: "Turn picked ideas into a small-step plan" },
+  {
+    text: BUILD_MODE,
+    description: "Implement plans with small-model subagents",
+  },
+];
 const PLAN_INVOCATION = `/${BRAINSTORM_COMMAND} ${PLAN_MODE}`;
 const BUILD_INVOCATION = `/${BRAINSTORM_COMMAND} ${BUILD_MODE}`;
 const ALL_KEYWORD = "all";
@@ -1091,6 +1100,18 @@ export const register: Register = (on) => {
       isDeferred: false,
     });
     return next(e);
+  });
+
+  on("prompt.autocomplete", async (_, e, next) => {
+    const isFirstBrainstormArgument =
+      e.text.startsWith(BRAINSTORM_COMMAND_PREFIX) &&
+      e.text.slice(BRAINSTORM_COMMAND_PREFIX.length, e.start).trim() === "";
+    if (!isFirstBrainstormArgument) return next(e);
+    const { suggestions } = await next(e);
+    const matchingModes = BRAINSTORM_MODE_SUGGESTIONS.filter((mode) =>
+      mode.text.startsWith(e.token)
+    );
+    return { suggestions: [...suggestions, ...matchingModes] };
   });
 
   on("command.run", { command: BRAINSTORM_COMMAND }, async ($, e) => {

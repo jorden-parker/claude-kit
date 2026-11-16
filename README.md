@@ -169,12 +169,37 @@ user. `./sync-opencode tdd guards` syncs only those. It needs `opencode`, `jq`, 
 - `opencode.jsonc` is never rewritten, since it may hold comments; rename it to
   `opencode.json` or add the MCP server by hand.
 
+## Design Studio
+
+A standalone tool, outside any Claude Code session. It writes fresh UI mockups
+with a local Qwen model and renders them with the ui-design plugin's own tools.
+
+```
+design-studio/cli.ts "Onboarding screen for a recipe app" --variants 2 --size 9b --project ~/src/my-app
+```
+
+- It opens a monitor page in the browser: the steps, every model call with its
+  token counts and speed, and the model's output as it is written. The same
+  steps print in the terminal. `--no-open` leaves the browser alone.
+- The model is the claude-lite size you name with `--size`, or claude-lite's
+  default. `CLAUDE_LITE_HOME` overrides `~/src/claude-lite`. The size's model
+  must already be built (`cl ollama <size>`).
+- The project's saved theme (`.claude/ui-design/theme.json`) is reused. With
+  none, the studio writes a starter theme from a ui-ux-pro-max palette.
+- Each variant follows one ui-ux-pro-max direction. `UI_UX_PRO_MAX_HOME`
+  overrides `~/.claude/skills/ui-ux-pro-max`.
+- The plugin's `render_design` checks the variants. A refusal goes back to the
+  model, twice at most; a variant still refused is dropped.
+- The design page lands in `<project>/.claude/ui-design/` and opens in the
+  browser. Needs `bun`, `python3` and a running Ollama. Tests: `bun test design-studio`.
+
 ## Layout
 
 ```
 .claude-plugin/marketplace.json   lists every plugin and its folder
 plugins/<name>/                   one plugin: its own plugin.json, README, package.json and tests
 plugin-host/                      runs register.ts plugins outside Claude Code (engine, MCP server, pi extension, build)
+design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode install the plugins into Qwen Code, pi and OpenCode
 ```
 
@@ -187,6 +212,10 @@ sync-qwen, sync-pi, sync-opencode install the plugins into Qwen Code, pi and Ope
 - A plugin works when every other plugin is missing.
 - To add a plugin: create `plugins/<name>/` with `.claude-plugin/plugin.json`,
   then add an entry to `.claude-plugin/marketplace.json`.
+- A command that takes flags (`--save`) or modes (`plan`) completes them: a
+  `prompt.autocomplete` hook in `hooks/register.ts` suggests each one with a
+  short description, with a test for it. Copy the pattern from
+  `plugins/handoff/` (flags) or `plugins/brainstorm/` (modes).
 
 ## Dev
 

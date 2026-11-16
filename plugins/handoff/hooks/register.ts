@@ -29,6 +29,15 @@ const SAVE_FLAG = /(^|\s)--save(?=\s|$)/;
 const LIST_FLAG = /(^|\s)--list(?=\s|$)/;
 const RESUME_FLAG = /(^|\s)--resume(?:\s+(\S+))?(?=\s|$)/;
 const EACH_PLAN_FLAG = /(^|\s)--each(?=\s|$)/;
+const HANDOFF_COMMAND_PREFIX = "/handoff ";
+
+const HANDOFF_FLAG_SUGGESTIONS = [
+  { text: "--new", description: "Continue the recap in a fresh session" },
+  { text: "--save", description: "Only store the recap" },
+  { text: "--each", description: "Store one handoff per suggested plan" },
+  { text: "--list", description: "Show stored handoffs" },
+  { text: "--resume", description: "Continue a stored handoff by id" },
+];
 const PENDING_HANDOFF_KEY = "pendingHandoff";
 const HANDOFFS_KEY = "handoffs";
 const STORED_HANDOFF_LIMIT = 50;
@@ -364,5 +373,17 @@ export const register: Register = (on) => {
       return { text: describeSavedHandoff(savedHandoff.handoffId) };
     if (!isNewSession) return offerRecapInThisSession($, recap);
     return startNewSessionWithRecap($, recap);
+  });
+
+  on("prompt.autocomplete", { token: /^-/ }, async (_, e, next) => {
+    const isHandoffArgument =
+      e.text.startsWith(HANDOFF_COMMAND_PREFIX) &&
+      e.start >= HANDOFF_COMMAND_PREFIX.length;
+    if (!isHandoffArgument) return next(e);
+    const { suggestions } = await next(e);
+    const matchingFlags = HANDOFF_FLAG_SUGGESTIONS.filter((flag) =>
+      flag.text.startsWith(e.token)
+    );
+    return { suggestions: [...suggestions, ...matchingFlags] };
   });
 };

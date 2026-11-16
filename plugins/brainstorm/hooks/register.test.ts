@@ -1,4 +1,8 @@
-import type { On } from "claude-code";
+import type {
+  On,
+  PromptAutocompleteInput,
+  PromptAutocompleteResult,
+} from "claude-code";
 import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const RENDER_TOOL = "mcp__brainstorm__render_brainstorm";
@@ -954,4 +958,42 @@ test("the status tool denies a plan folder the index does not list", async ($, o
     `${CLEAN_RUN_FOLDER}/index.md: has no row for 02-extra`
   );
   expect(writes).toEqual([]);
+});
+
+const autocompleteAt = (text: string) => {
+  const start = text.search(/\S*$/);
+  return { text, cursor: text.length, token: text.slice(start), start };
+};
+
+type AutocompleteCall = {
+  autocomplete: (
+    input: PromptAutocompleteInput
+  ) => Promise<PromptAutocompleteResult>;
+};
+
+const autocomplete = ($: Engine, text: string) =>
+  ($.prompt as unknown as AutocompleteCall).autocomplete(autocompleteAt(text));
+
+const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
+  reply.suggestions.map((suggestion) => suggestion.text);
+
+test("the first word after /brainstorm suggests the matching modes", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const planReply = await autocomplete($, "/brainstorm pl");
+  const buildReply = await autocomplete($, "/brainstorm b");
+
+  expect(suggestedTexts(planReply)).toEqual(["plan"]);
+  expect(suggestedTexts(buildReply)).toEqual(["build"]);
+  expect(planReply.suggestions[0]!.description).toContain("plan");
+});
+
+test("later words and other commands get no /brainstorm mode suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const laterReply = await autocomplete($, "/brainstorm plan b");
+  const otherReply = await autocomplete($, "/handoff pl");
+
+  expect(suggestedTexts(laterReply)).toEqual([]);
+  expect(suggestedTexts(otherReply)).toEqual([]);
 });

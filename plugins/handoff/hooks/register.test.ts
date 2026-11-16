@@ -1,5 +1,15 @@
-import type { On } from "claude-code";
-import { expect, mock, test, type TestBody } from "claude-code/testing";
+import type {
+  On,
+  PromptAutocompleteInput,
+  PromptAutocompleteResult,
+} from "claude-code";
+import {
+  expect,
+  mock,
+  test,
+  type Engine,
+  type TestBody,
+} from "claude-code/testing";
 
 const MODEL_USAGE = {
   input_tokens: 0,
@@ -773,7 +783,9 @@ testWithSession(
 
     expect(requests[0]!.prompt).toContain(`assistant: ${"p".repeat(4000)}\n`);
     expect(requests[0]!.prompt).not.toContain("x".repeat(1501));
-    expect(requests[0]!.prompt).toContain("<focus>\nthe plugin ideas\n</focus>");
+    expect(requests[0]!.prompt).toContain(
+      "<focus>\nthe plugin ideas\n</focus>"
+    );
     expect(requests[0]!.system).toContain(PLAN_SEPARATOR);
   }
 );
@@ -793,3 +805,55 @@ testWithSession(
     expect(store.has(HANDOFFS_KEY)).toBe(false);
   }
 );
+
+const autocompleteAt = (text: string) => {
+  const start = text.search(/\S*$/);
+  return { text, cursor: text.length, token: text.slice(start), start };
+};
+
+type AutocompleteCall = {
+  autocomplete: (
+    input: PromptAutocompleteInput
+  ) => Promise<PromptAutocompleteResult>;
+};
+
+const autocomplete = ($: Engine, text: string) =>
+  ($.prompt as unknown as AutocompleteCall).autocomplete(autocompleteAt(text));
+
+const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
+  reply.suggestions.map((suggestion) => suggestion.text);
+
+test("typing a dash after /handoff suggests every flag", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const reply = await autocomplete($, "/handoff -");
+
+  expect(suggestedTexts(reply)).toEqual([
+    "--new",
+    "--save",
+    "--each",
+    "--list",
+    "--resume",
+  ]);
+  expect(reply.suggestions[0]!.description).toContain("fresh session");
+});
+
+test("a partly typed /handoff flag narrows the suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const reply = await autocomplete($, "/handoff the auth --re");
+
+  expect(suggestedTexts(reply)).toEqual(["--resume"]);
+});
+
+test("words that are not flags or other commands get no /handoff suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const focusReply = await autocomplete($, "/handoff au");
+  const otherReply = await autocomplete($, "/optimize -");
+  const commandReply = await autocomplete($, "/handoff");
+
+  expect(suggestedTexts(focusReply)).toEqual([]);
+  expect(suggestedTexts(otherReply)).toEqual([]);
+  expect(suggestedTexts(commandReply)).toEqual([]);
+});

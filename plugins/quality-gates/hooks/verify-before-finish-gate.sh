@@ -5,7 +5,7 @@ maximum_blocks_per_turn=1
 
 payload="$(cat)" || exit 0
 session_id="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)" || exit 0
-transcript_path="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)" || exit 0
+transcript_path="$(printf '%s' "$payload" | jq -r '.agent_transcript_path // .transcript_path // empty' 2>/dev/null)" || exit 0
 [ -n "$session_id" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ] || exit 0
 
 current_turn_actions="$(jq -c '

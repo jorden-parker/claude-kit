@@ -280,6 +280,20 @@ write_transcript "$transcript" \
   "$(qwen_text_line a2 'Done.')"
 run_gate "$transcript" session-qwen-docs-only; status=$?
 expect_exit "Qwen Code: allows a turn that only changed docs" 0 "$status"
+parent_transcript="$fixture_directory/subagent-parent.jsonl"
+write_transcript "$parent_transcript" \
+  "$(user_prompt_line u1 'delegate the fix')" \
+  "$(tool_use_line a1 Agent '{"prompt":"fix the bug"}')"
+agent_transcript="$fixture_directory/subagent-own.jsonl"
+write_transcript "$agent_transcript" \
+  "$(user_prompt_line s1 'fix the bug')" \
+  "$(tool_use_line s2 Edit '{"file_path":"/x/app.py","old_string":"a","new_string":"b"}')" \
+  "$(tool_result_line s3 s2 '')" \
+  "$(text_line s4 'Done.')"
+printf '{"session_id":"session-subagent","transcript_path":"%s","agent_transcript_path":"%s","cwd":"%s","stop_hook_active":false}' \
+  "$parent_transcript" "$agent_transcript" "$fixture_directory" \
+  | "$gate" 2>"$fixture_directory/stderr"; status=$?
+expect_exit "checks the subagent's own transcript on SubagentStop" 2 "$status"
 
 transcript="$fixture_directory/no-transcript.jsonl"
 run_gate "$transcript" session-missing; status=$?

@@ -36,19 +36,19 @@ Limits keep the store small: the latest 100 sessions with notes, 100 notes per s
 
 `bin/session-notes` reads and edits the same store from your own terminal. It needs `jq`.
 
-Run `session-notes` with no arguments to browse every session in a full-screen list, each with the first line of its notes indented under it; `enter` shows the notes in full, formatted as in the pane. The list is a small Go program built with Charm's Bubble Tea; the first run builds it, so it needs Go (`brew install go`) once.
+Run `session-notes` with no arguments to open every session in your browser. It starts a small local web server (a Go program, built on first run, so it needs Go once: `brew install go`), prints its address and opens the page. `Ctrl+C` stops it.
 
-- `↑`/`↓` (or `j`/`k`) move the selection
-- `enter` (or `v`) shows the whole session; scroll it with `↑`/`↓`, `space`/`pgdn` or the mouse wheel, and the footer says when more is below; `esc` or `q` goes back to the list. Hold `option` (or `shift`) to select text with the mouse
-- `e` on a note opens it in `$VISUAL` or `$EDITOR` (default `vi`); saving it empty leaves the note as it was
-- `d` deletes the selected note, or the whole session, after you press `y`
-- `/` filters the list
-- `q` quits from the list; the footer always shows the keys
+- Each session shows its number, start time (UTC) and working directory, then every note in full, formatted as in the pane
+- **Edit** opens a note in a text box; saving it empty is refused and leaves the note as it was
+- **Delete** removes a note, or the whole session, after you confirm
+- The filter box narrows the page to sessions and notes that contain its text
+- The page reloads the store when you come back to its tab, so new notes show without restarting
+- The server listens on `127.0.0.1` only, on a random port. Set `SESSION_NOTES_PORT` to pick one, or `SESSION_NOTES_NO_OPEN=1` to print the address without opening the browser
 
-The same commands work without the list, for scripts:
+The same commands work without the browser, for scripts:
 
 ```
-session-notes browse                         # the list above, by name
+session-notes browse                         # the web page above, by name
 session-notes list                           # every session, newest first, notes numbered
 session-notes delete <session> <note>        # e.g. session-notes delete 1 2
 session-notes amend <session> <note> <text>  # e.g. session-notes amend 1 2 Deploy moved to Monday

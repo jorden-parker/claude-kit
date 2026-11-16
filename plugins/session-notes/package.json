@@ -2,7 +2,7 @@
   "name": "session-notes",
   "version": "0.12.0",
   "scripts": {
-    "test": "claude plugin test . && (cd tui && go test ./...) && for test_file in tests/*.test.sh; do bash \"$test_file\" || exit 1; done",
+    "test": "claude plugin test . && (cd web && go test ./...) && for test_file in tests/*.test.sh; do bash \"$test_file\" || exit 1; done",
     "typecheck": "tsc -p ."
   },
   "packageManager": "pnpm@10.15.0",

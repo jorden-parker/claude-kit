@@ -70,14 +70,14 @@ replace_note() {
 }
 
 browse_notes() {
-  local script_path="$0" tui_directory browser_path
+  local script_path="$0" web_directory browser_path
   [ ! -L "$script_path" ] || script_path="$(readlink "$script_path")"
-  tui_directory="$(cd "$(dirname "$script_path")/../tui" && pwd)"
-  browser_path="${XDG_CACHE_HOME:-$HOME/.cache}/session-notes/browse-$(printf '%s' "$tui_directory" | cksum | cut -d ' ' -f 1)"
-  if [ ! -x "$browser_path" ] || [ -n "$(find "$tui_directory" -newer "$browser_path" -print -quit)" ]; then
-    command -v go > /dev/null || fail "Browsing needs Go once, to build the browser. Install it (brew install go) and run session-notes again."
-    [ ! -t 2 ] || printf 'Building the session-notes browser...\n' >&2
-    (cd "$tui_directory" && go build -o "$browser_path" .) || fail "Could not build the session-notes browser."
+  web_directory="$(cd "$(dirname "$script_path")/../web" && pwd)"
+  browser_path="${XDG_CACHE_HOME:-$HOME/.cache}/session-notes/browse-$(printf '%s' "$web_directory" | cksum | cut -d ' ' -f 1)"
+  if [ ! -x "$browser_path" ] || [ -n "$(find "$web_directory" -newer "$browser_path" -print -quit)" ]; then
+    command -v go > /dev/null || fail "Browsing needs Go once, to build the web server. Install it (brew install go) and run session-notes again."
+    [ ! -t 2 ] || printf 'Building the session-notes web server...\n' >&2
+    (cd "$web_directory" && go build -o "$browser_path" .) || fail "Could not build the session-notes web server."
   fi
   SESSION_NOTES_STORE="$store_path" exec "$browser_path"
 }
@@ -90,7 +90,7 @@ _session_notes() {
   case $CURRENT in
     2)
       candidates=(
-        'browse:pick a note to view, edit or delete'
+        'browse:open the notes in the browser to view, edit or delete'
         'list:list every session and its notes'
         'delete:delete a note'
         'amend:replace the text of a note'

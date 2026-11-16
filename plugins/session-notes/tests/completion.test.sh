@@ -50,7 +50,7 @@ complete_words() {
 }
 
 expect_equal "completes the subcommands" \
-  "browse:pick a note to view, edit or delete
+  "browse:open the notes in the browser to view, edit or delete
 list:list every session and its notes
 delete:delete a note
 amend:replace the text of a note

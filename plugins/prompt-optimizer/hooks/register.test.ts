@@ -150,7 +150,9 @@ testWithEmptySession(
 
     const reply = await $.command.run(optimize("fix bug"));
 
-    expect(reply.text).toBe("Could not optimize the prompt (api-error).");
+    expect(reply.text).toBe(
+      "Could not optimize the prompt (API error 500, server_error)."
+    );
     expect(copies).toBe(0);
   }
 );
@@ -257,6 +259,29 @@ test("the model prompt carries the working directory, the last six non-blank mes
   expect(prompt).not.toContain("user: \n");
   expect(prompt).toContain("assistant: last kept");
   expect(prompt).toContain("<draft>\nfix the bug\n</draft>");
+});
+
+test("a long message cut at an emoji keeps the prompt valid UTF-16", async ($, on) => {
+  const prompts: string[] = [];
+  on("session.cwd", () => ({ value: "/repo" }));
+  on("session.messages", () => ({
+    value: [buildSessionMessage("assistant", "x".repeat(499) + "🤖 tail")],
+  }));
+  on("model.complete", (_, e) => {
+    prompts.push(e.prompt);
+    return {
+      value: { isAnswered: true, text: "Better prompt", usage: USAGE },
+    };
+  });
+  on("prompt.fill", () => ({ isFilled: true }));
+
+  await $.command.run(optimize("fix the bug"));
+
+  const [prompt] = prompts;
+  expect(prompt).not.toMatch(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+  );
+  expect(prompt).toContain("assistant: " + "x".repeat(499) + "🤖…");
 });
 
 test("the command registers with an argument hint and does not run mid-turn", async ($, on) => {

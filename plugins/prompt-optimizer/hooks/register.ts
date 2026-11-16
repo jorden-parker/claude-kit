@@ -1,5 +1,6 @@
 import type {
   EngineInterface,
+  ModelCompleteResult,
   PluginOptions,
   PromptSubmitAttachment,
   PromptSubmitInput,
@@ -81,10 +82,12 @@ const extractRewrittenPrompt = (text: string, draft: string) => {
     : dropLeadingAsides(rewrittenPrompt);
 };
 
-const truncateMessageText = (text: string) =>
-  text.length > RECENT_MESSAGE_MAX_LENGTH
-    ? `${text.slice(0, RECENT_MESSAGE_MAX_LENGTH)}…`
+const truncateMessageText = (text: string) => {
+  const characters = Array.from(text);
+  return characters.length > RECENT_MESSAGE_MAX_LENGTH
+    ? `${characters.slice(0, RECENT_MESSAGE_MAX_LENGTH).join("")}…`
     : text;
+};
 
 const describeRecentMessages = async (engine: EngineInterface) => {
   const messages = await engine.session.messages();
@@ -160,6 +163,13 @@ const describeAttachedImages = (imageCount: number, imageList: string) => {
   return `The /optimize command above was submitted with ${imageCountLabel}: ${imageList}. They belong with the optimized prompt; refer to them when it runs.`;
 };
 
+const describeUnansweredReply = (
+  reply: Extract<ModelCompleteResult, { isAnswered: false }>
+) =>
+  reply.reason === "api-error"
+    ? `API error ${reply.status ?? "with no response"}, ${reply.error}`
+    : reply.reason;
+
 const buildFailureResult = (text: string) => ({
   text,
   exitCode: FAILURE_EXIT_CODE,
@@ -199,7 +209,7 @@ export const register: Register = (on, options) => {
 
     if (!reply.isAnswered) {
       return buildFailureResult(
-        `Could not optimize the prompt (${reply.reason}).`
+        `Could not optimize the prompt (${describeUnansweredReply(reply)}).`
       );
     }
 

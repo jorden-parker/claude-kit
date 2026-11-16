@@ -199,13 +199,26 @@ export const register: Register = (on, options) => {
     if (!draft) return buildFailureResult(USAGE_MESSAGE);
 
     $.ui.toast("Optimizing prompt…");
-    const reply = await $.model.complete({
-      model: optimizerModel,
-      system: optimizerRules,
-      prompt: await buildOptimizerPrompt($, draft, attachedImageList),
-      effort: "low",
-      timeoutMs: 15000,
-    });
+    const optimizerPrompt = await buildOptimizerPrompt(
+      $,
+      draft,
+      attachedImageList
+    );
+    const rewriteWith = (model: string) =>
+      $.model.complete({
+        model,
+        system: optimizerRules,
+        prompt: optimizerPrompt,
+        effort: "low",
+        timeoutMs: 15000,
+      });
+    let reply = await rewriteWith(optimizerModel);
+    if (!reply.isAnswered && reply.reason === "api-error") {
+      const sessionModel = await $.session.model();
+      if (sessionModel !== optimizerModel) {
+        reply = await rewriteWith(sessionModel);
+      }
+    }
 
     if (!reply.isAnswered) {
       return buildFailureResult(

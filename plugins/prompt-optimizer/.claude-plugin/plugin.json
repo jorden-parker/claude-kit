@@ -1,6 +1,6 @@
 {
   "name": "prompt-optimizer",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "/optimize rewrites a draft prompt with repo context and fills it into the composer",
   "userConfig": {
     "model": {

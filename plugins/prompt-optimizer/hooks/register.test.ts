@@ -16,6 +16,7 @@ const testWithEmptySession = (
   test(name, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: [] }));
+    on("session.model", () => ({ value: "sonnet" }));
     on("ui.selection", () => ({
       value: selectedText === undefined ? undefined : { text: selectedText },
     }));
@@ -376,6 +377,56 @@ testWithEmptySession(
     for (let i = 0; i < 2; i++) await $.command.run(optimize("fix bug"));
 
     expect(fills).toEqual(["'Fix x' and 'add y'", "Fix the bug"]);
+  }
+);
+
+const API_ERROR_REPLY = {
+  isAnswered: false,
+  reason: "api-error",
+  status: 400,
+  error: "invalid_request",
+  usage: USAGE,
+} as const;
+
+test("an API error on the configured model retries once on the session's model", async ($, on) => {
+  const models: string[] = [];
+  on("session.cwd", () => ({ value: "/repo" }));
+  on("session.messages", () => ({ value: [] }));
+  on("session.model", () => ({ value: "claude-opus-5-5" }));
+  on("model.complete", (_, e) => {
+    models.push(e.model);
+    return {
+      value:
+        models.length === 1
+          ? API_ERROR_REPLY
+          : { isAnswered: true, text: "Better prompt", usage: USAGE },
+    };
+  });
+  on("prompt.fill", () => ({ isFilled: true }));
+
+  const reply = await $.command.run(optimize("fix bug"));
+
+  expect(models).toEqual(["sonnet", "claude-opus-5-5"]);
+  expect(reply.text).toBe(
+    "Prompt filled into the composer. Edit it or press Enter."
+  );
+});
+
+testWithEmptySession(
+  "an API error is not retried when the session already runs the configured model",
+  async ($, on) => {
+    const models: string[] = [];
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return { value: API_ERROR_REPLY };
+    });
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(models).toEqual(["sonnet"]);
+    expect(reply.text).toBe(
+      "Could not optimize the prompt (API error 400, invalid_request)."
+    );
   }
 );
 

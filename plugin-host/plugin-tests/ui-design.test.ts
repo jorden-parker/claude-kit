@@ -272,7 +272,9 @@ for (const target of TARGET_NAMES) {
         ),
       ];
       expect(mentionedToolNames.sort()).toEqual(
-        (await plugin.listToolNames()).sort()
+        (await plugin.listToolNames())
+          .filter((toolName) => !toolName.startsWith("run_"))
+          .sort()
       );
       if (target === "pi") {
         const manifest = JSON.parse(

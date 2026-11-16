@@ -1,8 +1,4 @@
 #!/bin/sh
 set -e
 
-for manifest in plugins/*/package.json; do
-  plugin_folder=$(dirname "$manifest")
-  git diff --cached --quiet -- "$plugin_folder" && continue
-  (cd "$plugin_folder" && pnpm exec lint-staged && pnpm run typecheck && pnpm run test)
-done
+exec ./check --staged

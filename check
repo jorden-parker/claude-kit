@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+is_staged_only=false
+if [ "${1:-}" = "--staged" ]; then
+  is_staged_only=true
+fi
+
+should_check() {
+  [ "$is_staged_only" = false ] || ! git diff --cached --quiet -- "$@"
+}
+
+for manifest in plugins/*/package.json; do
+  plugin_folder="$(dirname "$manifest")"
+  should_check "$plugin_folder" || continue
+  echo "check: $plugin_folder"
+  if [ "$is_staged_only" = true ]; then
+    (cd "$plugin_folder" && pnpm exec lint-staged)
+  fi
+  (cd "$plugin_folder" && pnpm run typecheck && pnpm run test)
+done
+
+for bun_folder in plugin-host design-studio; do
+  should_check "$bun_folder" || continue
+  echo "check: $bun_folder"
+  bun test "$bun_folder"
+done
+
+for sync_test in tests/sync-*.test.sh; do
+  sync_script="$(basename "$sync_test" .test.sh)"
+  should_check "$sync_script" "$sync_test" plugin-host || continue
+  echo "check: $sync_test"
+  bash "$sync_test"
+done
+
+echo "check: tests/repository.test.sh"
+bash tests/repository.test.sh
+
+echo "check: passed"

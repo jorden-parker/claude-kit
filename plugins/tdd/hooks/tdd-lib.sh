@@ -53,7 +53,7 @@ tdd_detect_test_command() {
   fi
   if [ -f "$project_directory/package.json" ] \
     && jq -e '.scripts.test' "$project_directory/package.json" >/dev/null 2>&1; then
-    if grep -q 'jest' "$project_directory/package.json"; then
+    if jq -r '.scripts.test' "$project_directory/package.json" | grep -q 'jest'; then
       printf '%s' 'npm test --silent -- --watchAll=false'
     else
       printf '%s' 'npm test --silent'

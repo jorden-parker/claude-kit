@@ -1,6 +1,5 @@
 import type {
   EngineInterface,
-  HttpInit,
   HttpResponse,
   ModelCompleteResult,
   PluginOptions,
@@ -201,7 +200,9 @@ const LOCAL_MODEL = "local";
 const OLLAMA_URL = "http://127.0.0.1:11434";
 const OWN_OLLAMA_MODEL = "qwen3:4b-instruct-2507-q4_K_M";
 const OLLAMA_STATUS_TIMEOUT_MS = 3000;
-const OLLAMA_REWRITE_TIMEOUT_MS = 25000;
+const OLLAMA_REWRITE_TIMEOUT_SECONDS = 180;
+const CURL_TIMED_OUT_EXIT_CODE = 28;
+const STATUS_PREFIX = "/optimize:";
 const OLLAMA_MAX_REPLY_TOKENS = 1024;
 const TIMED_OUT = Symbol("timed out");
 
@@ -211,6 +212,7 @@ type RewriteReply =
 type OllamaReply = {
   models?: { name?: string }[];
   message?: { content?: string };
+  done?: boolean;
   error?: string;
 };
 
@@ -230,14 +232,13 @@ const waitForever = () => new Promise<never>(() => {});
 const fetchFromOllama = async (
   engine: EngineInterface,
   path: string,
-  timeoutMs: number,
-  init?: HttpInit,
-  answerer = `Ollama at ${OLLAMA_URL}`
+  timeoutMs: number
 ): Promise<HttpResponse | string> => {
+  const answerer = `Ollama at ${OLLAMA_URL}`;
   const stopWaiting = new AbortController();
   try {
     const response = await Promise.race([
-      engine.http.fetch(`${OLLAMA_URL}${path}`, init),
+      engine.http.fetch(`${OLLAMA_URL}${path}`),
       engine.clock
         .sleep(timeoutMs, { signal: stopWaiting.signal })
         .then((): typeof TIMED_OUT => TIMED_OUT, waitForever),
@@ -252,30 +253,61 @@ const fetchFromOllama = async (
   }
 };
 
-const rewriteLocally = async (
-  engine: EngineInterface,
-  system: string,
-  prompt: string
-): Promise<RewriteReply> => {
-  const status = await fetchFromOllama(
-    engine,
-    "/api/ps",
-    OLLAMA_STATUS_TIMEOUT_MS
-  );
-  if (typeof status === "string") return { isAnswered: false, failure: status };
-  const rewriteModel =
-    parseOllamaReply(status.text).models?.[0]?.name ?? OWN_OLLAMA_MODEL;
+const countTokens = (tokenCount: number) =>
+  tokenCount === 1 ? "1 token" : `${tokenCount} tokens`;
 
-  const response = await fetchFromOllama(
-    engine,
-    "/api/chat",
-    OLLAMA_REWRITE_TIMEOUT_MS,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: rewriteModel,
-        stream: false,
+const streamRewrite = async (
+  engine: EngineInterface,
+  model: string,
+  system: string,
+  prompt: string,
+  logStep: (step: string) => void
+): Promise<RewriteReply> => {
+  const answerer = `${model} on Ollama at ${OLLAMA_URL}`;
+  const startedAt = Date.now();
+  let rewrite = "";
+  let tokenCount = 0;
+  let unparsedText = "";
+  let errorOutput = "";
+  let ollamaError: string | undefined;
+
+  const readChatLine = (line: string) => {
+    if (!line.trim()) return;
+    const chunk = parseOllamaReply(line);
+    if (chunk.error) {
+      ollamaError = chunk.error;
+      return;
+    }
+    const content = chunk.message?.content ?? "";
+    if (!content) return;
+    if (tokenCount === 0) {
+      logStep(`first token after ${Date.now() - startedAt}ms`);
+    }
+    tokenCount += 1;
+    rewrite += content;
+    engine.ui.status(
+      `${STATUS_PREFIX} writing on ${model}, ${countTokens(tokenCount)}`
+    );
+  };
+
+  try {
+    const chat = engine.process.spawn({
+      argv: [
+        "curl",
+        "--silent",
+        "--show-error",
+        "--no-buffer",
+        "--max-time",
+        String(OLLAMA_REWRITE_TIMEOUT_SECONDS),
+        "--header",
+        "content-type: application/json",
+        "--data-binary",
+        "@-",
+        `${OLLAMA_URL}/api/chat`,
+      ],
+      input: JSON.stringify({
+        model,
+        stream: true,
         think: false,
         options: { num_predict: OLLAMA_MAX_REPLY_TOKENS },
         messages: [
@@ -283,20 +315,84 @@ const rewriteLocally = async (
           { role: "user", content: prompt },
         ],
       }),
-    },
-    `${rewriteModel} on Ollama at ${OLLAMA_URL}`
-  );
-  if (typeof response === "string") {
-    return { isAnswered: false, failure: response };
-  }
-  const reply = parseOllamaReply(response.text);
-  if (!response.ok) {
+    });
+    let exit: { code: number | null } = { code: null };
+    while (true) {
+      const piece = await chat.next();
+      if (piece.done) {
+        exit = piece.value;
+        break;
+      }
+      if (piece.value.stream === "stderr") {
+        errorOutput += piece.value.text;
+        continue;
+      }
+      const lines = (unparsedText + piece.value.text).split("\n");
+      unparsedText = lines.pop() ?? "";
+      lines.forEach(readChatLine);
+    }
+    readChatLine(unparsedText);
+
+    if (ollamaError) {
+      logStep(`Ollama error: ${ollamaError}`);
+      return {
+        isAnswered: false,
+        failure: `Ollama error from ${model}: ${ollamaError}`,
+      };
+    }
+    if (exit.code !== 0) {
+      logStep(`curl exited ${exit.code}: ${errorOutput.trim()}`);
+      return {
+        isAnswered: false,
+        failure:
+          exit.code === CURL_TIMED_OUT_EXIT_CODE
+            ? `${answerer} did not answer within ${OLLAMA_REWRITE_TIMEOUT_SECONDS} seconds`
+            : `${answerer} did not answer: ${errorOutput.trim() || `curl exit code ${exit.code}`}`,
+      };
+    }
+    logStep(`done in ${Date.now() - startedAt}ms, ${countTokens(tokenCount)}`);
+    return { isAnswered: true, text: rewrite };
+  } catch (error) {
+    logStep(`could not run curl: ${describeError(error)}`);
     return {
       isAnswered: false,
-      failure: `Ollama error ${response.status}, ${reply.error ?? response.text.trim()}`,
+      failure: `could not run curl for ${answerer}: ${describeError(error)}`,
     };
   }
-  return { isAnswered: true, text: reply.message?.content ?? "" };
+};
+
+const rewriteLocally = async (
+  engine: EngineInterface,
+  system: string,
+  prompt: string
+): Promise<RewriteReply> => {
+  const logStep = (step: string) =>
+    engine.ui.log(`/optimize ${step}`, { to: "debug" });
+  try {
+    engine.ui.status(`${STATUS_PREFIX} checking Ollama…`);
+    const status = await fetchFromOllama(
+      engine,
+      "/api/ps",
+      OLLAMA_STATUS_TIMEOUT_MS
+    );
+    if (typeof status === "string") {
+      logStep(status);
+      return { isAnswered: false, failure: status };
+    }
+    const loadedModel = parseOllamaReply(status.text).models?.[0]?.name;
+    const rewriteModel = loadedModel ?? OWN_OLLAMA_MODEL;
+    logStep(
+      `rewrite model ${rewriteModel} (${loadedModel ? "loaded" : "not loaded"})`
+    );
+    engine.ui.status(
+      loadedModel
+        ? `${STATUS_PREFIX} waiting for ${rewriteModel}…`
+        : `${STATUS_PREFIX} loading ${rewriteModel} (the first load can take a minute)…`
+    );
+    return await streamRewrite(engine, rewriteModel, system, prompt, logStep);
+  } finally {
+    engine.ui.status(undefined);
+  }
 };
 
 const buildFailureResult = (text: string) => ({

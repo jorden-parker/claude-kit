@@ -1,4 +1,4 @@
-import type { PromptSubmitAttachment } from "claude-code";
+import type { EngineInterface, PromptSubmitAttachment } from "claude-code";
 import { expect, test, type TestBody } from "claude-code/testing";
 
 const USAGE = {
@@ -831,6 +831,7 @@ testWithEmptySession(
 );
 
 const OLLAMA_URL = "http://127.0.0.1:11434";
+const OWN_MODEL = "qwen3:4b-instruct-2507-q4_K_M";
 
 const buildHttpResponse = (status: number, body: unknown) => ({
   value: {
@@ -843,61 +844,82 @@ const buildHttpResponse = (status: number, body: unknown) => ({
 
 const waitForever = () => new Promise<never>(() => {});
 
-type OllamaRequest = { url: string; body: Record<string, unknown> };
+const answerStatus = (loadedModels: string[]) => () =>
+  buildHttpResponse(200, {
+    models: loadedModels.map((name) => ({ name, model: name })),
+  });
 
-const answerOllama =
-  (
-    requests: OllamaRequest[],
-    loadedModels: string[],
-    chatReply = buildHttpResponse(200, {
-      message: { role: "assistant", content: "Better prompt" },
-    })
-  ) =>
-  (_: unknown, e: { url: string; init?: { body?: string } }) => {
-    requests.push({ url: e.url, body: JSON.parse(e.init?.body ?? "{}") });
-    return e.url.endsWith("/api/ps")
-      ? buildHttpResponse(200, {
-          models: loadedModels.map((name) => ({ name, model: name })),
-        })
-      : chatReply;
+const toChatLine = (content: string, isDone = false) =>
+  JSON.stringify({ message: { role: "assistant", content }, done: isDone }) +
+  "\n";
+
+type SpawnRequest = { argv: readonly string[]; input?: string };
+
+type LocalRecord = {
+  spawns: SpawnRequest[];
+  statuses: (string | undefined)[];
+  debugLogs: string[];
+};
+
+const answerChat = (
+  record: LocalRecord,
+  pieces: string[],
+  exit: { code: number | null; signal: string | null } = {
+    code: 0,
+    signal: null,
+  },
+  stderr = ""
+) =>
+  async function* (_: EngineInterface, e: SpawnRequest) {
+    record.spawns.push({ argv: e.argv, input: e.input });
+    for (const text of pieces) yield { stream: "stdout" as const, text };
+    if (stderr) yield { stream: "stderr" as const, text: stderr };
+    return { value: exit };
   };
 
 const testLocalRewrite = (
   name: string,
-  body: TestBody,
+  body: (
+    record: LocalRecord,
+    ...rest: Parameters<TestBody>
+  ) => ReturnType<TestBody>,
   answerSleep: (
     _: unknown,
     e: { ms: number }
   ) => Promise<never> | { value: undefined } = waitForever
 ) =>
   test(name, { options: {} }, ($, on) => {
+    const record: LocalRecord = { spawns: [], statuses: [], debugLogs: [] };
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: [] }));
     on("session.model", () => ({ value: "sonnet" }));
     on("ui.selection", () => ({ value: undefined }));
+    on("ui.toast", () => ({ value: undefined }));
+    on("ui.status", (_, e) => {
+      record.statuses.push(e.text);
+      return { value: undefined };
+    });
+    on("ui.log", (_, e) => {
+      if (e.to === "debug") record.debugLogs.push(e.text);
+      return { value: undefined };
+    });
     on("clock.sleep", answerSleep);
-    return body($, on);
+    return body(record, $, on);
   });
 
 testLocalRewrite(
-  "by default the rewrite runs on the model Ollama has loaded, with thinking off",
-  async ($, on) => {
-    const requests: OllamaRequest[] = [];
+  "by default the rewrite streams from the model Ollama has loaded, with thinking off",
+  async (record, $, on) => {
     let cloudCallCount = 0;
-    let commandCount = 0;
-    on("http.fetch", answerOllama(requests, ["granite4.2:3b"]));
-    on("process.run", () => {
-      commandCount += 1;
-      return {
-        value: {
-          exitCode: 1,
-          stdout: "",
-          stderr: "",
-          isStdoutTruncated: false,
-          isStderrTruncated: false,
-        },
-      };
-    });
+    on("http.fetch", answerStatus(["granite4.2:3b"]));
+    on(
+      "process.spawn",
+      answerChat(record, [
+        toChatLine("Better ") + toChatLine("pro").slice(0, 10),
+        toChatLine("pro").slice(10) + toChatLine("mpt"),
+        toChatLine("", true),
+      ])
+    );
     on("model.complete", () => {
       cloudCallCount += 1;
       return { value: { isAnswered: true, text: "cloud", usage: USAGE } };
@@ -910,13 +932,13 @@ testLocalRewrite(
 
     await $.command.run(optimize("fix bug"));
 
-    expect(requests.map((request) => request.url)).toEqual([
-      `${OLLAMA_URL}/api/ps`,
-      `${OLLAMA_URL}/api/chat`,
-    ]);
-    const chat = requests[1]?.body ?? {};
+    const spawn = record.spawns[0];
+    expect(spawn?.argv[0]).toBe("curl");
+    expect(spawn?.argv).toContain(`${OLLAMA_URL}/api/chat`);
+    expect(spawn?.argv).toContain("180");
+    const chat = JSON.parse(spawn?.input ?? "{}");
     expect(chat.model).toBe("granite4.2:3b");
-    expect(chat.stream).toBe(false);
+    expect(chat.stream).toBe(true);
     expect(chat.think).toBe(false);
     expect(chat.options).toEqual({ num_predict: 1024 });
     expect(JSON.stringify(chat.messages)).toContain(
@@ -926,51 +948,136 @@ testLocalRewrite(
       "<draft>\\nfix bug\\n</draft>"
     );
     expect(cloudCallCount).toBe(0);
-    expect(commandCount).toBe(0);
     expect(filled).toEqual(["Better prompt"]);
   }
 );
 
 testLocalRewrite(
-  "with no model loaded the rewrite loads the plugin's own model",
-  async ($, on) => {
-    const requests: OllamaRequest[] = [];
-    on("http.fetch", answerOllama(requests, []));
+  "the status line shows each step and clears when the rewrite ends",
+  async (record, $, on) => {
+    on("http.fetch", answerStatus(["granite4.2:3b"]));
+    on(
+      "process.spawn",
+      answerChat(record, [toChatLine("Better"), toChatLine(" prompt", true)])
+    );
     on("prompt.fill", () => ({ isFilled: true }));
 
     await $.command.run(optimize("fix bug"));
 
-    expect(requests[1]?.body.model).toBe("qwen3:4b-instruct-2507-q4_K_M");
+    expect(record.statuses).toEqual([
+      "/optimize: checking Ollama…",
+      "/optimize: waiting for granite4.2:3b…",
+      "/optimize: writing on granite4.2:3b, 1 token",
+      "/optimize: writing on granite4.2:3b, 2 tokens",
+      undefined,
+    ]);
   }
 );
 
 testLocalRewrite(
-  "an Ollama error reply names its status and message",
-  async ($, on) => {
+  "with no model loaded the rewrite loads the plugin's own model and says so",
+  async (record, $, on) => {
+    on("http.fetch", answerStatus([]));
+    on("process.spawn", answerChat(record, [toChatLine("Better", true)]));
+    on("prompt.fill", () => ({ isFilled: true }));
+
+    await $.command.run(optimize("fix bug"));
+
+    expect(JSON.parse(record.spawns[0]?.input ?? "{}").model).toBe(OWN_MODEL);
+    expect(record.statuses).toContain(
+      `/optimize: loading ${OWN_MODEL} (the first load can take a minute)…`
+    );
+  }
+);
+
+testLocalRewrite(
+  "each step goes to the debug log with the model and timings",
+  async (record, $, on) => {
+    on("http.fetch", answerStatus([]));
+    on("process.spawn", answerChat(record, [toChatLine("Better", true)]));
+    on("prompt.fill", () => ({ isFilled: true }));
+
+    await $.command.run(optimize("fix bug"));
+
+    const debugText = record.debugLogs.join("\n");
+    expect(debugText).toContain(`rewrite model ${OWN_MODEL} (not loaded)`);
+    expect(debugText).toMatch(/first token after \d+ms/);
+    expect(debugText).toMatch(/done in \d+ms, 1 token/);
+  }
+);
+
+testLocalRewrite(
+  "an Ollama error line names the model and message",
+  async (record, $, on) => {
+    on("http.fetch", answerStatus([]));
     on(
-      "http.fetch",
-      answerOllama(
+      "process.spawn",
+      answerChat(record, [
+        JSON.stringify({
+          error: `model "${OWN_MODEL}" not found, try pulling it first`,
+        }) + "\n",
+      ])
+    );
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(reply.text).toBe(
+      `Could not optimize the prompt (Ollama error from ${OWN_MODEL}: model "${OWN_MODEL}" not found, try pulling it first).`
+    );
+    expect(reply.exitCode).toBe(1);
+    expect(record.statuses.at(-1)).toBeUndefined();
+    expect(record.debugLogs.join("\n")).toContain("not found");
+  }
+);
+
+testLocalRewrite(
+  "a rewrite past the 3 minute limit names the model and the limit",
+  async (record, $, on) => {
+    on("http.fetch", answerStatus([]));
+    on(
+      "process.spawn",
+      answerChat(
+        record,
         [],
-        [],
-        buildHttpResponse(404, {
-          error:
-            'model "qwen3:4b-instruct-2507-q4_K_M" not found, try pulling it first',
-        })
+        { code: 28, signal: null },
+        "curl: (28) Operation timed out after 180000 milliseconds with 0 bytes received\n"
       )
     );
 
     const reply = await $.command.run(optimize("fix bug"));
 
     expect(reply.text).toBe(
-      'Could not optimize the prompt (Ollama error 404, model "qwen3:4b-instruct-2507-q4_K_M" not found, try pulling it first).'
+      `Could not optimize the prompt (${OWN_MODEL} on Ollama at ${OLLAMA_URL} did not answer within 180 seconds).`
     );
     expect(reply.exitCode).toBe(1);
   }
 );
 
 testLocalRewrite(
+  "a curl failure returns its message",
+  async (record, $, on) => {
+    on("http.fetch", answerStatus([]));
+    on(
+      "process.spawn",
+      answerChat(
+        record,
+        [],
+        { code: 7, signal: null },
+        "curl: (7) Failed to connect to 127.0.0.1 port 11434\n"
+      )
+    );
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(reply.text).toBe(
+      `Could not optimize the prompt (${OWN_MODEL} on Ollama at ${OLLAMA_URL} did not answer: curl: (7) Failed to connect to 127.0.0.1 port 11434).`
+    );
+  }
+);
+
+testLocalRewrite(
   "an unreachable Ollama server returns the error line instead of dropping the command",
-  async ($, on) => {
+  async (record, $, on) => {
     on("http.fetch", () => {
       throw new Error("connect ECONNREFUSED 127.0.0.1:11434");
     });
@@ -981,31 +1088,13 @@ testLocalRewrite(
       `Could not optimize the prompt (Ollama at ${OLLAMA_URL} did not answer:`
     );
     expect(reply.exitCode).toBe(1);
+    expect(record.statuses.at(-1)).toBeUndefined();
   }
 );
 
 testLocalRewrite(
-  "a rewrite that runs past 25 seconds fails before the host's 30 second fetch limit",
-  async ($, on) => {
-    on("http.fetch", (_, e) =>
-      e.url.endsWith("/api/ps")
-        ? buildHttpResponse(200, { models: [] })
-        : waitForever()
-    );
-
-    const reply = await $.command.run(optimize("fix bug"));
-
-    expect(reply.text).toBe(
-      `Could not optimize the prompt (qwen3:4b-instruct-2507-q4_K_M on Ollama at ${OLLAMA_URL} did not answer within 25 seconds).`
-    );
-  },
-  (_: unknown, e: { ms: number }) =>
-    e.ms === 25000 ? { value: undefined } : waitForever()
-);
-
-testLocalRewrite(
   "an Ollama server that does not answer fails fast instead of hanging",
-  async ($, on) => {
+  async (record, $, on) => {
     on("http.fetch", waitForever);
 
     const reply = await $.command.run(optimize("fix bug"));

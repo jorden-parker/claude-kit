@@ -201,6 +201,7 @@ plugins/<name>/                   one plugin: its own plugin.json, README, packa
 plugin-host/                      runs register.ts plugins outside Claude Code (engine, MCP server, pi extension, build)
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode install the plugins into Qwen Code, pi and OpenCode
+check                             runs every test suite; --staged runs only staged ones (the pre-commit hook)
 ```
 
 ## Rules for plugins
@@ -211,7 +212,9 @@ sync-qwen, sync-pi, sync-opencode install the plugins into Qwen Code, pi and Ope
   deliberate copies.
 - A plugin works when every other plugin is missing.
 - To add a plugin: create `plugins/<name>/` with `.claude-plugin/plugin.json`,
-  then add an entry to `.claude-plugin/marketplace.json`.
+  then add an entry to `.claude-plugin/marketplace.json` and a row to the
+  plugin table at the top. `tests/repository.test.sh` fails when either is
+  missing, and when the two copies of `turn-edits-lib.sh` differ.
 - A command that takes flags (`--save`) or modes (`plan`) completes them: a
   `prompt.autocomplete` hook in `hooks/register.ts` suggests each one with a
   short description, with a test for it. Copy the pattern from

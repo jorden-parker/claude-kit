@@ -113,6 +113,11 @@ func isLocalHost(hostHeader string) bool {
 	return hostName == "127.0.0.1" || hostName == "localhost"
 }
 
+func isOwnOrigin(request *http.Request) bool {
+	origin := request.Header.Get("Origin")
+	return request.Method == http.MethodGet || origin == "" || origin == "http://"+request.Host
+}
+
 func newNotesServer(storePath string) http.Handler {
 	var storeLock sync.Mutex
 	routes := http.NewServeMux()
@@ -201,7 +206,7 @@ func newNotesServer(storePath string) http.Handler {
 	}))
 
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if !isLocalHost(request.Host) {
+		if !isLocalHost(request.Host) || !isOwnOrigin(request) {
 			http.Error(writer, "Forbidden.", http.StatusForbidden)
 			return
 		}

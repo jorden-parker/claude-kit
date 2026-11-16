@@ -240,3 +240,24 @@ func TestForeignHostIsRefused(t *testing.T) {
 	expectStatus(t, http.StatusForbidden, recorder)
 	expectStrings(t, "sessions", []string{"session-b", "session-a", "session-c"}, storedSessionIds(t, storePath))
 }
+
+func TestForeignOriginCannotChangeNotes(t *testing.T) {
+	storePath := writeStore(t, fixtureStore)
+	request := httptest.NewRequest(http.MethodDelete, "/api/sessions/1", nil)
+	request.Host = "127.0.0.1:4321"
+	request.Header.Set("Origin", "http://evil.example")
+	recorder := httptest.NewRecorder()
+	newNotesServer(storePath).ServeHTTP(recorder, request)
+	expectStatus(t, http.StatusForbidden, recorder)
+	expectStrings(t, "sessions", []string{"session-b", "session-a", "session-c"}, storedSessionIds(t, storePath))
+}
+
+func TestOwnOriginCanChangeNotes(t *testing.T) {
+	storePath := writeStore(t, fixtureStore)
+	request := httptest.NewRequest(http.MethodDelete, "/api/sessions/1", nil)
+	request.Host = "127.0.0.1:4321"
+	request.Header.Set("Origin", "http://127.0.0.1:4321")
+	recorder := httptest.NewRecorder()
+	newNotesServer(storePath).ServeHTTP(recorder, request)
+	expectStatus(t, http.StatusNoContent, recorder)
+}

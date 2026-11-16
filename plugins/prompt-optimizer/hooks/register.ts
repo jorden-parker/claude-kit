@@ -1,5 +1,7 @@
 import type {
   EngineInterface,
+  HttpInit,
+  HttpResponse,
   ModelCompleteResult,
   PluginOptions,
   PromptSubmitAttachment,
@@ -196,48 +198,56 @@ const completeWithBackoff = async (
 };
 
 const LOCAL_MODEL = "local";
-const CLAUDE_LITE_CONFIG_COMMAND = ["cl", "ollama", "--print-config"];
-const LOCAL_MAX_TOKENS = 4096;
-const SETTINGS_START = /^\{/m;
+const OLLAMA_URL = "http://127.0.0.1:11434";
+const OWN_OLLAMA_MODEL = "qwen3:4b-instruct-2507-q4_K_M";
+const OLLAMA_STATUS_TIMEOUT_MS = 3000;
+const OLLAMA_REWRITE_TIMEOUT_MS = 25000;
+const OLLAMA_MAX_REPLY_TOKENS = 1024;
+const TIMED_OUT = Symbol("timed out");
 
 type RewriteReply =
   { isAnswered: true; text: string } | { isAnswered: false; failure: string };
 
-type ClaudeLiteSettings = {
-  model: string;
-  env: {
-    ANTHROPIC_BASE_URL: string;
-    ANTHROPIC_AUTH_TOKEN?: string;
-    CLAUDE_CODE_EXTRA_BODY?: string;
-  };
-};
-
-type OllamaMessagesReply = {
-  content?: { type: string; text?: string }[];
-  error?: { message?: string };
+type OllamaReply = {
+  models?: { name?: string }[];
+  message?: { content?: string };
+  error?: string;
 };
 
 const describeError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-const readClaudeLiteSettings = async (engine: EngineInterface) => {
-  const commandName = CLAUDE_LITE_CONFIG_COMMAND.join(" ");
+const parseOllamaReply = (text: string): OllamaReply => {
   try {
-    const { exitCode, stdout, stderr } = await engine.process.run(
-      CLAUDE_LITE_CONFIG_COMMAND
-    );
-    if (exitCode !== 0) {
-      return `${commandName} failed: ${stderr.trim() || `exit code ${exitCode}`}`;
-    }
-    const settings = JSON.parse(
-      stdout.slice(stdout.search(SETTINGS_START))
-    ) as Partial<ClaudeLiteSettings>;
-    if (!settings.model || !settings.env?.ANTHROPIC_BASE_URL) {
-      return `${commandName} failed: no model or ANTHROPIC_BASE_URL in its output`;
-    }
-    return settings as ClaudeLiteSettings;
+    return JSON.parse(text) as OllamaReply;
+  } catch {
+    return {};
+  }
+};
+
+const waitForever = () => new Promise<never>(() => {});
+
+const fetchFromOllama = async (
+  engine: EngineInterface,
+  path: string,
+  timeoutMs: number,
+  init?: HttpInit
+): Promise<HttpResponse | string> => {
+  const stopWaiting = new AbortController();
+  try {
+    const response = await Promise.race([
+      engine.http.fetch(`${OLLAMA_URL}${path}`, init),
+      engine.clock
+        .sleep(timeoutMs, { signal: stopWaiting.signal })
+        .then((): typeof TIMED_OUT => TIMED_OUT, waitForever),
+    ]);
+    return response === TIMED_OUT
+      ? `Ollama at ${OLLAMA_URL} did not answer within ${timeoutMs / 1000} seconds`
+      : response;
   } catch (error) {
-    return `${commandName} failed: ${describeError(error)}`;
+    return `Ollama at ${OLLAMA_URL} did not answer: ${describeError(error)}`;
+  } finally {
+    stopWaiting.abort();
   }
 };
 
@@ -246,50 +256,44 @@ const rewriteLocally = async (
   system: string,
   prompt: string
 ): Promise<RewriteReply> => {
-  const settings = await readClaudeLiteSettings(engine);
-  if (typeof settings === "string") {
-    return { isAnswered: false, failure: settings };
-  }
-  const { ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_EXTRA_BODY } =
-    settings.env;
-  let response: Awaited<ReturnType<EngineInterface["http"]["fetch"]>>;
-  try {
-    response = await engine.http.fetch(`${ANTHROPIC_BASE_URL}/v1/messages`, {
+  const status = await fetchFromOllama(
+    engine,
+    "/api/ps",
+    OLLAMA_STATUS_TIMEOUT_MS
+  );
+  if (typeof status === "string") return { isAnswered: false, failure: status };
+  const loadedModel = parseOllamaReply(status.text).models?.[0]?.name;
+
+  const response = await fetchFromOllama(
+    engine,
+    "/api/chat",
+    OLLAMA_REWRITE_TIMEOUT_MS,
+    {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "anthropic-version": "2023-06-01",
-        "x-api-key": ANTHROPIC_AUTH_TOKEN ?? "ollama",
-      },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: settings.model,
-        max_tokens: LOCAL_MAX_TOKENS,
-        system,
-        messages: [{ role: "user", content: prompt }],
-        ...JSON.parse(CLAUDE_CODE_EXTRA_BODY || "{}"),
+        model: loadedModel ?? OWN_OLLAMA_MODEL,
+        stream: false,
+        think: false,
+        options: { num_predict: OLLAMA_MAX_REPLY_TOKENS },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: prompt },
+        ],
       }),
-    });
-  } catch (error) {
-    return {
-      isAnswered: false,
-      failure: `Ollama at ${ANTHROPIC_BASE_URL} did not answer: ${describeError(error)}`,
-    };
+    }
+  );
+  if (typeof response === "string") {
+    return { isAnswered: false, failure: response };
   }
-  let reply: OllamaMessagesReply = {};
-  try {
-    reply = JSON.parse(response.text) as OllamaMessagesReply;
-  } catch {}
+  const reply = parseOllamaReply(response.text);
   if (!response.ok) {
     return {
       isAnswered: false,
-      failure: `Ollama error ${response.status}, ${reply.error?.message ?? response.text.trim()}`,
+      failure: `Ollama error ${response.status}, ${reply.error ?? response.text.trim()}`,
     };
   }
-  const text = (reply.content ?? [])
-    .filter((block) => block.type === "text")
-    .map((block) => block.text ?? "")
-    .join("");
-  return { isAnswered: true, text };
+  return { isAnswered: true, text: reply.message?.content ?? "" };
 };
 
 const buildFailureResult = (text: string) => ({

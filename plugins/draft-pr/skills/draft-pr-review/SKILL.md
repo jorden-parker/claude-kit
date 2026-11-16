@@ -15,9 +15,9 @@ The page is the only output.
 - Do not print a comment, a finding, the summary or a verdict in the session, while you work or at the end.
 - Do not run `gh pr review`, `gh pr comment`, a `gh api` call that writes, or any other command that changes GitHub.
 - Do not check out the PR or change the working tree.
-- Your last message is the tool's one-line result, and nothing else.
+- Your last message is the tool's one-line result, and nothing else. The one exception: the notes asked for screenshots and you could take none. Then add one line that says why.
 
-The notes are the words after the command, or the request that led here. They can name the PR and what to focus on.
+The notes are the words after the command, or the request that led here. They can name the PR, say what to focus on, and ask for screenshots.
 
 ## 1. Find the PR
 
@@ -45,6 +45,8 @@ Look for, most important first:
 6. Work worth praising.
 
 Check each finding against the code before you write it. Drop what you cannot show. Prefer a few comments that matter over many that do not.
+
+When the PR changes UX or UI, or the notes ask for screenshots, take the screenshots now, as step 4 says, before you write the comments.
 
 ## 4. Write Conventional Comments
 
@@ -89,13 +91,14 @@ Rules for every comment:
 - For a concrete replacement of the commented lines, put a GitHub suggestion block in the discussion: a code fence whose language is `suggestion`.
 - Write to the author as a colleague: say "we" and "this", not "you".
 
-Screenshots as evidence, when the PR changes UX or UI:
+Screenshots as evidence, when the PR changes UX or UI, or the notes ask for them:
 
-- You may embed a screenshot next to the comment it supports: a Markdown image on its own line of the discussion, `![<what it shows>](<absolute path of the file>)`.
-- Do it whenever a UX/UI problem, issue or fix is clearer seen than described: a broken layout, an overlap, poor contrast, a wrong state, or a suggested fix before and after.
+- Embed a screenshot next to the comment it supports: a Markdown image on its own line of the `discussion`, `![<what it shows>](<absolute path of the file>)`. That line is the whole embed. The tool takes no file and nothing is uploaded: the page reads the file from that path and shows it in the comment.
+- Never leave a screenshot out because the tool cannot upload files, or because GitHub cannot read a local path. The user attaches the file on GitHub after posting.
+- Do it whenever a UX/UI problem, issue or fix is clearer seen than described: a broken layout, an overlap, poor contrast, a wrong state, or a suggested fix before and after. When the notes ask for screenshots, they are required: every UX/UI comment a screenshot can show gets one.
 - Take the screenshot yourself, with the session's browser or screenshot tools, from the PR's code: the working tree when it is at the PR's head, or a preview deployment the PR links. To show a fix, change the page in the browser, not the files. When you cannot take one, write the comment without it.
 - One screenshot shows one point. Frame it so the problem is the first thing seen, and say what it shows in the alt text.
-- Save every screenshot as a PNG, with no space in its path, in a folder outside the repository, such as `$TMPDIR/draft-pr-review-<number>/`. The page shows it from that path. Never write one into the working tree, and never `git add`, commit, push or upload one.
+- Save every screenshot as a PNG, with no space in its path, in a folder outside the repository, such as `$TMPDIR/draft-pr-review-<number>/`. Never write one into the working tree, never `git add`, commit or push one, and never send one to an image host or any other service.
 
 Where a comment goes:
 

@@ -16,7 +16,7 @@ When the composer cannot take the text (a headless run, or a dialog holding the 
 
 Images pasted into the composer alongside `/optimize` are noted for the model: a hidden line names each attached image and says it belongs with the optimized prompt, so a follow-up like "do it" treats them as part of it. The same list is given to the rewrite model, so it knows the images exist and that the agent will see them. The rewrite itself is text-only, and the composer cannot take images back, so the rewritten prompt does not re-attach them.
 
-If the rewrite model answers with an API error (a cloud session that cannot use it, for one), the rewrite is tried once more on the session's own model. The error line names the HTTP status and error kind when both fail.
+A rate limit (429), overload (529) or server error is retried on the same model after 1, 2 and 4 seconds, the way the main conversation backs off. If the rewrite model still answers with an API error (a cloud session that cannot use it, for one), the rewrite is tried once more on the session's own model. The error line names the HTTP status and error kind when both fail.
 
 In a headless run (`claude -p "/optimize fix the bug"`) the process exits with code 1 when the rewrite fails or there is nothing to rewrite, so a script can tell.
 

@@ -134,6 +134,7 @@ testWithEmptySession(
 testWithEmptySession(
   "a failed model call returns the error line",
   async ($, on) => {
+    on("clock.sleep", () => ({ value: undefined }));
     let copies = 0;
     on("ui.copy", () => {
       copies += 1;
@@ -412,6 +413,79 @@ test("an API error on the configured model retries once on the session's model",
   );
 });
 
+const RATE_LIMIT_REPLY = {
+  isAnswered: false,
+  reason: "api-error",
+  status: 429,
+  error: "rate_limit",
+  usage: USAGE,
+} as const;
+
+testWithEmptySession(
+  "a rate-limited call is retried on the same model after backing off",
+  async ($, on) => {
+    const models: string[] = [];
+    const waits: number[] = [];
+    on("clock.sleep", (_, e) => {
+      waits.push(e.ms);
+      return { value: undefined };
+    });
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return {
+        value:
+          models.length < 3
+            ? RATE_LIMIT_REPLY
+            : { isAnswered: true, text: "Better prompt", usage: USAGE },
+      };
+    });
+    on("prompt.fill", () => ({ isFilled: true }));
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(models).toEqual(["sonnet", "sonnet", "sonnet"]);
+    expect(waits).toEqual([1000, 2000]);
+    expect(reply.text).toBe(
+      "Prompt filled into the composer. Edit it or press Enter."
+    );
+  }
+);
+
+testWithEmptySession(
+  "a call still rate-limited after every backoff returns the error line",
+  async ($, on) => {
+    const waits: number[] = [];
+    on("clock.sleep", (_, e) => {
+      waits.push(e.ms);
+      return { value: undefined };
+    });
+    on("model.complete", () => ({ value: RATE_LIMIT_REPLY }));
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(waits).toEqual([1000, 2000, 4000]);
+    expect(reply.text).toBe(
+      "Could not optimize the prompt (API error 429, rate_limit)."
+    );
+  }
+);
+
+testWithEmptySession(
+  "a request the API rejects is not retried after a backoff",
+  async ($, on) => {
+    const waits: number[] = [];
+    on("clock.sleep", (_, e) => {
+      waits.push(e.ms);
+      return { value: undefined };
+    });
+    on("model.complete", () => ({ value: API_ERROR_REPLY }));
+
+    await $.command.run(optimize("fix bug"));
+
+    expect(waits).toEqual([]);
+  }
+);
+
 testWithEmptySession(
   "an API error is not retried when the session already runs the configured model",
   async ($, on) => {
@@ -433,6 +507,7 @@ testWithEmptySession(
 testWithEmptySession(
   "a failed model call exits non-zero in a headless run",
   async ($, on) => {
+    on("clock.sleep", () => ({ value: undefined }));
     on("model.complete", () => ({
       value: {
         isAnswered: false,

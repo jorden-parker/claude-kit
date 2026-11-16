@@ -170,6 +170,31 @@ const describeUnansweredReply = (
     ? `API error ${reply.status ?? "with no response"}, ${reply.error}`
     : reply.reason;
 
+const BACKOFF_DELAYS_MS = [1000, 2000, 4000];
+const TRANSIENT_API_ERRORS = new Set([
+  "rate_limit",
+  "overloaded",
+  "server_error",
+]);
+
+const isTransientFailure = (reply: ModelCompleteResult) =>
+  !reply.isAnswered &&
+  reply.reason === "api-error" &&
+  TRANSIENT_API_ERRORS.has(reply.error);
+
+const completeWithBackoff = async (
+  engine: EngineInterface,
+  complete: () => Promise<ModelCompleteResult>
+) => {
+  let reply = await complete();
+  for (const delayMs of BACKOFF_DELAYS_MS) {
+    if (!isTransientFailure(reply)) break;
+    await engine.clock.sleep(delayMs);
+    reply = await complete();
+  }
+  return reply;
+};
+
 const buildFailureResult = (text: string) => ({
   text,
   exitCode: FAILURE_EXIT_CODE,
@@ -205,13 +230,15 @@ export const register: Register = (on, options) => {
       attachedImageList
     );
     const rewriteWith = (model: string) =>
-      $.model.complete({
-        model,
-        system: optimizerRules,
-        prompt: optimizerPrompt,
-        effort: "low",
-        timeoutMs: 15000,
-      });
+      completeWithBackoff($, () =>
+        $.model.complete({
+          model,
+          system: optimizerRules,
+          prompt: optimizerPrompt,
+          effort: "low",
+          timeoutMs: 15000,
+        })
+      );
     let reply = await rewriteWith(optimizerModel);
     if (!reply.isAnswered && reply.reason === "api-error") {
       const sessionModel = await $.session.model();

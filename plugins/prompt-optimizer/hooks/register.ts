@@ -231,7 +231,8 @@ const fetchFromOllama = async (
   engine: EngineInterface,
   path: string,
   timeoutMs: number,
-  init?: HttpInit
+  init?: HttpInit,
+  answerer = `Ollama at ${OLLAMA_URL}`
 ): Promise<HttpResponse | string> => {
   const stopWaiting = new AbortController();
   try {
@@ -242,10 +243,10 @@ const fetchFromOllama = async (
         .then((): typeof TIMED_OUT => TIMED_OUT, waitForever),
     ]);
     return response === TIMED_OUT
-      ? `Ollama at ${OLLAMA_URL} did not answer within ${timeoutMs / 1000} seconds`
+      ? `${answerer} did not answer within ${timeoutMs / 1000} seconds`
       : response;
   } catch (error) {
-    return `Ollama at ${OLLAMA_URL} did not answer: ${describeError(error)}`;
+    return `${answerer} did not answer: ${describeError(error)}`;
   } finally {
     stopWaiting.abort();
   }
@@ -262,7 +263,8 @@ const rewriteLocally = async (
     OLLAMA_STATUS_TIMEOUT_MS
   );
   if (typeof status === "string") return { isAnswered: false, failure: status };
-  const loadedModel = parseOllamaReply(status.text).models?.[0]?.name;
+  const rewriteModel =
+    parseOllamaReply(status.text).models?.[0]?.name ?? OWN_OLLAMA_MODEL;
 
   const response = await fetchFromOllama(
     engine,
@@ -272,7 +274,7 @@ const rewriteLocally = async (
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: loadedModel ?? OWN_OLLAMA_MODEL,
+        model: rewriteModel,
         stream: false,
         think: false,
         options: { num_predict: OLLAMA_MAX_REPLY_TOKENS },
@@ -281,7 +283,8 @@ const rewriteLocally = async (
           { role: "user", content: prompt },
         ],
       }),
-    }
+    },
+    `${rewriteModel} on Ollama at ${OLLAMA_URL}`
   );
   if (typeof response === "string") {
     return { isAnswered: false, failure: response };

@@ -996,7 +996,7 @@ testLocalRewrite(
     const reply = await $.command.run(optimize("fix bug"));
 
     expect(reply.text).toBe(
-      `Could not optimize the prompt (Ollama at ${OLLAMA_URL} did not answer within 25 seconds).`
+      `Could not optimize the prompt (qwen3:4b-instruct-2507-q4_K_M on Ollama at ${OLLAMA_URL} did not answer within 25 seconds).`
     );
   },
   (_: unknown, e: { ms: number }) =>

@@ -41,7 +41,8 @@ Run `session-notes` with no arguments to open every session in your browser. It 
 - Each session shows its number, start time (UTC) and working directory, then every note in full, formatted as in the pane
 - **Edit** opens a note in a text box; saving it empty is refused and leaves the note as it was
 - **Delete** removes a note, or the whole session, after you confirm
-- The filter box narrows the page to sessions and notes that contain its text
+- The sidebar groups every note by project (the session's working directory). Click a project to show only its sessions, or a note to jump to it
+- The filter box narrows the page and the sidebar to sessions and notes that contain its text
 - The page reloads the store when you come back to its tab, so new notes show without restarting
 - The server listens on `127.0.0.1` only, on a random port. Set `SESSION_NOTES_PORT` to pick one, or `SESSION_NOTES_NO_OPEN=1` to print the address without opening the browser
 

@@ -32,9 +32,10 @@ type noteView struct {
 }
 
 type sessionView struct {
-	Number int        `json:"number"`
-	Title  string     `json:"title"`
-	Notes  []noteView `json:"notes"`
+	Number  int        `json:"number"`
+	Title   string     `json:"title"`
+	Project string     `json:"project"`
+	Notes   []noteView `json:"notes"`
 }
 
 func formatStartTime(startedAt string) string {
@@ -79,7 +80,7 @@ func viewSessions(sessions []session) []sessionView {
 			}
 			notes = append(notes, noteView{noteIndex + 1, text, lines})
 		}
-		views = append(views, sessionView{sessionIndex + 1, sessionTitle(entry), notes})
+		views = append(views, sessionView{sessionIndex + 1, sessionTitle(entry), entry.WorkingDirectory, notes})
 	}
 	return views
 }

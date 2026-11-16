@@ -123,6 +123,11 @@ func TestSessionsListEverySessionWithNotesNumberedLikeTheCli(t *testing.T) {
 	}
 }
 
+func TestSessionsNameTheirProjectForTheSidebar(t *testing.T) {
+	sessions := listedSessions(t, writeStore(t, fixtureStore))
+	expectStrings(t, "projects", []string{"/repo", "/other"}, []string{sessions[0].Project, sessions[1].Project})
+}
+
 func TestNotesCarryTheirTextAndFormattedLines(t *testing.T) {
 	note := listedSessions(t, writeStore(t, fixtureStore))[0].Notes[2]
 	if note.Text != "## Left to do\n- [ ] Ship the fix\n## Done\n- [x] Wrote the test" {

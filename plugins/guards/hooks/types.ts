@@ -10,7 +10,6 @@ export type HookEvent = {
   tool_input?: Record<string, any>;
   tool_response?: Record<string, any>;
   agent_id?: string;
-  permission_mode?: string;
 };
 
 export type HookResult = {

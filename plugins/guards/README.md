@@ -18,11 +18,13 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   characters that lookups (`Read`, `Grep`, `Glob`, and Bash commands that start
   with `cat`, `grep`, `rg`, `find`, `ls`, `git log`, `git diff` and the like)
   put into the context. At 40,000 characters it denies the next lookup and
-  points Claude at the `guards:context-scout` agent. Only a new user prompt or
-  a delegation to Haiku (that agent, or any agent spawned with
-  `model: "haiku"`) resets the budget. It also denies an `Explore` subagent
-  that is not spawned with `model: "haiku"`. Subagents are never limited.
-  Claude Code only. Opt out with `GUARDS_DELEGATE_GUARD=0`.
+  points Claude at the `guards:context-scout` agent. Only a delegation to Haiku
+  (that agent, or any agent spawned with `model: "haiku"`) resets the budget;
+  a new user prompt does not, since the context keeps the earlier reads. It
+  also denies an `Explore` subagent that is not spawned with `model: "haiku"`.
+  Subagents are never limited. Claude Code only. Opt out with
+  `GUARDS_DELEGATE_GUARD=0`. Hooks load when a session starts, so a session
+  opened before the plugin was updated runs without this guard.
 - **bash-trim** (PostToolUse, Bash): keeps the head, the tail and the error
   lines of long output.
 - **browser-check** (Stop): blocks once when a UI file was edited after the last

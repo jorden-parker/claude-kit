@@ -6,6 +6,8 @@ const LOOKUP_BUDGET = 40_000;
 const SCOUT_AGENT = "guards:context-scout";
 const LOOKUP_TOOLS = ["Read", "Grep", "Glob"];
 const DELEGATION_TOOLS = ["Agent", "Task"];
+const TOOL_BLOCK_MARK = '"tool_';
+const MAX_TRANSCRIPT_BYTES = 10_000_000;
 const LOOKUP_PROGRAMS = String.raw`cat|head|tail|less|more|bat|sed\s+-n|grep|rg|find|fd|ls|tree|git\s+${GIT_OPTIONS}(?:grep|log|diff|show|blame|ls-files)`;
 const WRITES_INSTEAD_OF_READING = String.raw`(?!\s*(?:<<|>))`;
 const LOOKUP_COMMAND = new RegExp(
@@ -14,8 +16,6 @@ const LOOKUP_COMMAND = new RegExp(
 const HEREDOC = /<<-?\s*(['"]?)(\w+)\1[\s\S]*?\n[ \t]*\2\b/g;
 
 type TranscriptLine = {
-  type?: string;
-  isMeta?: boolean;
   isSidechain?: boolean;
   message?: { content?: unknown };
 };
@@ -41,9 +41,7 @@ function isAgentCall(event: HookEvent): boolean {
 
 function isExempt(event: HookEvent): boolean {
   return (
-    process.env.GUARDS_DELEGATE_GUARD === "0" ||
-    event.agent_id !== undefined ||
-    event.permission_mode === undefined
+    process.env.GUARDS_DELEGATE_GUARD === "0" || event.agent_id !== undefined
   );
 }
 
@@ -57,7 +55,7 @@ function exploreProblem(event: HookEvent): HookResult {
 }
 
 function budgetReason(spent: number): string {
-  return `This session has read or searched ${spent} characters since the last user message or Haiku delegation, over the ${LOOKUP_BUDGET} budget. Delegate the rest of the reading and searching to the ${SCOUT_AGENT} agent (Haiku) through the Agent tool, and ask it for the conclusion with file:line references. The budget resets only when you delegate to it or to an agent spawned with model: "haiku".`;
+  return `This session has read or searched ${spent} characters since the last Haiku delegation, over the ${LOOKUP_BUDGET} budget. Delegate the rest of the reading and searching to the ${SCOUT_AGENT} agent (Haiku) through the Agent tool, and ask it for the conclusion with file:line references. The budget resets only when you delegate to it or to an agent spawned with model: "haiku".`;
 }
 
 function parseLine(line: string): TranscriptLine | undefined {
@@ -68,25 +66,19 @@ function parseLine(line: string): TranscriptLine | undefined {
   }
 }
 
-function isRealPrompt(line: TranscriptLine): boolean {
-  const content = line.message?.content;
-  if (line.type !== "user" || line.isMeta === true) return false;
-  if (typeof content === "string") return true;
-  return (
-    Array.isArray(content) &&
-    !content.some((block: any) => block?.type === "tool_result")
-  );
-}
-
 function resetTally(tally: Tally): void {
   tally.spent = 0;
   tally.lookupIds.clear();
 }
 
 function resultSize(content: unknown): number {
-  return typeof content === "string"
-    ? content.length
-    : JSON.stringify(content ?? "").length;
+  if (typeof content === "string") return content.length;
+  if (!Array.isArray(content)) return 0;
+  return content.reduce(
+    (total, block) =>
+      total + (typeof block?.text === "string" ? block.text.length : 0),
+    0
+  );
 }
 
 function isHaikuDelegation(block: any): boolean {
@@ -118,9 +110,7 @@ function applyBlock(tally: Tally, block: any): void {
 
 function applyLine(tally: Tally, line: TranscriptLine): void {
   const content = line.message?.content;
-  if (isRealPrompt(line)) {
-    resetTally(tally);
-  } else if (Array.isArray(content)) {
+  if (Array.isArray(content)) {
     for (const block of content) applyBlock(tally, block);
   }
 }
@@ -128,7 +118,7 @@ function applyLine(tally: Tally, line: TranscriptLine): void {
 function lookupCharacters(transcript: string): number {
   const tally: Tally = { spent: 0, lookupIds: new Set() };
   for (const text of transcript.split("\n")) {
-    const line = parseLine(text);
+    const line = text.includes(TOOL_BLOCK_MARK) ? parseLine(text) : undefined;
     if (line && line.isSidechain !== true) applyLine(tally, line);
   }
   return tally.spent;
@@ -155,7 +145,7 @@ export function decideDelegation(
 
 export function decideDelegationFromTranscript(
   event: HookEvent,
-  maxBytes = 2_000_000
+  maxBytes = MAX_TRANSCRIPT_BYTES
 ): HookResult {
   const path = event.transcript_path;
   const transcript =

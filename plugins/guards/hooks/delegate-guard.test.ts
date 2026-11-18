@@ -14,7 +14,6 @@ const mainEvent = (
   toolName: string,
   toolInput: Record<string, unknown>
 ): HookEvent => ({
-  permission_mode: "default",
   tool_name: toolName,
   tool_input: toolInput,
 });
@@ -172,20 +171,31 @@ test.each([
   expect(isDenied(decideDelegation(readEvent, delegated))).toBe(true);
 });
 
-test("allows a Read after a new user prompt resets the budget", () => {
+test("keeps the budget after a new user prompt, since the context keeps the earlier reads", () => {
   const next = transcript(
     ...readPair("r1", LIMIT),
     userPrompt("next question")
   );
-  expect(decideDelegation(readEvent, next)).toBeNull();
+  expect(isDenied(decideDelegation(readEvent, next))).toBe(true);
 });
 
-test("keeps the budget after a meta user line", () => {
-  const meta = transcript(
-    ...readPair("r1", LIMIT),
-    userPrompt("<command-meta>", { isMeta: true })
+test("adds up lookups across user prompts", () => {
+  const acrossPrompts = transcript(
+    ...readPair("r1", 20_000),
+    userPrompt("next question"),
+    ...readPair("r2", 20_000)
   );
-  expect(isDenied(decideDelegation(readEvent, meta))).toBe(true);
+  expect(isDenied(decideDelegation(readEvent, acrossPrompts))).toBe(true);
+});
+
+test("does not count image blocks in a tool result", () => {
+  const screenshot = transcript(
+    toolUseLine("r1", "Read", { file_path: "/shot.png" }),
+    toolResultLine("r1", [
+      { type: "image", source: { data: "x".repeat(LIMIT * 2) } },
+    ])
+  );
+  expect(decideDelegation(readEvent, screenshot)).toBeNull();
 });
 
 test("keeps the budget after a tool result line", () => {
@@ -207,13 +217,15 @@ test("allows everything inside a subagent", () => {
   ).toBeNull();
 });
 
-test("allows everything when permission_mode is missing", () => {
+test("denies over budget when the event carries no permission_mode", () => {
   expect(
-    decideDelegation(
-      { tool_name: "Read", tool_input: { file_path: "/a.ts" } },
-      overBudget
+    isDenied(
+      decideDelegation(
+        { tool_name: "Read", tool_input: { file_path: "/a.ts" } },
+        overBudget
+      )
     )
-  ).toBeNull();
+  ).toBe(true);
 });
 
 test("allows everything when GUARDS_DELEGATE_GUARD is 0", () => {

@@ -57,7 +57,7 @@ function exploreProblem(event: HookEvent): HookResult {
 }
 
 function budgetReason(spent: number): string {
-  return `This session has read or searched ${spent} characters since the last user message or delegation, over the ${LOOKUP_BUDGET} budget. Delegate the rest of the reading and searching to the ${SCOUT_AGENT} agent (Haiku) through the Agent tool, and ask it for the conclusion with file:line references. The budget resets after a delegation.`;
+  return `This session has read or searched ${spent} characters since the last user message or Haiku delegation, over the ${LOOKUP_BUDGET} budget. Delegate the rest of the reading and searching to the ${SCOUT_AGENT} agent (Haiku) through the Agent tool, and ask it for the conclusion with file:line references. The budget resets only when you delegate to it or to an agent spawned with model: "haiku".`;
 }
 
 function parseLine(line: string): TranscriptLine | undefined {
@@ -89,8 +89,16 @@ function resultSize(content: unknown): number {
     : JSON.stringify(content ?? "").length;
 }
 
+function isHaikuDelegation(block: any): boolean {
+  return (
+    DELEGATION_TOOLS.includes(block.name) &&
+    (block.input?.model === "haiku" ||
+      block.input?.subagent_type === SCOUT_AGENT)
+  );
+}
+
 function applyToolUse(tally: Tally, block: any): void {
-  if (DELEGATION_TOOLS.includes(block.name)) {
+  if (isHaikuDelegation(block)) {
     resetTally(tally);
   } else if (isLookup(block.name, block.input)) {
     tally.lookupIds.add(block.id);

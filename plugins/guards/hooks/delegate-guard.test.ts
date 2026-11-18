@@ -152,6 +152,26 @@ test("allows a Read after a delegation resets the budget", () => {
   expect(decideDelegation(readEvent, delegated)).toBeNull();
 });
 
+test("allows a Read after a delegation to any agent on haiku", () => {
+  const delegated = transcript(
+    ...readPair("r1", LIMIT),
+    toolUseLine("a1", "Agent", { subagent_type: "Explore", model: "haiku" })
+  );
+  expect(decideDelegation(readEvent, delegated)).toBeNull();
+});
+
+test.each([
+  { subagent_type: "general-purpose" },
+  { subagent_type: "general-purpose", model: "sonnet" },
+  {},
+])("keeps the budget after a delegation that is not on Haiku: %j", (input) => {
+  const delegated = transcript(
+    ...readPair("r1", LIMIT),
+    toolUseLine("a1", "Agent", input)
+  );
+  expect(isDenied(decideDelegation(readEvent, delegated))).toBe(true);
+});
+
 test("allows a Read after a new user prompt resets the budget", () => {
   const next = transcript(
     ...readPair("r1", LIMIT),

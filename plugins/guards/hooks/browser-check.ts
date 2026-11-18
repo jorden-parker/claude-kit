@@ -72,7 +72,7 @@ export function decide(event: HookEvent, transcript: string): HookResult {
 
 const MAX_TRANSCRIPT_BYTES = 20_000_000;
 
-function transcriptTail(path: string, maxBytes: number): string {
+export function transcriptTail(path: string, maxBytes: number): string {
   const size = statSync(path).size;
   const start = Math.max(0, size - maxBytes);
   const descriptor = openSync(path, "r");

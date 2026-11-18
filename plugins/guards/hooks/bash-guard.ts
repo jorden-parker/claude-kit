@@ -55,7 +55,7 @@ const RULES: [RegExp, string][] = [
   ],
 ];
 
-const withoutQuotedText = (command: string) =>
+export const withoutQuotedText = (command: string) =>
   command.replace(QUOTED_TEXT, (match) =>
     QUOTED_SEPARATOR.test(match) ? "''" : match
   );

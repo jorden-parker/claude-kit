@@ -15,7 +15,7 @@ install any of them on its own.
 | [code-style](plugins/code-style/) | Writes the comment and naming rules into each session and blocks edits that break them. |
 | [tdd](plugins/tdd/) | Enforces red, green, refactor: blocks implementation edits until a failing test run and finishing while tests fail. |
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
-| [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
+| [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
 | [session-notes](plugins/session-notes/) | Keeps Claude's notes for each session, what is left to do first, outside Claude's context; `/notes` shows them in a pane. |
 

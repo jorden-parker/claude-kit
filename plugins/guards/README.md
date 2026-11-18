@@ -1,7 +1,7 @@
 # guards
 
-Small command guards that keep Bash, Read and commit behavior in check. Each
-hook is a pure `decide(event)` function in `hooks/`, run through
+Small command guards that keep Bash, Read, commit and delegation behavior in
+check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 `hooks/run.ts`.
 
 - **bash-guard** (PreToolUse, Bash): denies unbounded `git log`, `git diff`,
@@ -13,12 +13,27 @@ hook is a pure `decide(event)` function in `hooks/`, run through
   `GUARDS_COMMIT_GUARD=0`.
 - **read-guard** (PreToolUse, Read): denies Reads of text files over 300 lines
   or 5 MB unless `limit` is 300 or less.
+- **delegate-guard** (PreToolUse, Read, Grep, Glob, Bash, Agent): forces
+  context-heavy work onto Haiku subagents. In the main session it adds up the
+  characters that lookups (`Read`, `Grep`, `Glob`, and Bash commands that start
+  with `cat`, `grep`, `rg`, `find`, `ls`, `git log`, `git diff` and the like)
+  put into the context. At 40,000 characters it denies the next lookup and
+  points Claude at the `guards:context-scout` agent. Delegating or a new user
+  prompt resets the budget. It also denies an `Explore` subagent that is not
+  spawned with `model: "haiku"`. Subagents are never limited. Claude Code only.
+  Opt out with `GUARDS_DELEGATE_GUARD=0`.
 - **bash-trim** (PostToolUse, Bash): keeps the head, the tail and the error
   lines of long output.
 - **browser-check** (Stop): blocks once when a UI file was edited after the last
   browser console read (`agent-browser console`, Playwright or Claude in Chrome).
   A plugin's own hooks module (`hooks/*.tsx` beside `.claude-plugin/`) is not a
   page and is skipped.
+
+## Agent
+
+- **context-scout** (`agents/context-scout.md`, Haiku, read-only): reads and
+  searches the codebase and replies with the conclusion and `path:line`
+  references. delegate-guard sends Claude here.
 
 Hook events are logged to `~/.cache/guards/hooks.log`.
 

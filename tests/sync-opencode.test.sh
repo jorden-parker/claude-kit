@@ -46,7 +46,7 @@ expect "the clash names the file" output_has "skills/naming-review"
 expect "other plugins still install" test -f "$config/skills/build-plans/SKILL.md"
 expect "the user's settings are kept" config_query '.model == "anthropic/claude-sonnet-5-5"'
 expect "the user's own MCP server is kept" config_query '.mcp.servers.mine.command == ["mine"]'
-expect "every tool plugin gets an MCP server" config_query '.mcp.servers | has("brainstorm") and has("ui-design") and has("draft-pr") and has("handoff") and has("project-notes")'
+expect "every tool plugin gets an MCP server" config_query '.mcp.servers | has("brainstorm") and has("ui-design") and has("draft-pr") and has("handoff") and has("small-plans") and has("project-notes")'
 expect "a plugin of hand-written commands gets no MCP server" config_query '.mcp.servers | has("prompt-optimizer") | not'
 expect "portable commands are installed" test -f "$config/commands/optimize.md"
 expect "a plugin removed from the repo loses its command" test ! -e "$config/commands/retired.md"

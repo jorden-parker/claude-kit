@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Small plans</title>
+    <style>
+      :root {
+        --background: #ffffff;
+        --sidebar: #fafafa;
+        --hover: #f2f2f2;
+        --selected: #ebebeb;
+        --text: #171717;
+        --muted: #666666;
+        --border: #eaeaea;
+        --border-strong: #d4d4d4;
+        --focus: #0070f3;
+        --blocked: #c62828;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #0a0a0a;
+          --sidebar: #000000;
+          --hover: #1a1a1a;
+          --selected: #242424;
+          --text: #ededed;
+          --muted: #a1a1a1;
+          --border: #262626;
+          --border-strong: #3d3d3d;
+          --focus: #3291ff;
+          --blocked: #ff6b6b;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        height: 100vh;
+        font:
+          14px/1.6 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background: var(--background);
+      }
+      nav {
+        overflow-y: auto;
+        padding: 16px 8px;
+        background: var(--sidebar);
+        border-right: 1px solid var(--border);
+      }
+      nav h1 {
+        margin: 0 8px 12px;
+        font-size: 14px;
+      }
+      nav h2 {
+        margin: 16px 8px 2px;
+        font-size: 13px;
+      }
+      nav h3 {
+        margin: 8px 8px 2px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      nav a {
+        display: block;
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: inherit;
+        text-decoration: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      nav a:hover {
+        background: var(--hover);
+      }
+      nav a[aria-current="page"] {
+        background: var(--selected);
+        font-weight: 500;
+      }
+      nav a small {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      nav a[data-status="done"] {
+        color: var(--muted);
+      }
+      nav a[data-status="blocked"] small {
+        color: var(--blocked);
+      }
+      nav h3 {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        overflow-wrap: anywhere;
+      }
+      nav h3 .progress {
+        flex: none;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      :is(a, main):focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: -2px;
+      }
+      main {
+        overflow-y: auto;
+        padding: 32px 40px 64px;
+      }
+      article {
+        max-width: 760px;
+      }
+      article > h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.3;
+      }
+      .plan-details {
+        margin: 4px 0 24px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .empty {
+        color: var(--muted);
+      }
+      .plan-body :is(h1, h2, h3, h4, h5, h6) {
+        margin: 28px 0 8px;
+        line-height: 1.3;
+      }
+      .plan-body h1 {
+        font-size: 20px;
+      }
+      .plan-body h2 {
+        font-size: 17px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border);
+      }
+      .plan-body :is(h3, h4, h5, h6) {
+        font-size: 14px;
+      }
+      .plan-body :is(p, ul, ol, pre, blockquote, table) {
+        margin: 0 0 12px;
+      }
+      .plan-body :is(ul, ol) {
+        padding-left: 24px;
+      }
+      .plan-body li:has(> input[type="checkbox"]) {
+        list-style: none;
+        margin-left: -24px;
+      }
+      .plan-body input[type="checkbox"] {
+        margin: 0 6px 0 0;
+        accent-color: var(--focus);
+      }
+      .plan-body code {
+        font:
+          0.9em ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: var(--hover);
+      }
+      .plan-body pre {
+        padding: 10px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--sidebar);
+        overflow-x: auto;
+      }
+      .plan-body pre code {
+        padding: 0;
+        background: none;
+      }
+      .plan-body a {
+        color: var(--focus);
+      }
+      .plan-body blockquote {
+        padding-left: 12px;
+        border-left: 3px solid var(--border-strong);
+        color: var(--muted);
+      }
+      .plan-body table {
+        display: block;
+        overflow-x: auto;
+        border-collapse: collapse;
+      }
+      .plan-body :is(th, td) {
+        padding: 4px 10px;
+        border: 1px solid var(--border);
+        text-align: left;
+      }
+      .plan-body hr {
+        border: 0;
+        border-top: 1px solid var(--border);
+      }
+      @media (max-width: 720px) {
+        body {
+          grid-template-columns: 1fr;
+          grid-template-rows: 40vh 1fr;
+        }
+        nav {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        main {
+          padding: 20px 16px 48px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav aria-label="All plans"></nav>
+    <main tabindex="-1"></main>
+    <script>
+      const sidebar = document.querySelector("nav");
+      const planArea = document.querySelector("main");
+      let plans = [];
+
+      const createElement = (tagName, text, className) => {
+        const element = document.createElement(tagName);
+        if (text) element.textContent = text;
+        if (className) element.className = className;
+        return element;
+      };
+
+      const readSelectedPath = () => decodeURIComponent(location.hash.slice(1));
+
+      const findSelectedPlan = () =>
+        plans.find((plan) => plan.path === readSelectedPath()) ?? plans[0];
+
+      const readOrder = (plan) => plan.path.split("/")[2].slice(0, 2);
+
+      const describeProgress = (memberPlan) => {
+        const plansOfSet = plans.filter(
+          (plan) =>
+            plan.project === memberPlan.project && plan.set === memberPlan.set
+        );
+        const doneCount = plansOfSet.filter(
+          (plan) => plan.status === "done"
+        ).length;
+        return `${doneCount} of ${plansOfSet.length} done`;
+      };
+
+      const renderSidebar = (selectedPlan) => {
+        sidebar.replaceChildren(createElement("h1", "Small plans"));
+        plans.forEach((plan, planIndex) => {
+          const previousPlan = plans[planIndex - 1] ?? {};
+          const isNewProject = plan.project !== previousPlan.project;
+          if (isNewProject) sidebar.append(createElement("h2", plan.project));
+          if (isNewProject || plan.set !== previousPlan.set) {
+            const setNameHeading = createElement("h3", plan.set);
+            setNameHeading.append(
+              createElement("span", describeProgress(plan), "progress")
+            );
+            sidebar.append(setNameHeading);
+          }
+          const link = createElement("a", `${readOrder(plan)} ${plan.title}`);
+          link.href = `#${encodeURIComponent(plan.path)}`;
+          link.title = plan.title;
+          link.dataset.status = plan.status;
+          link.append(createElement("small", `${plan.kind} · ${plan.status}`));
+          if (plan === selectedPlan) link.setAttribute("aria-current", "page");
+          sidebar.append(link);
+        });
+      };
+
+      const renderPlan = (selectedPlan) => {
+        if (!selectedPlan) {
+          planArea.replaceChildren(
+            createElement(
+              "p",
+              "No plans yet. Run /small-plans to plan work as small plans.",
+              "empty"
+            )
+          );
+          return;
+        }
+        const article = createElement("article");
+        const body = createElement("div", "", "plan-body");
+        body.innerHTML = selectedPlan.html;
+        body
+          .querySelectorAll("input[type=checkbox]")
+          .forEach((checkbox) => (checkbox.disabled = true));
+        article.append(
+          createElement("h1", selectedPlan.title),
+          createElement(
+            "p",
+            [
+              selectedPlan.project,
+              selectedPlan.set,
+              `plan ${readOrder(selectedPlan)}`,
+              selectedPlan.kind,
+              selectedPlan.status,
+              selectedPlan.dependsOn && `needs plan ${selectedPlan.dependsOn}`,
+              selectedPlan.path,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            "plan-details"
+          ),
+          body
+        );
+        planArea.replaceChildren(article);
+      };
+
+      const render = () => {
+        const selectedPlan = findSelectedPlan();
+        document.title = selectedPlan
+          ? `${selectedPlan.title} · Small plans`
+          : "Small plans";
+        renderSidebar(selectedPlan);
+        renderPlan(selectedPlan);
+      };
+
+      const loadPlans = async () => {
+        plans = await (await fetch("/api/plans")).json();
+        render();
+      };
+
+      addEventListener("hashchange", () => {
+        render();
+        planArea.scrollTop = 0;
+        planArea.focus();
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) loadPlans();
+      });
+      loadPlans();
+    </script>
+  </body>
+</html>

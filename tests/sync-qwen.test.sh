@@ -58,7 +58,7 @@ expect "brainstorm ships its slash command" log_has "brainstorm has-command brai
 expect "handoff ships its slash command" log_has "handoff has-command handoff.md"
 expect "prompt-optimizer ships its slash command" log_has "prompt-optimizer has-command optimize.md"
 expect "the portable-commands folder is turned into commands" log_lacks "has-portable-commands-folder"
-for module_plugin in brainstorm ui-design draft-pr handoff project-notes; do
+for module_plugin in brainstorm ui-design draft-pr handoff small-plans project-notes; do
   expect "$module_plugin ships an MCP server" log_has "$module_plugin has-mcp-server"
   expect "$module_plugin declares its MCP server" log_has "$module_plugin has-mcp-json"
   expect "$module_plugin is reported as running through its MCP server" output_has "$module_plugin: installed. Its tools and slash commands run through an MCP server"

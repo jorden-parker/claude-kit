@@ -264,15 +264,20 @@ testWithSession(
       return { value: { isCopied: true } };
     });
     const models: string[] = [];
-    on("session.model", () => ({ value: "claude-opus-5-5" }));
+    let forkCount = 0;
     on("model.complete", (_, e) => {
       models.push(e.model);
+      return { value: REJECTED_REPLY };
+    });
+    on("model.fork", () => {
+      forkCount += 1;
       return { value: REJECTED_REPLY };
     });
 
     const reply = await $.command.run(handoff(""));
 
-    expect(models).toEqual(["haiku", "claude-opus-5-5"]);
+    expect(models).toEqual(["haiku"]);
+    expect(forkCount).toBe(1);
     expect(reply.text).toBe(
       "Could not build the recap (API error 400, invalid_request)."
     );
@@ -281,37 +286,54 @@ testWithSession(
 );
 
 testWithSession(
-  "an API error on haiku retries on the session's model and --save stores the recap",
+  "an API error on haiku forks the session's own request and --save stores the recap",
   CONVERSATION,
   async ($, on) => {
     mock.clock(on);
     mockStore(on);
-    const models: string[] = [];
-    on("session.model", () => ({ value: "claude-opus-5-5" }));
-    on("model.complete", (_, e) => {
-      models.push(e.model);
+    const forkPrompts: string[] = [];
+    on("model.complete", () => ({ value: REJECTED_REPLY }));
+    on("model.fork", (_, e) => {
+      forkPrompts.push(e.prompt);
       return {
-        value:
-          models.length === 1
-            ? REJECTED_REPLY
-            : { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
       };
     });
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("--save the failing test"));
 
-    expect(models).toEqual(["haiku", "claude-opus-5-5"]);
+    expect(forkPrompts).toHaveLength(1);
+    expect(forkPrompts[0]).toContain("The conversation above is");
+    expect(forkPrompts[0]).toContain("Output only the prompt");
+    expect(forkPrompts[0]).toContain("<focus>\nthe failing test\n</focus>");
     expect(reply.text).toContain("Saved as handoff #1.");
   }
 );
 
 testWithSession(
-  "a call rate-limited on every model waits less than the hook's 10 second budget",
+  "a session with nothing to fork reports the API error haiku gave",
+  CONVERSATION,
+  async ($, on) => {
+    on("model.complete", () => ({ value: REJECTED_REPLY }));
+    on("model.fork", () => ({
+      value: { isAnswered: false, reason: "nothing-to-fork" },
+    }));
+
+    const reply = await $.command.run(handoff("--save"));
+
+    expect(reply.text).toBe(
+      "Could not build the recap (API error 400, invalid_request)."
+    );
+  }
+);
+
+testWithSession(
+  "a call rate-limited on haiku and on the fork waits less than the hook's 10 second budget",
   CONVERSATION,
   async ($, on) => {
     const models: string[] = [];
     const waits: number[] = [];
-    on("session.model", () => ({ value: "claude-opus-5-5" }));
+    let forkCount = 0;
     on("clock.sleep", (_, e) => {
       waits.push(e.ms);
       return { value: undefined };
@@ -320,17 +342,16 @@ testWithSession(
       models.push(e.model);
       return { value: RATE_LIMITED_REPLY };
     });
+    on("model.fork", () => {
+      forkCount += 1;
+      return { value: RATE_LIMITED_REPLY };
+    });
 
     const reply = await $.command.run(handoff("--save"));
 
     expect(waits).toEqual([1000, 2000, 4000]);
-    expect(models).toEqual([
-      "haiku",
-      "haiku",
-      "haiku",
-      "haiku",
-      "claude-opus-5-5",
-    ]);
+    expect(models).toEqual(["haiku", "haiku", "haiku", "haiku"]);
+    expect(forkCount).toBe(1);
     expect(reply.text).toBe(
       "Could not build the recap (API error 429, rate_limit)."
     );

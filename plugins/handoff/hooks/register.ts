@@ -101,14 +101,22 @@ const describeRecentMessages = async (
     .join("\n");
 };
 
+const describeFocus = (focus: string) =>
+  focus ? `\n\n<focus>\n${focus}\n</focus>` : "";
+
 const buildRecapPrompt = (
   workingDirectory: string,
   recentMessages: string,
   focus: string
 ) => {
-  const focusSection = focus ? `\n\n<focus>\n${focus}\n</focus>` : "";
-  return `Working directory: ${workingDirectory}\n\nConversation:\n${recentMessages}${focusSection}`;
+  return `Working directory: ${workingDirectory}\n\nConversation:\n${recentMessages}${describeFocus(focus)}`;
 };
+
+const FORK_PREAMBLE = `Stop the work here. You have no tools for this message: answer it straight away.
+The conversation above is what the rules below call "the conversation below".`;
+
+const buildForkPrompt = (rules: string, focus: string) =>
+  `${FORK_PREAMBLE}\n\n${rules}${describeFocus(focus)}`;
 
 type HandoffArguments =
   | { action: "list" }
@@ -267,21 +275,21 @@ const buildRecap = async (
     recentMessages,
     focus
   );
-  const completeRecapOnce = (model: string) =>
+  let reply = await completeWithBackoff(engine, () =>
     engine.model.complete({
-      model,
+      model: RECAP_MODEL,
       system: style.rules,
       prompt,
       effort: "low",
       timeoutMs: style.timeoutMs,
-    });
-  let reply = await completeWithBackoff(engine, () =>
-    completeRecapOnce(RECAP_MODEL)
+    })
   );
   if (!reply.isAnswered && reply.reason === "api-error") {
-    const sessionModel = await engine.session.model();
-    if (sessionModel !== RECAP_MODEL) {
-      reply = await completeRecapOnce(sessionModel);
+    const forkReply = await engine.model.fork({
+      prompt: buildForkPrompt(style.rules, focus),
+    });
+    if (forkReply.isAnswered || forkReply.reason !== "nothing-to-fork") {
+      reply = forkReply;
     }
   }
 

@@ -351,20 +351,29 @@ const askConversationForRecap = (
 const buildAgentPrompt = (request: RecapRequest, digest: string) =>
   `${AGENT_PREAMBLE}\n\n${chooseRecapStyle(request).rules}\n\n${digest}`;
 
-const delegateRecap = async (
-  engine: EngineInterface,
-  request: RecapRequest,
-  digest: string,
-  canUseSubagent: boolean
-): Promise<RecapDelegation> => {
-  if (canUseSubagent) {
-    const promptText = buildAgentPrompt(request, digest);
-    const spawnResult = await engine.agent.spawn({
+const spawnRecapAgent = async (engine: EngineInterface, promptText: string) => {
+  try {
+    return await engine.agent.spawn({
       prompt: promptText,
       description: RECAP_AGENT_DESCRIPTION,
       subagentType: RECAP_AGENT_TYPE,
       model: RECAP_MODEL,
     });
+  } catch {
+    return undefined;
+  }
+};
+
+const delegateRecap = async (
+  engine: EngineInterface,
+  request: RecapRequest,
+  digest: string,
+  canUseSubagent: boolean
+): Promise<RecapDelegation | undefined> => {
+  if (canUseSubagent) {
+    const promptText = buildAgentPrompt(request, digest);
+    const spawnResult = await spawnRecapAgent(engine, promptText);
+    if (spawnResult === undefined) return undefined;
     if (spawnResult.deny === undefined) {
       return {
         awaitedRecap: { request, promptText, agentId: spawnResult.agentId },
@@ -421,6 +430,38 @@ const buildRecap = async (
   const recap = stripWrappingCodeFence(reply.text);
   if (!recap) return { failure: EMPTY_REPLY_MESSAGE };
   return { recap };
+};
+
+type RecapStart =
+  | { recap: string; failure?: undefined; delegation?: undefined }
+  | { failure: string; delegation?: undefined }
+  | { delegation: RecapDelegation; delegationPrefix: string };
+
+const startRecap = async (
+  engine: EngineInterface,
+  request: RecapRequest,
+  writer: string | undefined
+): Promise<RecapStart> => {
+  const isHaikuWriter = writer === HAIKU_WRITER;
+  const recapBuild = await buildRecap(engine, request, isHaikuWriter);
+  if (recapBuild.delegationPrefix === undefined) return recapBuild;
+  const delegation = await delegateRecap(
+    engine,
+    request,
+    recapBuild.digest,
+    writer !== CONVERSATION_WRITER
+  );
+  if (delegation) {
+    return { delegation, delegationPrefix: recapBuild.delegationPrefix };
+  }
+  const modelRecapBuild = isHaikuWriter
+    ? recapBuild
+    : await buildRecap(engine, request, true);
+  if (modelRecapBuild.delegationPrefix === undefined) return modelRecapBuild;
+  return {
+    delegation: askConversationForRecap(engine, request),
+    delegationPrefix: modelRecapBuild.delegationPrefix,
+  };
 };
 
 const splitPlanRecaps = (text: string) =>
@@ -554,7 +595,6 @@ const resumePendingHandoff = async (engine: EngineInterface) => {
 
 export const register: Register = (on, options) => {
   const writer = readStringOption(options, "writer");
-  const isHaikuWriter = writer === HAIKU_WRITER;
   let awaitedRecap: AwaitedRecap | undefined;
   let hasPinnedOutcome = false;
   let recapAgentId: string | undefined;
@@ -582,23 +622,16 @@ export const register: Register = (on, options) => {
         handoffArguments.extraContext
       );
     }
-    const recapBuild = await buildRecap($, handoffArguments, isHaikuWriter);
-    if (recapBuild.delegationPrefix !== undefined) {
-      const delegation = await delegateRecap(
-        $,
-        handoffArguments,
-        recapBuild.digest,
-        writer !== CONVERSATION_WRITER
-      );
+    const recapStart = await startRecap($, handoffArguments, writer);
+    if (recapStart.delegation !== undefined) {
+      const { delegation, delegationPrefix } = recapStart;
       awaitedRecap = delegation.awaitedRecap;
       recapAgentId = delegation.awaitedRecap.agentId;
       $.ui.status(delegation.routeNotice);
-      return {
-        text: `${recapBuild.delegationPrefix}${delegation.routeNotice}`,
-      };
+      return { text: `${delegationPrefix}${delegation.routeNotice}` };
     }
-    if (recapBuild.failure !== undefined) return { text: recapBuild.failure };
-    return deliverRecap($, handoffArguments, recapBuild.recap, false);
+    if (recapStart.failure !== undefined) return { text: recapStart.failure };
+    return deliverRecap($, handoffArguments, recapStart.recap, false);
   });
 
   on("prompt.submit", (_, e, next) => {

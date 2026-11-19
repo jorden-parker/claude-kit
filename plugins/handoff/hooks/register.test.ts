@@ -1232,6 +1232,57 @@ testWithSession(
   }
 );
 
+const refuseSubagents = (on: On) => {
+  on("agent.spawn", () => {
+    throw new Error("agent.spawn is not available outside Claude Code.");
+  });
+};
+
+testWithSubagentWriter(
+  "a host that cannot start subagents gets the recap from the model call",
+  async ($, on) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    const store = mockStore(on);
+    refuseSubagents(on);
+    answerRecap(on);
+    on("prompt.fill", () => ({ isFilled: true }));
+
+    const reply = await $.command.run(handoff(""));
+
+    expect(reply.text).toBe(
+      "Recap filled into the composer. Edit it or press Enter."
+    );
+    expect(store.get(HANDOFFS_KEY)).toEqual([
+      storedHandoff(1, "Resume prompt"),
+    ]);
+  }
+);
+
+testWithSubagentWriter(
+  "a host that cannot start subagents and refuses the model call leaves the recap to the conversation",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    refuseSubagents(on);
+    let modelCalls = 0;
+    on("model.complete", () => {
+      modelCalls += 1;
+      return { value: REJECTED_REPLY };
+    });
+
+    const reply = await $.command.run(handoff("--save"));
+    await clock.settle();
+
+    expect(reply.text).toBe(
+      "Haiku could not write the recap (API error 400, invalid_request). Writing the recap in the conversation…"
+    );
+    expect(modelCalls).toBe(1);
+    expect(submittedPrompts).toHaveLength(1);
+  }
+);
+
 testWithSession("--list with nothing stored says so", [], async ($, on) => {
   mockStore(on);
 

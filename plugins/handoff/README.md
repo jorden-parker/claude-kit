@@ -36,6 +36,8 @@ Nothing is stored until the subagent ends, so wait for it before closing the ses
 
 If the subagent cannot start, or ends with no answer, the conversation writes the recap instead: `/handoff` submits the recap rules as a normal turn, the session's own model answers, and the result is printed beneath that answer.
 
+A host that cannot start subagents at all (Qwen Code, pi, OpenCode) gets the recap from the model call instead. There the model call returns the reply the calling model wrote and passed to the command.
+
 ## Settings
 
 The row appears in `/config` under the plugin.

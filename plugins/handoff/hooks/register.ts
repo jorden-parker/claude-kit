@@ -242,7 +242,7 @@ const buildConversationPrompt = (request: RecapRequest) =>
   `${CONVERSATION_PREAMBLE}\n\n${chooseRecapStyle(request).rules}${describeFocus(request.focus)}`;
 
 const RECAP_MODEL = "haiku";
-const SUBAGENT_WRITER = "subagent";
+const HAIKU_WRITER = "haiku";
 const CONVERSATION_WRITER = "conversation";
 const RECAP_AGENT_TYPE = "general-purpose";
 const AGENT_PREAMBLE =
@@ -509,8 +509,7 @@ const resumePendingHandoff = async (engine: EngineInterface) => {
 
 export const register: Register = (on, options) => {
   const writer = readStringOption(options, "writer");
-  const isHaikuWriter =
-    writer !== SUBAGENT_WRITER && writer !== CONVERSATION_WRITER;
+  const isHaikuWriter = writer === HAIKU_WRITER;
   let awaitedRecap: AwaitedRecap | undefined;
   let hasPinnedOutcome = false;
   let recapAgentId: string | undefined;

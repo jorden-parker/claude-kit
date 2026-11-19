@@ -55,7 +55,7 @@ const testWithSession = (
   messages: SessionMessageRow[],
   body: TestBody
 ) =>
-  test(name, ($, on) => {
+  test(name, { options: { writer: "haiku" } }, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: messages }));
     return body($, on);
@@ -432,6 +432,23 @@ testWithSubagentWriter(
     expect(spawnedAgents).toHaveLength(1);
   }
 );
+
+test("with no writer setting the subagent writes the recap without calling haiku", async ($, on) => {
+  on("session.cwd", () => ({ value: "/repo" }));
+  on("session.messages", () => ({ value: CONVERSATION }));
+  const spawnedAgents = collectSpawnedAgents(on);
+  let modelCalls = 0;
+  on("model.complete", () => {
+    modelCalls += 1;
+    return { value: REJECTED_REPLY };
+  });
+
+  const reply = await $.command.run(handoff("--save"));
+
+  expect(reply.text).toBe(SUBAGENT_WRITING_MESSAGE);
+  expect(modelCalls).toBe(0);
+  expect(spawnedAgents).toHaveLength(1);
+});
 
 testWithSubagentWriter(
   "--save stores the recap the subagent wrote and reports its id in a toast",

@@ -59,7 +59,7 @@ From a terminal: `bash ~/src/claude-kit/plugins/project-notes/bin/project-notes`
 
 ## Organising existing notes
 
-`/project-notes organise` files the notes the session-notes plugin already holds as project notes. Claude calls `list_legacy_notes`, which reads the session-notes store and lists the notes not filed yet, ten at a time, each with a source id, its project (the git root of the session's folder) and its date. Claude then files each one with `write_project_note`: a category, a title, the note's content, and the listed source, project and date.
+`/project-notes organise` files the notes that the retired session-notes plugin left in its store as project notes. Claude calls `list_legacy_notes`, which reads that store (`~/.claude/plugins/store/session-notes_*.json`) and lists the notes not filed yet, ten at a time, each with a source id, its project (the git root of the session's folder) and its date. Claude then files each one with `write_project_note`: a category, a title, the note's content, and the listed source, project and date.
 
 - A note that records a bug investigation becomes a `debugging` note with all six sections; a section the old note says nothing about reads "Not recorded."
 - A filed note keeps its source id in its front matter (`source:`). A session note whose id is somewhere in the notes folder is not listed again; delete the filed note and it is listed once more

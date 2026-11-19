@@ -1206,6 +1206,17 @@ const storedHandoff = (
   cwd = "/repo"
 ) => ({ handoffId, createdAt, cwd, focus: "", recap });
 
+const collectRecapPrompts = (on: On) => {
+  const recapPrompts: string[] = [];
+  on("model.complete", (_, e) => {
+    recapPrompts.push(e.prompt);
+    return {
+      value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+    };
+  });
+  return recapPrompts;
+};
+
 const answerRecap = (on: On, text = "Resume prompt") => {
   on("model.complete", () => ({
     value: { isAnswered: true, text, usage: MODEL_USAGE },
@@ -1377,6 +1388,10 @@ const collectHandoffSteps = (on: On) => {
     handoffSteps.push(`submit:${e.text}`);
     return { text: e.text };
   });
+  on("prompt.fill", (_, e) => {
+    handoffSteps.push(`fill:${e.text}`);
+    return { isFilled: true };
+  });
   return handoffSteps;
 };
 
@@ -1400,7 +1415,7 @@ testWithSession(
 
     await clock.settle();
 
-    expect(handoffSteps).toEqual(["clear", "submit:First recap"]);
+    expect(handoffSteps).toEqual(["clear", "fill:First recap"]);
     expect(modelCalls).toBe(0);
     expect(store.has(PENDING_HANDOFF_KEY)).toBe(false);
     expect(handoffFiles.size).toBe(2);
@@ -1420,7 +1435,7 @@ testWithSession(
     await $.command.run(handoff("resume"));
     await clock.settle();
 
-    expect(handoffSteps).toEqual(["clear", "submit:Tenth recap"]);
+    expect(handoffSteps).toEqual(["clear", "fill:Tenth recap"]);
   }
 );
 
@@ -1440,7 +1455,7 @@ testWithSession(
 
     expect(handoffSteps).toEqual([
       "clear",
-      "submit:First recap\n\nExtra context from the user: start with the failing test",
+      "fill:First recap\n\nExtra context from the user: start with the failing test",
     ]);
     expect(listSavedHandoffs(handoffFiles)).toEqual(savedFiles);
   }
@@ -1461,7 +1476,7 @@ testWithSession(
 
     expect(handoffSteps).toEqual([
       "clear",
-      "submit:Second recap\n\nExtra context from the user: start with the failing test",
+      "fill:Second recap\n\nExtra context from the user: start with the failing test",
     ]);
   }
 );
@@ -1859,15 +1874,15 @@ const placeBoxPane = (on: On, isPlaced = true) => {
 };
 
 testWithSession(
-  "new with no focus opens the notes box, then hands off with the notes added",
+  "new with no focus opens the notes box, then gives the notes to the recap writer as guidance",
   CONVERSATION,
   async ($, on, handoffFiles) => {
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
     const toasts = collectToasts(on);
     const paneCalls = placeBoxPane(on);
-    let modelCalls = 0;
-    on("model.complete", () => {
-      modelCalls += 1;
+    const recapPrompts: string[] = [];
+    on("model.complete", (_, e) => {
+      recapPrompts.push(e.prompt);
       return {
         value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
       };
@@ -1878,19 +1893,19 @@ testWithSession(
 
     expect(reply.text).toBe(NOTES_BOX_MESSAGE);
     expect(paneCalls).toEqual(["open:Handoff notes"]);
-    expect(modelCalls).toBe(0);
+    expect(recapPrompts).toEqual([]);
 
     const box = await $.ui.mount(BOX_PANE);
     await box.input({ key: "notes", text: " start with the failing test \n" });
     await clock.settle();
 
     expect(paneCalls).toEqual(["open:Handoff notes", "close"]);
-    expect(handoffSteps).toEqual([
-      "clear",
-      "submit:Resume prompt\n\nExtra context from the user: start with the failing test",
-    ]);
-    expect(handoffFiles.get(handoffPath(1, "resume-prompt"))).toContain(
-      "Extra context from the user: start with the failing test"
+    expect(recapPrompts[0]).toContain(
+      "<guidance>\nstart with the failing test\n</guidance>"
+    );
+    expect(handoffSteps).toEqual(["clear", "submit:Resume prompt"]);
+    expect(handoffFiles.get(handoffPath(1, "resume-prompt"))).toBe(
+      handoffText("Resume prompt")
     );
     expect(toasts).toEqual(["Building recap…", HANDING_OFF_MESSAGE]);
   }
@@ -1922,7 +1937,7 @@ testWithSession(
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
     placeBoxPane(on);
-    answerRecap(on);
+    const recapPrompts = collectRecapPrompts(on);
     const handoffSteps = collectHandoffSteps(on);
 
     await $.command.run(handoff("new"));
@@ -1931,31 +1946,30 @@ testWithSession(
     await box.press({ key: "continue" });
     await clock.settle();
 
-    expect(handoffSteps).toEqual([
-      "clear",
-      "submit:Resume prompt\n\nExtra context from the user: ship it",
-    ]);
+    expect(recapPrompts[0]).toContain("<guidance>\nship it\n</guidance>");
+    expect(handoffSteps).toEqual(["clear", "submit:Resume prompt"]);
   }
 );
 
 testWithSession(
-  "save with no focus takes notes in the box and writes them into the file",
+  "save with no focus takes notes in the box and saves the recap written from them",
   CONVERSATION,
   async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     const toasts = collectToasts(on);
     placeBoxPane(on);
-    answerRecap(on);
+    const recapPrompts = collectRecapPrompts(on);
 
     const reply = await $.command.run(handoff("save"));
     expect(reply.text).toBe(NOTES_BOX_MESSAGE);
     const box = await $.ui.mount(BOX_PANE);
     await box.input({ key: "notes", text: "the deploy is on Monday" });
 
+    expect(recapPrompts[0]).toContain(
+      "<guidance>\nthe deploy is on Monday\n</guidance>"
+    );
     expect(handoffFiles.get(handoffPath(1, "resume-prompt"))).toBe(
-      handoffText(
-        "Resume prompt\n\nExtra context from the user: the deploy is on Monday"
-      )
+      handoffText("Resume prompt")
     );
     expect(toasts).toEqual([
       "Building recap…",
@@ -2045,7 +2059,7 @@ testWithSession(
 
     expect(handoffSteps).toEqual([
       "clear",
-      "submit:First recap\n\nExtra context from the user: skip the docs",
+      "fill:First recap\n\nExtra context from the user: skip the docs",
     ]);
   }
 );
@@ -2066,7 +2080,7 @@ testWithSession(
     await box.input({ key: "notes", text: "" });
     await clock.settle();
 
-    expect(handoffSteps).toEqual(["clear", "submit:Second recap"]);
+    expect(handoffSteps).toEqual(["clear", "fill:Second recap"]);
   }
 );
 
@@ -2119,5 +2133,60 @@ testWithSession(
     expect(
       (await box.find({ type: "Text", text: /\/handoff new/ }))?.text
     ).toBe("Run /handoff new, save or resume to use this box.");
+  }
+);
+
+testWithConversationWriter(
+  "the conversation writer receives the box's notes as guidance",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    placeBoxPane(on);
+    collectStatuses(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("save"));
+    const box = await $.ui.mount(BOX_PANE);
+    await box.input({ key: "notes", text: "ship it" });
+    await clock.settle();
+
+    expect(submittedPrompts[0]).toContain("<guidance>\nship it\n</guidance>");
+  }
+);
+
+testWithSession(
+  "resume fills the composer and tells the user, without submitting",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    const toasts = collectToasts(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("resume"));
+    await clock.settle();
+
+    expect(handoffSteps).toEqual(["clear", "fill:First recap"]);
+    expect(toasts).toEqual([FILLED_MESSAGE]);
+  }
+);
+
+testWithSession(
+  "resume shows the recap when the composer refuses it, without submitting",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    const toasts = collectToasts(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    const submittedPrompts = collectSubmittedPrompts(on);
+    on("command.run", { command: "clear" }, () => ({ text: "" }));
+    on("prompt.fill", refuseFill);
+    on("ui.copy", () => ({ value: { isCopied: true } }));
+
+    await $.command.run(handoff("resume"));
+    await clock.settle();
+
+    expect(submittedPrompts).toEqual([]);
+    expect(toasts).toEqual(["First recap\n\n(Copied to clipboard)"]);
   }
 );

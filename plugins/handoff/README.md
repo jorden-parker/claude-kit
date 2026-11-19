@@ -6,15 +6,15 @@
 
 The first word picks the action. Anything else is the focus, which centers the recap on one topic. There are no flags.
 
-| Command                                | What it does                                                          |
-| -------------------------------------- | --------------------------------------------------------------------- |
-| `/handoff [focus]`                     | Recap the session into the composer                                   |
-| `/handoff new [focus]`                 | Recap, then continue in a fresh session                               |
-| `/handoff save [focus]`                | Only save the recap                                                   |
-| `/handoff each [focus]`                | Save one handoff per plan suggested in the conversation               |
-| `/handoff list`                        | Show this project's handoffs, newest first                            |
-| `/handoff resume [id] [extra context]` | Continue a saved handoff in a fresh session: the latest, or one by id |
-| `/handoff open`                        | Browse every handoff in the browser                                   |
+| Command                                | What it does                                                                       |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `/handoff [focus]`                     | Recap the session into the composer                                                |
+| `/handoff new [focus]`                 | Recap, then continue in a fresh session                                            |
+| `/handoff save [focus]`                | Only save the recap                                                                |
+| `/handoff each [focus]`                | Save one handoff per plan suggested in the conversation                            |
+| `/handoff list`                        | Show this project's handoffs, newest first                                         |
+| `/handoff resume [id] [extra context]` | Put a saved handoff into the composer of a fresh session: the latest, or one by id |
+| `/handoff open`                        | Browse every handoff in the browser                                                |
 
 Typing `/handoff ` suggests the actions.
 
@@ -22,7 +22,7 @@ Typing `/handoff ` suggests the actions.
 - `/handoff new` builds the recap, runs `/clear`, then submits the recap as the first prompt of the fresh session. The recap is parked until it is submitted; if the process ends before that, the next session finds it and fills it into the composer instead. If the session cannot be cleared, the recap is filled into the composer as `/handoff` would
 - `/handoff save the auth change` leaves the composer alone and prints the handoff's id and file path
 - `/handoff each` is for after Claude proposes several options, such as a ranked list of ideas: each becomes its own handoff, and `/handoff resume <id>` starts a fresh session on any one of them. The latest assistant message is sent whole so long lists are not cut off
-- `/handoff resume 3` continues #3. Words after that are extra context for the new session: `/handoff resume 3 start with the failing test` submits recap #3 followed by `Extra context from the user: start with the failing test`. Without an id the words go to the latest handoff. The saved file is not changed
+- `/handoff resume 3` runs `/clear`, then fills recap #3 into the composer of the fresh session. Nothing is sent until you press Enter, so you can read and edit it first. Words after the id are extra context: `/handoff resume 3 start with the failing test` fills recap #3 followed by `Extra context from the user: start with the failing test`. Without an id the words go to the latest handoff. The saved file is not changed. If the composer cannot be filled, the recap is copied to the clipboard and shown instead
 - `/handoff list` shows the ten newest: id, time (UTC) and the recap's first line
 
 The old dashed forms (`--new`, `--save`, `--each`, `--list`, `--resume`) still work as the first word.
@@ -31,8 +31,8 @@ The old dashed forms (`--new`, `--save`, `--each`, `--list`, `--resume`) still w
 
 `/handoff new`, `/handoff save` and `/handoff resume` with nothing after them open a small box above the prompt instead of running at once. The box takes the keyboard, so you can type straight away.
 
-- **Notes box** (`new`, `save`): a three-line field for notes to the next session. Enter hands off; an empty field means no notes. The notes are added under the recap as `Extra context from the user: …`, in the prompt and in the saved file. The recap is only written after you press Enter
-- **Resume box** (`resume`): the same notes field, then a list of this project's ten newest handoffs. Enter in the field resumes the latest. Tab to the list, pick another with the arrows, and Enter resumes that one. The notes go along as extra context
+- **Notes box** (`new`, `save`): a three-line field for notes to the next session. Enter hands off; an empty field means no notes. The notes are guidance for whoever writes the recap, not text to include: a direction to take, or extra requests. The writer works out what they mean and writes that into the recap in its own words, so the notes do not appear word for word in the prompt or in the saved file. The recap is only written after you press Enter
+- **Resume box** (`resume`): the same notes field, then a list of this project's ten newest handoffs. Enter in the field resumes the latest. Tab to the list, pick another with the arrows, and Enter resumes that one. The recap is already written, so here the notes are added under it as `Extra context from the user: …`, in the composer where you can edit them
 - Each box has a button for the same action and a Cancel button. Esc closes the box. Either way nothing is written and the session is left alone
 - Typing anything after the action skips the box: `/handoff new the auth change`, `/handoff save the parser`, `/handoff resume 3`, `/handoff resume start with the tests`
 - Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), the command runs at once: `new` and `save` without notes, `resume` on the latest handoff

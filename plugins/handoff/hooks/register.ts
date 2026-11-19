@@ -7,9 +7,10 @@ import type {
 } from "claude-code";
 
 const RECAP_RULES = `You write a prompt that a fresh coding-agent session could receive to continue the work in the conversation below.
-The working directory and the conversation are the only sources: invent nothing they do not contain.
+The working directory, the conversation and a <guidance> block, when present, are the only sources: invent nothing they do not contain.
 Include the goal, what has been done, what is left, the files and commands mentioned, and any open questions.
 If a <focus> block is present, center the recap on it and keep the rest brief.
+If a <guidance> block is present, it holds the user's rough notes for the next session: a direction to take, or extra requests. Work out what they mean and write that into the prompt in your own clear words, where it belongs: as the next step, a priority, a constraint or an added task. Do not quote the notes, label them, or add them as a separate block.
 Output only the prompt, with no preamble, quotes or explanation.`;
 
 const PLAN_SEPARATOR = "---handoff---";
@@ -160,12 +161,15 @@ const describeRecentMessages = async (
 const describeFocus = (focus: string) =>
   focus ? `\n\n<focus>\n${focus}\n</focus>` : "";
 
+const describeGuidance = (notes: string) =>
+  notes ? `\n\n<guidance>\n${notes}\n</guidance>` : "";
+
 const buildRecapPrompt = (
   workingDirectory: string,
   recentMessages: string,
-  focus: string
+  steering: string
 ) => {
-  return `Working directory: ${workingDirectory}\n\nConversation:\n${recentMessages}${describeFocus(focus)}`;
+  return `Working directory: ${workingDirectory}\n\nConversation:\n${recentMessages}${steering}`;
 };
 
 const CONVERSATION_PREAMBLE = `Stop the work here. Do not use any tools for this message: answer it straight away.
@@ -425,8 +429,12 @@ const PER_PLAN_RECAP_STYLE: RecapStyle = {
 const chooseRecapStyle = (request: RecapRequest) =>
   request.action === "each" ? PER_PLAN_RECAP_STYLE : SINGLE_RECAP_STYLE;
 
+const describeSteering = (request: RecapRequest) =>
+  describeFocus(request.focus) +
+  describeGuidance(request.action === "recap" ? request.notes : "");
+
 const buildConversationPrompt = (request: RecapRequest) =>
-  `${CONVERSATION_PREAMBLE}\n\n${chooseRecapStyle(request).rules}${describeFocus(request.focus)}`;
+  `${CONVERSATION_PREAMBLE}\n\n${chooseRecapStyle(request).rules}${describeSteering(request)}`;
 
 const RECAP_MODEL = "haiku";
 const HAIKU_WRITER = "haiku";
@@ -556,7 +564,7 @@ const buildRecap = async (
   const digest = buildRecapPrompt(
     await engine.session.cwd(),
     recentMessages,
-    request.focus
+    describeSteering(request)
   );
   if (!isHaikuWriter) return { delegationPrefix: "", digest };
 
@@ -660,17 +668,31 @@ const offerRecapInThisSession = async (
   };
 };
 
-const clearSessionAndSubmitRecap = async (
-  engine: EngineInterface,
-  recap: string
-) => {
-  await engine.command.run({ command: "clear" });
-  await engine.prompt.submit({ text: recap, asUser: true });
+const showRecapInComposer = async (engine: EngineInterface, recap: string) => {
+  const { text } = await offerRecapInThisSession(engine, recap);
+  engine.ui.toast(text, { timeoutMs: OUTCOME_TOAST_MS });
 };
 
-const handOffToNewSession = async (engine: EngineInterface, recap: string) => {
+const clearSessionAndPassRecap = async (
+  engine: EngineInterface,
+  recap: string,
+  shouldSubmitRecap: boolean
+) => {
+  await engine.command.run({ command: "clear" });
+  if (shouldSubmitRecap) {
+    await engine.prompt.submit({ text: recap, asUser: true });
+  } else {
+    await showRecapInComposer(engine, recap);
+  }
+};
+
+const handOffToNewSession = async (
+  engine: EngineInterface,
+  recap: string,
+  shouldSubmitRecap: boolean
+) => {
   try {
-    await clearSessionAndSubmitRecap(engine, recap);
+    await clearSessionAndPassRecap(engine, recap, shouldSubmitRecap);
   } catch {
     engine.ui.toast("Could not start a new session.");
     await offerRecapInThisSession(engine, recap);
@@ -680,10 +702,14 @@ const handOffToNewSession = async (engine: EngineInterface, recap: string) => {
 
 const startNewSessionWithRecap = async (
   engine: EngineInterface,
-  recap: string
+  recap: string,
+  shouldSubmitRecap: boolean
 ) => {
   await engine.store.set(PENDING_HANDOFF_KEY, recap);
-  engine.clock.after(0, () => void handOffToNewSession(engine, recap));
+  engine.clock.after(
+    0,
+    () => void handOffToNewSession(engine, recap, shouldSubmitRecap)
+  );
   return { text: HANDING_OFF_MESSAGE };
 };
 
@@ -696,10 +722,9 @@ const deliverRecap = async (
   if (request.action === "each") {
     return savePlanHandoffs(engine, recapText, request.focus);
   }
-  const recapWithNotes = appendExtraContext(recapText, request.notes);
   const saveOutcome = await saveSessionHandoff(
     engine,
-    recapWithNotes,
+    recapText,
     request.focus
   ).catch(describeError);
   const saveFailure =
@@ -710,15 +735,15 @@ const deliverRecap = async (
     return {
       text:
         typeof saveOutcome === "string"
-          ? `${saveFailure} The recap:\n\n${recapWithNotes}`
+          ? `${saveFailure} The recap:\n\n${recapText}`
           : `Saved as handoff #${saveOutcome.handoffId} in ${saveOutcome.path}. ${describeResumeCommand(saveOutcome.handoffId)}`,
     };
   }
   if (saveFailure) engine.ui.toast(saveFailure);
   if (!request.isNewSession) {
-    return offerRecapInThisSession(engine, recapWithNotes, isRecapOnScreen);
+    return offerRecapInThisSession(engine, recapText, isRecapOnScreen);
   }
-  return startNewSessionWithRecap(engine, recapWithNotes);
+  return startNewSessionWithRecap(engine, recapText, true);
 };
 
 const buildResumeBox = async (
@@ -795,7 +820,8 @@ const resumeSavedHandoff = async (
   const { recap } = await readHandoff(engine, chosenFile);
   return startNewSessionWithRecap(
     engine,
-    appendExtraContext(recap, extraContext)
+    appendExtraContext(recap, extraContext),
+    false
   );
 };
 

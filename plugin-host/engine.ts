@@ -162,6 +162,9 @@ export const createPluginHost = ({
           kind: entry.isFile() ? "file" : entry.isDirectory() ? "dir" : "other",
         })),
     },
+    env: {
+      get: async (variableName: string) => process.env[variableName],
+    },
     process: {
       run: async (argv: string[], runOptions: { timeoutMs?: number } = {}) => {
         if (isStarting) throw new Error(NO_COMMANDS_AT_START);

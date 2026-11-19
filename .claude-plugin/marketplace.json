@@ -5,7 +5,7 @@
     { "name": "prompt-optimizer", "source": "./plugins/prompt-optimizer",
       "description": "/optimize rewrites a draft prompt with repo context and fills it into the composer" },
     { "name": "handoff", "source": "./plugins/handoff",
-      "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session" },
+      "description": "/handoff summarizes the session into a prompt a fresh session can pick up, saved per project under ~/.claude/handoffs; /handoff new continues it in a fresh session; /handoff open browses them all" },
     { "name": "brainstorm", "source": "./plugins/brainstorm",
       "description": "/brainstorm studies the project and brainstorms ideas in the browser; /brainstorm plan turns picked ideas into a small-step plan; /brainstorm build has small-model subagents implement it and a strong model review it" },
     { "name": "draft-pr", "source": "./plugins/draft-pr",

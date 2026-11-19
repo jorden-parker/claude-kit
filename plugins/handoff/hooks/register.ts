@@ -29,49 +29,60 @@ const FILLED_MESSAGE =
   "Recap filled into the composer. Edit it or press Enter.";
 const HANDING_OFF_MESSAGE = "Handing off to a new session…";
 
-const NEW_SESSION_FLAG = /(^|\s)--new(?=\s|$)/;
-const SAVE_FLAG = /(^|\s)--save(?=\s|$)/;
-const LIST_FLAG = /(^|\s)--list(?=\s|$)/;
-const RESUME_FLAG = /(^|\s)--resume(?:\s+(\S+))?(?=\s|$)/;
-const EACH_PLAN_FLAG = /(^|\s)--each(?=\s|$)/;
+const FIRST_WORD_AND_REST = /^(\S*)\s*([\s\S]*)$/;
+const HANDOFF_ID_AND_REST = /^(?:#?(\d+)(?=\s|$))?\s*([\s\S]*)$/;
 const HANDOFF_COMMAND_PREFIX = "/handoff ";
 
-const HANDOFF_FLAG_SUGGESTIONS = [
-  { text: "--new", description: "Continue the recap in a fresh session" },
-  { text: "--save", description: "Only store the recap" },
-  { text: "--each", description: "Store one handoff per suggested plan" },
-  { text: "--list", description: "Show stored handoffs" },
+const SUBCOMMAND_SUGGESTIONS = [
+  { text: "new", description: "Continue the recap in a fresh session" },
+  { text: "save", description: "Only save the recap" },
+  { text: "each", description: "Save one handoff per suggested plan" },
+  { text: "list", description: "Show this project's handoffs" },
   {
-    text: "--resume",
-    description: "Continue a stored handoff by id, plus optional extra context",
+    text: "resume",
+    description:
+      "Continue the latest handoff, or one by id, plus optional extra context",
   },
+  { text: "open", description: "Browse every handoff in the browser" },
 ];
 const PENDING_HANDOFF_KEY = "pendingHandoff";
-const HANDOFFS_KEY = "handoffs";
-const STORED_HANDOFF_LIMIT = 50;
+const LEGACY_HANDOFFS_KEY = "handoffs";
+const LISTED_HANDOFF_LIMIT = 10;
 const SUMMARY_MAX_LENGTH = 80;
+const MAX_SLUG_LENGTH = 60;
+const HANDOFF_ID_WIDTH = 3;
+const VIEWER_BUILD_TIMEOUT_MS = 180_000;
+const HANDOFF_FILE_NAME = /^(\d+)-.*\.md$/;
+const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
+const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n+/;
+const CREATED_FIELD = /^created: (.+)$/m;
 
-const NO_HANDOFFS_MESSAGE =
-  "No handoffs stored yet. Run /handoff to create one.";
+const describeNoHandoffs = (projectName: string) =>
+  `No handoffs for ${projectName} yet. Run /handoff to create one.`;
 const RESUME_HINT =
-  "Run /handoff --resume <id> to continue one in a new session.";
+  "Run /handoff resume <id> to continue one in a new session, or /handoff open to browse them all.";
 const NO_PLANS_MESSAGE = "No suggested plans found to hand off.";
 const describeSavedPlanCount = (planCount: number) =>
   planCount === 1
     ? "Saved 1 handoff, one per suggested plan:"
     : `Saved ${planCount} handoffs, one per suggested plan:`;
-const HANDOFF_FILE_FOLDER = ".claude/handoffs";
 const describeResumeCommand = (handoffId: number) =>
-  `Run /handoff --resume ${handoffId} to continue it in a new session.`;
-const describeMissingHandoff = (handoffId: string) =>
-  `No handoff #${handoffId}. Run /handoff --list to see the stored handoffs.`;
+  `Run /handoff resume ${handoffId} to continue it in a new session.`;
 
-type StoredHandoff = {
-  handoffId: number;
-  createdAt: number;
-  cwd: string;
-  focus: string;
+type HandoffFile = { handoffId: number; path: string };
+
+type HandoffDraft = {
   recap: string;
+  focus: string;
+  cwd: string;
+  createdAt: number;
+};
+
+type LegacyHandoff = {
+  recap: string;
+  createdAt?: number;
+  cwd?: string;
+  focus?: string;
 };
 
 const WRAPPING_CODE_FENCE = /^```[^\n]*\n([\s\S]*?)\n?```$/;
@@ -122,7 +133,8 @@ The conversation above is what the rules below call "the conversation below".`;
 
 type HandoffArguments =
   | { action: "list" }
-  | { action: "resume"; handoffId: string | undefined; extraContext: string }
+  | { action: "open" }
+  | { action: "resume"; handoffId: number | undefined; extraContext: string }
   | { action: "each"; focus: string }
   | {
       action: "recap";
@@ -132,111 +144,204 @@ type HandoffArguments =
     };
 
 const parseHandoffArguments = (args: string): HandoffArguments => {
-  if (LIST_FLAG.test(args)) return { action: "list" };
-  const resumeMatch = RESUME_FLAG.exec(args);
-  if (resumeMatch) {
+  const [, firstWord = "", laterWords = ""] =
+    FIRST_WORD_AND_REST.exec(args.trim()) ?? [];
+  const subcommand = firstWord.replace(/^--/, "");
+  if (subcommand === "list" || subcommand === "open") {
+    return { action: subcommand };
+  }
+  if (subcommand === "resume") {
+    const [, handoffId, extraContext = ""] =
+      HANDOFF_ID_AND_REST.exec(laterWords) ?? [];
     return {
       action: "resume",
-      handoffId: resumeMatch[2],
-      extraContext: args.replace(RESUME_FLAG, " ").trim(),
+      handoffId: handoffId === undefined ? undefined : Number(handoffId),
+      extraContext,
     };
   }
-  if (EACH_PLAN_FLAG.test(args)) {
-    return { action: "each", focus: args.replace(EACH_PLAN_FLAG, " ").trim() };
-  }
+  if (subcommand === "each") return { action: "each", focus: laterWords };
+  const isRecapSubcommand = subcommand === "new" || subcommand === "save";
   return {
     action: "recap",
-    isNewSession: NEW_SESSION_FLAG.test(args),
-    isSaveOnly: SAVE_FLAG.test(args),
-    focus: args.replace(NEW_SESSION_FLAG, " ").replace(SAVE_FLAG, " ").trim(),
+    isNewSession: subcommand === "new",
+    isSaveOnly: subcommand === "save",
+    focus: isRecapSubcommand ? laterWords : args.trim(),
   };
-};
-
-const isStoredHandoff = (value: unknown): value is StoredHandoff =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as StoredHandoff).handoffId === "number" &&
-  typeof (value as StoredHandoff).recap === "string";
-
-const readStoredHandoffs = async (
-  engine: EngineInterface
-): Promise<StoredHandoff[]> => {
-  const storedValue = await engine.store.get(HANDOFFS_KEY);
-  return Array.isArray(storedValue) ? storedValue.filter(isStoredHandoff) : [];
-};
-
-const storeHandoff = async (
-  engine: EngineInterface,
-  recap: string,
-  focus: string
-) => {
-  const handoffs = await readStoredHandoffs(engine);
-  const highestHandoffId = handoffs.reduce(
-    (highest, { handoffId }) => Math.max(highest, handoffId),
-    0
-  );
-  const newHandoff: StoredHandoff = {
-    handoffId: highestHandoffId + 1,
-    createdAt: await engine.clock.now(),
-    cwd: await engine.session.cwd(),
-    focus,
-    recap,
-  };
-  await engine.store.set(
-    HANDOFFS_KEY,
-    [...handoffs, newHandoff].slice(-STORED_HANDOFF_LIMIT)
-  );
-  return newHandoff;
-};
-
-const buildHandoffFilePath = (handoff: StoredHandoff) => {
-  const minuteStamp = new Date(handoff.createdAt)
-    .toISOString()
-    .slice(0, 16)
-    .replace("T", "-")
-    .replace(":", "");
-  return `${HANDOFF_FILE_FOLDER}/${minuteStamp}-handoff-${handoff.handoffId}.md`;
 };
 
 const describeError = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-const saveHandoffFile = async (
-  engine: EngineInterface,
-  handoff: StoredHandoff
-) => {
-  const filePath = buildHandoffFilePath(handoff);
-  const resumeCommand = describeResumeCommand(handoff.handoffId);
-  try {
-    await engine.fs.write(`${handoff.cwd}/${filePath}`, `${handoff.recap}\n`);
-    return `Saved as handoff #${handoff.handoffId} in ${filePath}. ${resumeCommand}`;
-  } catch (error) {
-    return `Saved as handoff #${handoff.handoffId}, but ${filePath} could not be written (${describeError(error)}). ${resumeCommand}`;
-  }
-};
-
-const formatCreatedAt = (createdAt: number) =>
-  new Date(createdAt).toISOString().slice(0, 16).replace("T", " ");
-
 const summarizeRecap = (recap: string) => {
   const firstLine =
     recap
       .split("\n")
-      .map((line) => line.trim())
+      .map((line) => line.replace(/^#+\s*/, "").trim())
       .find((line) => line) ?? "";
   return firstLine.length > SUMMARY_MAX_LENGTH
     ? `${firstLine.slice(0, SUMMARY_MAX_LENGTH)}…`
     : firstLine;
 };
 
-const describeStoredHandoff = (handoff: StoredHandoff) =>
-  `#${handoff.handoffId}  ${formatCreatedAt(handoff.createdAt)}  ${handoff.cwd}  ${summarizeRecap(handoff.recap)}`;
+const toSlug = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-/, "")
+    .slice(0, MAX_SLUG_LENGTH)
+    .replace(/-$/, "");
 
-const listStoredHandoffs = async (engine: EngineInterface) => {
-  const handoffs = await readStoredHandoffs(engine);
-  if (handoffs.length === 0) return { text: NO_HANDOFFS_MESSAGE };
-  const handoffLines = [...handoffs].reverse().map(describeStoredHandoff);
-  return { text: [...handoffLines, "", RESUME_HINT].join("\n") };
+const toProjectName = (folder: string) => {
+  const lastSegment = folder.split("/").filter(Boolean).pop() ?? "";
+  const projectName = lastSegment.replace(/[^A-Za-z0-9._-]+/g, "-");
+  return /[A-Za-z0-9]/.test(projectName) ? projectName : "unknown";
+};
+
+const resolveProjectName = async (engine: EngineInterface, folder: string) => {
+  const commonGitFolder = await engine.process
+    .run([
+      "git",
+      "-C",
+      folder,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    ])
+    .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
+    .catch(() => "");
+  return toProjectName(
+    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") || folder
+  );
+};
+
+const readHandoffsRoot = async (engine: EngineInterface) =>
+  (await engine.env.get("HANDOFFS_DIR")) ??
+  `${(await engine.env.get("HOME")) ?? ""}/.claude/handoffs`;
+
+const findHandoffFolder = async (engine: EngineInterface, folder: string) => {
+  const projectName = await resolveProjectName(engine, folder);
+  return {
+    projectName,
+    folderPath: `${await readHandoffsRoot(engine)}/${projectName}`,
+  };
+};
+
+const listHandoffFiles = async (
+  engine: EngineInterface,
+  folderPath: string
+): Promise<HandoffFile[]> => {
+  const folderEntries = await engine.fs.list(folderPath).catch(() => []);
+  return folderEntries
+    .flatMap((entry) => {
+      const handoffId = HANDOFF_FILE_NAME.exec(entry.name)?.[1];
+      return handoffId
+        ? [
+            {
+              handoffId: Number(handoffId),
+              path: `${folderPath}/${entry.name}`,
+            },
+          ]
+        : [];
+    })
+    .sort((first, second) => second.handoffId - first.handoffId);
+};
+
+const saveHandoff = async (
+  engine: EngineInterface,
+  draft: HandoffDraft
+): Promise<HandoffFile> => {
+  const { projectName, folderPath } = await findHandoffFolder(
+    engine,
+    draft.cwd
+  );
+  const [newestFile] = await listHandoffFiles(engine, folderPath);
+  const handoffId = (newestFile?.handoffId ?? 0) + 1;
+  const title = summarizeRecap(draft.recap);
+  const fileName = `${String(handoffId).padStart(HANDOFF_ID_WIDTH, "0")}-${toSlug(title) || "handoff"}.md`;
+  const frontMatter = [
+    `title: ${title}`,
+    `project: ${projectName}`,
+    `created: ${new Date(draft.createdAt).toISOString()}`,
+    `cwd: ${draft.cwd}`,
+    ...(draft.focus ? [`focus: ${draft.focus.replace(/\s+/g, " ")}`] : []),
+  ].join("\n");
+  const path = `${folderPath}/${fileName}`;
+  await engine.fs.write(path, `---\n${frontMatter}\n---\n\n${draft.recap}\n`);
+  return { handoffId, path };
+};
+
+const saveSessionHandoff = async (
+  engine: EngineInterface,
+  recap: string,
+  focus: string
+) =>
+  saveHandoff(engine, {
+    recap,
+    focus,
+    cwd: await engine.session.cwd(),
+    createdAt: await engine.clock.now(),
+  });
+
+const readHandoff = async (engine: EngineInterface, file: HandoffFile) => {
+  const fileText = String(await engine.fs.read(file.path));
+  const frontMatter = FRONT_MATTER.exec(fileText)?.[1] ?? "";
+  return {
+    ...file,
+    created: CREATED_FIELD.exec(frontMatter)?.[1] ?? "",
+    recap: fileText.replace(FRONT_MATTER, "").trim(),
+  };
+};
+
+const isLegacyHandoff = (value: unknown): value is LegacyHandoff =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as LegacyHandoff).recap === "string";
+
+const fileLegacyHandoffs = async (engine: EngineInterface) => {
+  const storedValue = await engine.store.get(LEGACY_HANDOFFS_KEY);
+  if (!Array.isArray(storedValue)) return;
+  try {
+    for (const legacyHandoff of storedValue.filter(isLegacyHandoff)) {
+      await saveHandoff(engine, {
+        recap: legacyHandoff.recap,
+        focus: legacyHandoff.focus ?? "",
+        cwd: legacyHandoff.cwd ?? (await engine.session.cwd()),
+        createdAt: legacyHandoff.createdAt ?? (await engine.clock.now()),
+      });
+    }
+    await engine.store.delete(LEGACY_HANDOFFS_KEY);
+  } catch {
+    return;
+  }
+};
+
+const listProjectHandoffs = async (engine: EngineInterface) => {
+  const { projectName, folderPath } = await findHandoffFolder(
+    engine,
+    await engine.session.cwd()
+  );
+  const handoffFiles = await listHandoffFiles(engine, folderPath);
+  if (handoffFiles.length === 0) {
+    return { text: describeNoHandoffs(projectName) };
+  }
+  const shownHandoffs = await Promise.all(
+    handoffFiles
+      .slice(0, LISTED_HANDOFF_LIMIT)
+      .map((file) => readHandoff(engine, file))
+  );
+  const olderCount = handoffFiles.length - shownHandoffs.length;
+  return {
+    text: [
+      `Handoffs for ${projectName}, newest first:`,
+      ...shownHandoffs.map(
+        (handoff) =>
+          `#${handoff.handoffId}  ${handoff.created.slice(0, 16).replace("T", " ")}  ${summarizeRecap(handoff.recap)}`
+      ),
+      ...(olderCount > 0 ? [`…and ${olderCount} older.`] : []),
+      "",
+      RESUME_HINT,
+    ].join("\n"),
+  };
 };
 
 type RecapRequest = Extract<HandoffArguments, { focus: string }>;
@@ -470,7 +575,7 @@ const splitPlanRecaps = (text: string) =>
     .map(stripWrappingCodeFence)
     .filter((planRecap) => planRecap);
 
-const storePlanHandoffs = async (
+const savePlanHandoffs = async (
   engine: EngineInterface,
   recapText: string,
   focus: string
@@ -478,16 +583,14 @@ const storePlanHandoffs = async (
   const planRecaps = splitPlanRecaps(recapText);
   if (planRecaps.length === 0) return { text: NO_PLANS_MESSAGE };
 
-  const savedHandoffs: StoredHandoff[] = [];
+  const savedHandoffLines: string[] = [];
   for (const planRecap of planRecaps) {
-    savedHandoffs.push(await storeHandoff(engine, planRecap, focus));
+    const { handoffId } = await saveSessionHandoff(engine, planRecap, focus);
+    savedHandoffLines.push(`#${handoffId}  ${summarizeRecap(planRecap)}`);
   }
-  const savedHandoffLines = savedHandoffs.map(
-    (handoff) => `#${handoff.handoffId}  ${summarizeRecap(handoff.recap)}`
-  );
   return {
     text: [
-      describeSavedPlanCount(savedHandoffs.length),
+      describeSavedPlanCount(savedHandoffLines.length),
       ...savedHandoffLines,
       "",
       RESUME_HINT,
@@ -545,12 +648,26 @@ const deliverRecap = async (
   isRecapOnScreen: boolean
 ) => {
   if (request.action === "each") {
-    return storePlanHandoffs(engine, recapText, request.focus);
+    return savePlanHandoffs(engine, recapText, request.focus);
   }
-  const savedHandoff = await storeHandoff(engine, recapText, request.focus);
+  const saveOutcome = await saveSessionHandoff(
+    engine,
+    recapText,
+    request.focus
+  ).catch(describeError);
+  const saveFailure =
+    typeof saveOutcome === "string"
+      ? `The handoff could not be saved (${saveOutcome}).`
+      : undefined;
   if (request.isSaveOnly) {
-    return { text: await saveHandoffFile(engine, savedHandoff) };
+    return {
+      text:
+        typeof saveOutcome === "string"
+          ? `${saveFailure} The recap:\n\n${recapText}`
+          : `Saved as handoff #${saveOutcome.handoffId} in ${saveOutcome.path}. ${describeResumeCommand(saveOutcome.handoffId)}`,
+    };
   }
+  if (saveFailure) engine.ui.toast(saveFailure);
   if (!request.isNewSession) {
     return offerRecapInThisSession(engine, recapText, isRecapOnScreen);
   }
@@ -562,21 +679,46 @@ const appendExtraContext = (recap: string, extraContext: string) =>
     ? `${recap}\n\nExtra context from the user: ${extraContext}`
     : recap;
 
-const resumeStoredHandoff = async (
+const resumeSavedHandoff = async (
   engine: EngineInterface,
-  handoffId: string | undefined,
+  handoffId: number | undefined,
   extraContext: string
 ) => {
-  if (handoffId === undefined) return listStoredHandoffs(engine);
-  const handoffs = await readStoredHandoffs(engine);
-  const chosenHandoff = handoffs.find(
-    (handoff) => String(handoff.handoffId) === handoffId
+  const { projectName, folderPath } = await findHandoffFolder(
+    engine,
+    await engine.session.cwd()
   );
-  if (!chosenHandoff) return { text: describeMissingHandoff(handoffId) };
+  const handoffFiles = await listHandoffFiles(engine, folderPath);
+  const chosenFile =
+    handoffId === undefined
+      ? handoffFiles[0]
+      : handoffFiles.find((file) => file.handoffId === handoffId);
+  if (!chosenFile) {
+    return {
+      text:
+        handoffId === undefined
+          ? describeNoHandoffs(projectName)
+          : `No handoff #${handoffId} for ${projectName}. Run /handoff list to see its handoffs.`,
+    };
+  }
+  const { recap } = await readHandoff(engine, chosenFile);
   return startNewSessionWithRecap(
     engine,
-    appendExtraContext(chosenHandoff.recap, extraContext)
+    appendExtraContext(recap, extraContext)
   );
+};
+
+const openViewer = async (engine: EngineInterface) => {
+  const launch = await engine.process
+    .run(["bash", `${engine.plugin.root}/bin/handoffs`, "--background"], {
+      timeoutMs: VIEWER_BUILD_TIMEOUT_MS,
+    })
+    .catch(() => undefined);
+  if (launch?.exitCode === 0)
+    return { text: "Handoffs are opening in the browser." };
+  return {
+    text: launch?.stderr.trim() || "Could not start the handoffs viewer.",
+  };
 };
 
 const readPendingHandoff = async (engine: EngineInterface) => {
@@ -603,9 +745,9 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: "handoff",
       description:
-        "Summarize the session into a prompt that resumes the work; --new continues it in a fresh session; --save only stores it; --each stores one handoff per suggested plan; --list shows stored handoffs; --resume <id> [extra context] continues one, with the extra context added to its recap",
+        "Summarize the session into a prompt that resumes the work. new: continue it in a fresh session; save: only save it; each: one handoff per suggested plan; list: this project's handoffs; resume [id] [extra context]: continue the latest or a chosen one; open: browse every handoff in the browser",
       argumentHint:
-        "[--new | --save | --each] [focus] | --list | --resume <id> [extra context]",
+        "[new | save | each] [focus] | list | resume [id] [extra context] | open",
     });
     await resumePendingHandoff($);
 
@@ -614,9 +756,11 @@ export const register: Register = (on, options) => {
 
   on("command.run", { command: "handoff" }, async ($, e) => {
     const handoffArguments = parseHandoffArguments(e.args);
-    if (handoffArguments.action === "list") return listStoredHandoffs($);
+    if (handoffArguments.action === "open") return openViewer($);
+    await fileLegacyHandoffs($);
+    if (handoffArguments.action === "list") return listProjectHandoffs($);
     if (handoffArguments.action === "resume") {
-      return resumeStoredHandoff(
+      return resumeSavedHandoff(
         $,
         handoffArguments.handoffId,
         handoffArguments.extraContext
@@ -683,15 +827,15 @@ export const register: Register = (on, options) => {
     return turnResult;
   });
 
-  on("prompt.autocomplete", { token: /^-/ }, async (_, e, next) => {
-    const isHandoffArgument =
+  on("prompt.autocomplete", async (_, e, next) => {
+    const isFirstHandoffArgument =
       e.text.startsWith(HANDOFF_COMMAND_PREFIX) &&
-      e.start >= HANDOFF_COMMAND_PREFIX.length;
-    if (!isHandoffArgument) return next(e);
+      e.start === HANDOFF_COMMAND_PREFIX.length;
+    if (!isFirstHandoffArgument) return next(e);
     const { suggestions } = await next(e);
-    const matchingFlags = HANDOFF_FLAG_SUGGESTIONS.filter((flag) =>
-      flag.text.startsWith(e.token)
+    const matchingSubcommands = SUBCOMMAND_SUGGESTIONS.filter((subcommand) =>
+      subcommand.text.startsWith(e.token)
     );
-    return { suggestions: [...suggestions, ...matchingFlags] };
+    return { suggestions: [...suggestions, ...matchingSubcommands] };
   });
 };

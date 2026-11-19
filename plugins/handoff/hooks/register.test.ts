@@ -3,13 +3,108 @@ import type {
   PromptAutocompleteInput,
   PromptAutocompleteResult,
 } from "claude-code";
-import {
-  expect,
-  mock,
-  test,
-  type Engine,
-  type TestBody,
-} from "claude-code/testing";
+import { expect, mock, test, type Engine } from "claude-code/testing";
+
+type HandoffTestBody = (
+  $: Engine,
+  on: On,
+  handoffFiles: Map<string, string>,
+  store: Map<string, unknown>
+) => unknown;
+
+const NOVEMBER_NINTH = Date.UTC(2026, 10, 9, 14, 32);
+const HANDOFFS_ROOT = "/home/tester/.claude/handoffs";
+
+const parentFolder = (path: string) => path.slice(0, path.lastIndexOf("/"));
+
+const ranCommands: string[][] = [];
+
+const answerGit = (stdout: string, exitCode = 0) => ({
+  value: {
+    exitCode,
+    stdout,
+    stderr: "",
+    isStdoutTruncated: false,
+    isStderrTruncated: false,
+  },
+});
+
+const mockHandoffFiles = (
+  on: On,
+  commonGitFolder = "/repo/.git",
+  environment: Record<string, string> = {}
+) => {
+  const handoffFiles = new Map<string, string>();
+  on("env.get", (_, e) => ({
+    value: { HOME: "/home/tester", ...environment }[e.name],
+  }));
+  on("process.run", (_, e) => {
+    ranCommands.push([...e.argv]);
+    return commonGitFolder
+      ? answerGit(`${commonGitFolder}\n`)
+      : answerGit("", 128);
+  });
+  on("fs.list", (_, e) => ({
+    value: [...handoffFiles.keys()]
+      .filter((path) => parentFolder(path) === e.path)
+      .map((path) => ({
+        name: path.slice(e.path.length + 1),
+        kind: "file" as const,
+        size: 0,
+        mtimeMs: 0,
+        isLink: false,
+      })),
+  }));
+  on("fs.read", (_, e) => ({ value: handoffFiles.get(e.path) ?? "" }));
+  on("fs.write", (_, e) => {
+    handoffFiles.set(e.path, e.text);
+    return { value: undefined };
+  });
+  return handoffFiles;
+};
+
+const handoffPath = (handoffId: number, slug: string, projectName = "repo") =>
+  `${HANDOFFS_ROOT}/${projectName}/${String(handoffId).padStart(3, "0")}-${slug}.md`;
+
+const handoffText = (
+  recap: string,
+  createdAt = NOVEMBER_NINTH,
+  focus = "",
+  projectName = "repo"
+) =>
+  [
+    "---",
+    `title: ${recap.trim().split("\n")[0]}`,
+    `project: ${projectName}`,
+    `created: ${new Date(createdAt).toISOString()}`,
+    "cwd: /repo",
+    ...(focus ? [`focus: ${focus}`] : []),
+    "---",
+    "",
+    recap,
+    "",
+  ].join("\n");
+
+const listSavedHandoffs = (handoffFiles: Map<string, string>) =>
+  Object.fromEntries(handoffFiles);
+
+const slugify = (recap: string) =>
+  (recap.trim().split("\n")[0] ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+const seedHandoff = (
+  handoffFiles: Map<string, string>,
+  handoffId: number,
+  recap: string,
+  createdAt = NOVEMBER_NINTH
+) => {
+  handoffFiles.set(
+    handoffPath(handoffId, slugify(recap)),
+    handoffText(recap, createdAt)
+  );
+};
 
 const MODEL_USAGE = {
   input_tokens: 0,
@@ -53,24 +148,15 @@ const CONVERSATION = [
 const testWithSession = (
   name: string,
   messages: SessionMessageRow[],
-  body: TestBody
+  body: HandoffTestBody
 ) =>
   test(name, { options: { writer: "haiku" } }, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: messages }));
-    return body($, on);
+    return body($, on, mockHandoffFiles(on), mockStore(on));
   });
 
 const refuseFill = () => ({ isFilled: false, refusal: "no_composer" as const });
-
-const collectWrittenFiles = (on: On) => {
-  const writtenFiles: { path: string; text: string }[] = [];
-  on("fs.write", (_, e) => {
-    writtenFiles.push({ path: e.path, text: e.text });
-    return { value: undefined };
-  });
-  return writtenFiles;
-};
 
 const handoff = (args: string) => ({
   command: "handoff",
@@ -118,7 +204,6 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     const prompts: string[] = [];
     on("prompt.fill", () => ({ isFilled: true }));
     on("model.complete", (_, e) => {
@@ -148,7 +233,6 @@ testWithSession(
   [...LONG_CONVERSATION, buildSessionMessage("assistant", "y".repeat(1600))],
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     const prompts: string[] = [];
     on("prompt.fill", () => ({ isFilled: true }));
     on("model.complete", (_, e) => {
@@ -173,7 +257,6 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     const prompts: string[] = [];
     on("prompt.fill", () => ({ isFilled: true }));
     on("model.complete", (_, e) => {
@@ -194,7 +277,6 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     const fills: { text: string; mode?: string }[] = [];
     let copies = 0;
     on("model.complete", () => ({
@@ -223,7 +305,6 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     on("prompt.fill", refuseFill);
     const copiedTexts: string[] = [];
     on("ui.copy", (_, e) => {
@@ -247,7 +328,6 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     on("prompt.fill", refuseFill);
     on("model.complete", () => ({
       value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
@@ -286,8 +366,7 @@ testWithSession(
 const RECAP_TURN_ID = "turn-recap";
 const WRITING_IN_CONVERSATION_MESSAGE =
   "Writing the recap in the conversation…";
-const SAVED_FIRST_HANDOFF_MESSAGE =
-  "Saved as handoff #1 in .claude/handoffs/1970-01-01-0000-handoff-1.md. Run /handoff --resume 1 to continue it in a new session.";
+const SAVED_FIRST_HANDOFF_MESSAGE = `Saved as handoff #1 in ${handoffPath(1, "resume-prompt")}. Run /handoff resume 1 to continue it in a new session.`;
 
 const answerTurns = (on: On) => {
   on("turn.start", (_, e) => ({ turnId: e.turnId }));
@@ -314,11 +393,11 @@ const endRecapTurn = async ($: Engine, promptText: string, answer: string) => {
   });
 };
 
-const testWithConversationWriter = (name: string, body: TestBody) =>
+const testWithConversationWriter = (name: string, body: HandoffTestBody) =>
   test(name, { options: { writer: "conversation" } }, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: CONVERSATION }));
-    return body($, on);
+    return body($, on, mockHandoffFiles(on), mockStore(on));
   });
 
 const RECAP_AGENT_ID = "agent-recap";
@@ -369,11 +448,11 @@ const endAgentTurn = async (
   });
 };
 
-const testWithSubagentWriter = (name: string, body: TestBody) =>
+const testWithSubagentWriter = (name: string, body: HandoffTestBody) =>
   test(name, { options: { writer: "subagent" } }, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: CONVERSATION }));
-    return body($, on);
+    return body($, on, mockHandoffFiles(on), mockStore(on));
   });
 
 testWithSession(
@@ -384,7 +463,7 @@ testWithSession(
     const submittedPrompts = collectSubmittedPrompts(on);
     on("model.complete", () => ({ value: REJECTED_REPLY }));
 
-    const reply = await $.command.run(handoff("--save the failing test"));
+    const reply = await $.command.run(handoff("save the failing test"));
 
     expect(reply.text).toBe(
       "Haiku could not write the recap (API error 400, invalid_request). A subagent is writing the recap…"
@@ -414,7 +493,7 @@ testWithSession(
     on("agent.spawn", () => ({ deny: "agents are off" }));
     on("model.complete", () => ({ value: REJECTED_REPLY }));
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("save"));
     await clock.settle();
 
     expect(reply.text).toBe(
@@ -434,7 +513,7 @@ testWithSubagentWriter(
       return { value: REJECTED_REPLY };
     });
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("save"));
 
     expect(reply.text).toBe(SUBAGENT_WRITING_MESSAGE);
     expect(modelCalls).toBe(0);
@@ -445,6 +524,7 @@ testWithSubagentWriter(
 test("with no writer setting the subagent writes the recap without calling haiku", async ($, on) => {
   on("session.cwd", () => ({ value: "/repo" }));
   on("session.messages", () => ({ value: CONVERSATION }));
+  mockStore(on);
   const spawnedAgents = collectSpawnedAgents(on);
   let modelCalls = 0;
   on("model.complete", () => {
@@ -452,7 +532,7 @@ test("with no writer setting the subagent writes the recap without calling haiku
     return { value: REJECTED_REPLY };
   });
 
-  const reply = await $.command.run(handoff("--save"));
+  const reply = await $.command.run(handoff("save"));
 
   expect(reply.text).toBe(SUBAGENT_WRITING_MESSAGE);
   expect(modelCalls).toBe(0);
@@ -460,16 +540,14 @@ test("with no writer setting the subagent writes the recap without calling haiku
 });
 
 testWithSubagentWriter(
-  "--save stores the recap the subagent wrote and reports its id in a toast",
-  async ($, on) => {
-    collectWrittenFiles(on);
+  "save stores the recap the subagent wrote and reports its id in a toast",
+  async ($, on, handoffFiles, store) => {
     mock.clock(on);
-    const store = mockStore(on);
     answerTurns(on);
     const spawnedAgents = collectSpawnedAgents(on);
     const toasts = collectToasts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     const turnResult = await endAgentTurn(
       $,
       RECAP_AGENT_ID,
@@ -479,48 +557,39 @@ testWithSubagentWriter(
 
     expect(turnResult.text).toBe("Resume prompt");
     expect(toasts).toEqual([SAVED_FIRST_HANDOFF_MESSAGE]);
-    expect(store.get("handoffs")).toEqual([
-      {
-        handoffId: 1,
-        createdAt: 0,
-        cwd: "/repo",
-        focus: "",
-        recap: "Resume prompt",
-      },
-    ]);
+    expect(listSavedHandoffs(handoffFiles)).toEqual({
+      [handoffPath(1, "resume-prompt")]: handoffText("Resume prompt", 0),
+    });
   }
 );
 
 testWithSubagentWriter(
   "another subagent that ends while a recap is awaited is left alone",
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     mock.clock(on);
-    const store = mockStore(on);
     answerTurns(on);
     collectSpawnedAgents(on);
     const toasts = collectToasts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await endAgentTurn($, "agent-other", "Read README.md", "Unrelated report");
 
     expect(toasts).toEqual([]);
-    expect(store.has("handoffs")).toBe(false);
+    expect(handoffFiles.size).toBe(0);
   }
 );
 
 testWithSubagentWriter(
   "a subagent that ends with no answer leaves the recap to the conversation",
-  async ($, on) => {
-    collectWrittenFiles(on);
+  async ($, on, handoffFiles, store) => {
     const clock = mock.clock(on);
-    const store = mockStore(on);
     answerTurns(on);
     const spawnedAgents = collectSpawnedAgents(on);
     const submittedPrompts = collectSubmittedPrompts(on);
     const statuses = collectStatuses(on);
     const toasts = collectToasts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await endAgentTurn($, RECAP_AGENT_ID, spawnedAgents[0]?.prompt ?? "", "");
     await clock.settle();
 
@@ -531,7 +600,7 @@ testWithSubagentWriter(
       WRITING_IN_CONVERSATION_MESSAGE,
     ]);
     expect(toasts).toEqual([]);
-    expect(store.has("handoffs")).toBe(false);
+    expect(handoffFiles.size).toBe(0);
 
     const turnResult = await endRecapTurn(
       $,
@@ -546,7 +615,6 @@ testWithSubagentWriter(
   "a recap the subagent wrote is filled into the composer",
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     const spawnedAgents = collectSpawnedAgents(on);
     const toasts = collectToasts(on);
@@ -581,15 +649,13 @@ const collectStatuses = (on: On) => {
 testWithSubagentWriter(
   "the status line says a subagent is writing, then pins the outcome until the next prompt",
   async ($, on) => {
-    collectWrittenFiles(on);
     mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     ignoreToasts(on);
     const spawnedAgents = collectSpawnedAgents(on);
     const statuses = collectStatuses(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     expect(statuses).toEqual([SUBAGENT_WRITING_MESSAGE]);
 
     await endAgentTurn(
@@ -616,12 +682,11 @@ testWithConversationWriter(
   "the status line says the conversation is writing and clears when that turn ends",
   async ($, on) => {
     const clock = mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
     const statuses = collectStatuses(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await clock.settle();
     await endRecapTurn($, submittedPrompts[0] ?? "", "Resume prompt");
 
@@ -640,13 +705,12 @@ testWithSubagentWriter(
   "the recap subagent's report is kept out of the conversation",
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     ignoreToasts(on);
     const spawnedAgents = collectSpawnedAgents(on);
     const submittedPrompts = collectSubmittedPrompts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await endAgentTurn(
       $,
       RECAP_AGENT_ID,
@@ -666,13 +730,12 @@ testWithSubagentWriter(
   "another subagent's report reaches the conversation",
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     ignoreToasts(on);
     const spawnedAgents = collectSpawnedAgents(on);
     const submittedPrompts = collectSubmittedPrompts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await endAgentTurn(
       $,
       RECAP_AGENT_ID,
@@ -698,7 +761,7 @@ testWithSession(
       return { value: RATE_LIMITED_REPLY };
     });
 
-    const pendingReply = $.command.run(handoff("--save"));
+    const pendingReply = $.command.run(handoff("save"));
     await clock.settle();
     await clock.advance(7000);
     const reply = await pendingReply;
@@ -712,15 +775,13 @@ testWithSession(
 );
 
 testWithConversationWriter(
-  "--save stores the recap the conversation wrote and reports its id beneath the answer",
-  async ($, on) => {
-    collectWrittenFiles(on);
+  "save stores the recap the conversation wrote and reports its id beneath the answer",
+  async ($, on, handoffFiles, store) => {
     const clock = mock.clock(on);
-    const store = mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await clock.settle();
     const turnResult = await endRecapTurn(
       $,
@@ -729,27 +790,20 @@ testWithConversationWriter(
     );
 
     expect(turnResult.text).toBe(SAVED_FIRST_HANDOFF_MESSAGE);
-    expect(store.get("handoffs")).toEqual([
-      {
-        handoffId: 1,
-        createdAt: 0,
-        cwd: "/repo",
-        focus: "",
-        recap: "Resume prompt",
-      },
-    ]);
+    expect(listSavedHandoffs(handoffFiles)).toEqual({
+      [handoffPath(1, "resume-prompt")]: handoffText("Resume prompt", 0),
+    });
   }
 );
 
 testWithConversationWriter(
   "another turn that ends while a recap is awaited is left alone",
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     const clock = mock.clock(on);
-    const store = mockStore(on);
     answerTurns(on);
     collectSubmittedPrompts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await clock.settle();
     await $.turn.start({ text: "Something else", turnId: "turn-other" });
     const turnResult = await $.turn.complete({
@@ -761,24 +815,23 @@ testWithConversationWriter(
     });
 
     expect(turnResult.text).toBe("Unrelated answer");
-    expect(store.has("handoffs")).toBe(false);
+    expect(handoffFiles.size).toBe(0);
   }
 );
 
 testWithConversationWriter(
   "a recap turn that ends with no answer reports the empty reply and stores nothing",
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     const clock = mock.clock(on);
-    const store = mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
 
-    await $.command.run(handoff("--save"));
+    await $.command.run(handoff("save"));
     await clock.settle();
     const turnResult = await endRecapTurn($, submittedPrompts[0] ?? "", "");
 
     expect(turnResult.text).toBe("Could not build the recap (empty reply).");
-    expect(store.has("handoffs")).toBe(false);
+    expect(handoffFiles.size).toBe(0);
   }
 );
 
@@ -793,7 +846,7 @@ testWithConversationWriter(
       return { value: REJECTED_REPLY };
     });
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("save"));
     await clock.settle();
 
     expect(reply.text).toBe(WRITING_IN_CONVERSATION_MESSAGE);
@@ -809,8 +862,9 @@ test(
     const submittedPrompts = collectSubmittedPrompts(on);
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: [] }));
+    mockStore(on);
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("save"));
 
     expect(reply.text).toBe("Nothing to recap yet.");
     expect(submittedPrompts).toEqual([]);
@@ -818,14 +872,13 @@ test(
 );
 
 testWithConversationWriter(
-  "--each splits the recap the conversation wrote into one handoff per plan",
+  "each splits the recap the conversation wrote into one handoff per plan",
   async ($, on) => {
     const clock = mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
 
-    await $.command.run(handoff("--each"));
+    await $.command.run(handoff("each"));
     await clock.settle();
     const turnResult = await endRecapTurn(
       $,
@@ -844,7 +897,6 @@ testWithConversationWriter(
   "a recap the conversation wrote is filled into the composer",
   async ($, on) => {
     const clock = mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
     const fills: string[] = [];
@@ -870,7 +922,6 @@ testWithConversationWriter(
   "a refused composer copies the conversation's recap without printing it twice",
   async ($, on) => {
     const clock = mock.clock(on);
-    mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
     on("prompt.fill", refuseFill);
@@ -894,8 +945,6 @@ testWithSession(
   "a rate-limited call is retried on haiku after backing off",
   CONVERSATION,
   async ($, on) => {
-    collectWrittenFiles(on);
-    mockStore(on);
     const models: string[] = [];
     const waits: number[] = [];
     on("clock.now", () => ({ value: 0 }));
@@ -913,7 +962,7 @@ testWithSession(
       };
     });
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("save"));
 
     expect(models).toEqual(["haiku", "haiku", "haiku"]);
     expect(waits).toEqual([1000, 2000]);
@@ -940,7 +989,6 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     mock.clock(on);
-    mockStore(on);
     const fills: string[] = [];
     const modelReplies = [
       "```text\nResume prompt\n```",
@@ -996,18 +1044,24 @@ const mockStore = (on: On, entries: Record<string, unknown> = {}) => {
   return store;
 };
 
+const seedStore = (
+  store: Map<string, unknown>,
+  entries: Record<string, unknown>
+) => {
+  for (const [key, value] of Object.entries(entries)) store.set(key, value);
+};
+
 const allowSessionStart = (on: On) => {
   on("command.register", (_, e) => ({ value: { command: e.name } }));
   on("session.start", (_, e) => ({ cwd: e.cwd }));
 };
 
 testWithSession(
-  "--new clears the session, then submits the recap as the first prompt",
+  "new clears the session, then submits the recap as the first prompt",
   CONVERSATION,
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    const store = mockStore(on);
     const handoffSteps: string[] = [];
     let fills = 0;
     on("model.complete", () => ({
@@ -1026,7 +1080,7 @@ testWithSession(
       return { text: e.text };
     });
 
-    const reply = await $.command.run(handoff("--new"));
+    const reply = await $.command.run(handoff("new"));
     expect(reply.text).toBe(HANDING_OFF_MESSAGE);
     expect(handoffSteps).toEqual([]);
 
@@ -1039,12 +1093,11 @@ testWithSession(
 );
 
 testWithSession(
-  "--new keeps the rest of the arguments as the focus",
+  "new keeps the rest of the arguments as the focus",
   CONVERSATION,
   async ($, on) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    const store = mockStore(on);
     const prompts: string[] = [];
     on("model.complete", (_, e) => {
       prompts.push(e.prompt);
@@ -1055,7 +1108,7 @@ testWithSession(
     on("command.run", { command: "clear" }, () => ({ text: "" }));
     on("prompt.submit", (_, e) => ({ text: e.text }));
 
-    await $.command.run(handoff("the auth change --new"));
+    await $.command.run(handoff("new the auth change"));
     await clock.settle();
 
     expect(prompts[0]).toContain("<focus>\nthe auth change\n</focus>");
@@ -1063,12 +1116,11 @@ testWithSession(
 );
 
 testWithSession(
-  "--new falls back to the composer when the session cannot be cleared",
+  "new falls back to the composer when the session cannot be cleared",
   CONVERSATION,
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    const store = mockStore(on);
     const fills: string[] = [];
     let submits = 0;
     on("model.complete", () => ({
@@ -1086,7 +1138,7 @@ testWithSession(
       return { isFilled: true };
     });
 
-    await $.command.run(handoff("--new"));
+    await $.command.run(handoff("new"));
     await clock.settle();
 
     expect(fills).toEqual(["Resume prompt"]);
@@ -1098,9 +1150,9 @@ testWithSession(
 testWithSession(
   "a pending handoff is filled into the composer when a session starts",
   [],
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     allowSessionStart(on);
-    const store = mockStore(on, { [PENDING_HANDOFF_KEY]: "Resume prompt" });
+    seedStore(store, { [PENDING_HANDOFF_KEY]: "Resume prompt" });
     const fills: { text: string; mode?: string }[] = [];
     on("prompt.fill", (_, e) => {
       fills.push({ text: e.text, mode: e.mode });
@@ -1117,9 +1169,9 @@ testWithSession(
 testWithSession(
   "a pending handoff stays stored when the composer refuses it",
   [],
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     allowSessionStart(on);
-    const store = mockStore(on, { [PENDING_HANDOFF_KEY]: "Resume prompt" });
+    seedStore(store, { [PENDING_HANDOFF_KEY]: "Resume prompt" });
     on("prompt.fill", refuseFill);
 
     await $.session.start(sessionStart());
@@ -1134,7 +1186,6 @@ testWithSession(
   async ($, on) => {
     allowSessionStart(on);
     mock.clock(on);
-    mockStore(on);
     let fills = 0;
     on("prompt.fill", () => {
       fills += 1;
@@ -1148,8 +1199,6 @@ testWithSession(
 );
 
 const HANDOFFS_KEY = "handoffs";
-const NOVEMBER_NINTH = Date.UTC(2026, 10, 9, 14, 32);
-
 const storedHandoff = (
   handoffId: number,
   recap: string,
@@ -1164,71 +1213,60 @@ const answerRecap = (on: On, text = "Resume prompt") => {
 };
 
 testWithSession(
-  "a built recap is stored with an id, time, directory and focus",
+  "a built recap is saved as a file with its title, project, time, directory and focus",
   CONVERSATION,
-  async ($, on) => {
+  async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const store = mockStore(on);
     answerRecap(on);
     on("prompt.fill", () => ({ isFilled: true }));
 
     await $.command.run(handoff("the auth change"));
 
-    expect(store.get(HANDOFFS_KEY)).toEqual([
-      {
-        handoffId: 1,
-        createdAt: NOVEMBER_NINTH,
-        cwd: "/repo",
-        focus: "the auth change",
-        recap: "Resume prompt",
-      },
-    ]);
+    expect(listSavedHandoffs(handoffFiles)).toEqual({
+      [handoffPath(1, "resume-prompt")]: handoffText(
+        "Resume prompt",
+        NOVEMBER_NINTH,
+        "the auth change"
+      ),
+    });
   }
 );
 
 testWithSession(
-  "--new stores the recap too, with the next free id",
+  "new saves the recap too, with the next free id",
   CONVERSATION,
-  async ($, on) => {
+  async ($, on, handoffFiles) => {
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const store = mockStore(on, {
-      [HANDOFFS_KEY]: [storedHandoff(4, "Older recap")],
-    });
+    seedHandoff(handoffFiles, 4, "Older recap");
     answerRecap(on);
     on("command.run", { command: "clear" }, () => ({ text: "" }));
     on("prompt.submit", (_, e) => ({ text: e.text }));
 
-    await $.command.run(handoff("--new"));
+    await $.command.run(handoff("new"));
     await clock.settle();
 
-    expect(store.get(HANDOFFS_KEY)).toEqual([
-      storedHandoff(4, "Older recap"),
-      storedHandoff(5, "Resume prompt"),
+    expect([...handoffFiles.keys()]).toEqual([
+      handoffPath(4, "older-recap"),
+      handoffPath(5, "resume-prompt"),
     ]);
   }
 );
 
 testWithSession(
-  "only the latest 50 handoffs are kept",
-  CONVERSATION,
-  async ($, on) => {
-    mock.clock(on, { now: NOVEMBER_NINTH });
-    ignoreToasts(on);
-    const fiftyStoredHandoffs = Array.from({ length: 50 }, (_, index) =>
-      storedHandoff(index + 1, `Recap ${index + 1}`)
-    );
-    const store = mockStore(on, { [HANDOFFS_KEY]: fiftyStoredHandoffs });
-    answerRecap(on);
-    on("prompt.fill", () => ({ isFilled: true }));
+  "list shows the ten newest handoffs and counts the older ones",
+  [],
+  async ($, on, handoffFiles) => {
+    for (let handoffId = 1; handoffId <= 12; handoffId++)
+      seedHandoff(handoffFiles, handoffId, `Recap ${handoffId}`);
 
-    await $.command.run(handoff(""));
+    const reply = await $.command.run(handoff("list"));
 
-    const storedHandoffs = store.get(HANDOFFS_KEY) as { handoffId: number }[];
-    expect(storedHandoffs.length).toBe(50);
-    expect(storedHandoffs[0]!.handoffId).toBe(2);
-    expect(storedHandoffs[49]!.handoffId).toBe(51);
+    const replyLines = (reply.text ?? "").split("\n");
+    expect(replyLines[1]).toBe("#12  2026-11-09 14:32  Recap 12");
+    expect(replyLines[10]).toBe("#3  2026-11-09 14:32  Recap 3");
+    expect(replyLines[11]).toBe("…and 2 older.");
   }
 );
 
@@ -1240,10 +1278,9 @@ const refuseSubagents = (on: On) => {
 
 testWithSubagentWriter(
   "a host that cannot start subagents gets the recap from the model call",
-  async ($, on) => {
+  async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const store = mockStore(on);
     refuseSubagents(on);
     answerRecap(on);
     on("prompt.fill", () => ({ isFilled: true }));
@@ -1253,9 +1290,9 @@ testWithSubagentWriter(
     expect(reply.text).toBe(
       "Recap filled into the composer. Edit it or press Enter."
     );
-    expect(store.get(HANDOFFS_KEY)).toEqual([
-      storedHandoff(1, "Resume prompt"),
-    ]);
+    expect(listSavedHandoffs(handoffFiles)).toEqual({
+      [handoffPath(1, "resume-prompt")]: handoffText("Resume prompt"),
+    });
   }
 );
 
@@ -1272,7 +1309,7 @@ testWithSubagentWriter(
       return { value: REJECTED_REPLY };
     });
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("save"));
     await clock.settle();
 
     expect(reply.text).toBe(
@@ -1283,160 +1320,185 @@ testWithSubagentWriter(
   }
 );
 
-testWithSession("--list with nothing stored says so", [], async ($, on) => {
-  mockStore(on);
+testWithSession(
+  "list with nothing saved for the project says so",
+  [],
+  async ($) => {
+    const reply = await $.command.run(handoff("list"));
 
-  const reply = await $.command.run(handoff("--list"));
+    expect(reply.text).toBe(
+      "No handoffs for repo yet. Run /handoff to create one."
+    );
+  }
+);
 
-  expect(reply.text).toBe(
-    "No handoffs stored yet. Run /handoff to create one."
-  );
-});
+const RESUME_HINT =
+  "Run /handoff resume <id> to continue one in a new session, or /handoff open to browse them all.";
 
 testWithSession(
-  "--list shows every stored handoff, newest first, with its first line",
+  "list shows the project's handoffs, newest first, with their first line",
   [],
-  async ($, on) => {
-    mockStore(on, {
-      [HANDOFFS_KEY]: [
-        storedHandoff(
-          1,
-          "Fix the login bug\n\nThe test in auth.test.ts fails."
-        ),
-        storedHandoff(
-          2,
-          "\nShip the release notes",
-          Date.UTC(2026, 10, 10, 9, 5),
-          "/other"
-        ),
-      ],
-    });
+  async ($, on, handoffFiles) => {
+    seedHandoff(
+      handoffFiles,
+      1,
+      "# Fix the login bug\n\nThe test in auth.test.ts fails."
+    );
+    seedHandoff(
+      handoffFiles,
+      2,
+      "\nShip the release notes",
+      Date.UTC(2026, 10, 10, 9, 5)
+    );
+    handoffFiles.set(`${HANDOFFS_ROOT}/other/001-elsewhere.md`, "Elsewhere");
+    handoffFiles.set(`${HANDOFFS_ROOT}/repo/notes.md`, "Not a handoff");
 
-    const reply = await $.command.run(handoff("--list"));
+    const reply = await $.command.run(handoff("list"));
 
     expect(reply.text).toBe(
       [
-        "#2  2026-11-10 09:05  /other  Ship the release notes",
-        "#1  2026-11-09 14:32  /repo  Fix the login bug",
+        "Handoffs for repo, newest first:",
+        "#2  2026-11-10 09:05  Ship the release notes",
+        "#1  2026-11-09 14:32  Fix the login bug",
         "",
-        "Run /handoff --resume <id> to continue one in a new session.",
+        RESUME_HINT,
       ].join("\n")
     );
   }
 );
 
+const collectHandoffSteps = (on: On) => {
+  const handoffSteps: string[] = [];
+  on("command.run", { command: "clear" }, () => {
+    handoffSteps.push("clear");
+    return { text: "" };
+  });
+  on("prompt.submit", (_, e) => {
+    handoffSteps.push(`submit:${e.text}`);
+    return { text: e.text };
+  });
+  return handoffSteps;
+};
+
 testWithSession(
-  "--resume <id> clears the session and submits that stored recap",
+  "resume <id> clears the session and submits that saved recap",
   [],
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    const store = mockStore(on, {
-      [HANDOFFS_KEY]: [
-        storedHandoff(1, "First recap"),
-        storedHandoff(2, "Second recap"),
-      ],
-    });
-    const handoffSteps: string[] = [];
+    seedHandoff(handoffFiles, 1, "First recap");
+    seedHandoff(handoffFiles, 2, "Second recap");
+    const handoffSteps = collectHandoffSteps(on);
     let modelCalls = 0;
     on("model.complete", () => {
       modelCalls += 1;
       return { value: { isAnswered: true, text: "x", usage: MODEL_USAGE } };
     });
-    on("command.run", { command: "clear" }, () => {
-      handoffSteps.push("clear");
-      return { text: "" };
-    });
-    on("prompt.submit", (_, e) => {
-      handoffSteps.push(`submit:${e.text}`);
-      return { text: e.text };
-    });
 
-    const reply = await $.command.run(handoff("--resume 2"));
+    const reply = await $.command.run(handoff("resume 1"));
     expect(reply.text).toBe(HANDING_OFF_MESSAGE);
 
     await clock.settle();
 
-    expect(handoffSteps).toEqual(["clear", "submit:Second recap"]);
+    expect(handoffSteps).toEqual(["clear", "submit:First recap"]);
     expect(modelCalls).toBe(0);
     expect(store.has(PENDING_HANDOFF_KEY)).toBe(false);
-    expect((store.get(HANDOFFS_KEY) as unknown[]).length).toBe(2);
+    expect(handoffFiles.size).toBe(2);
   }
 );
 
 testWithSession(
-  "--resume <id> with extra context submits the stored recap followed by that context",
+  "resume without an id continues the project's latest handoff",
   [],
-  async ($, on) => {
+  async ($, on, handoffFiles) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    const store = mockStore(on, {
-      [HANDOFFS_KEY]: [
-        storedHandoff(1, "First recap"),
-        storedHandoff(2, "Second recap"),
-      ],
-    });
-    const submittedTexts: string[] = [];
-    on("command.run", { command: "clear" }, () => ({ text: "" }));
-    on("prompt.submit", (_, e) => {
-      submittedTexts.push(e.text);
-      return { text: e.text };
-    });
+    seedHandoff(handoffFiles, 2, "Second recap");
+    seedHandoff(handoffFiles, 10, "Tenth recap");
+    const handoffSteps = collectHandoffSteps(on);
 
-    const reply = await $.command.run(
-      handoff("--resume 2 start with the failing test  ")
-    );
-    expect(reply.text).toBe(HANDING_OFF_MESSAGE);
-
+    await $.command.run(handoff("resume"));
     await clock.settle();
 
-    expect(submittedTexts).toEqual([
-      "Second recap\n\nExtra context from the user: start with the failing test",
+    expect(handoffSteps).toEqual(["clear", "submit:Tenth recap"]);
+  }
+);
+
+testWithSession(
+  "resume <id> with extra context submits the saved recap followed by that context",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    seedHandoff(handoffFiles, 2, "Second recap");
+    const savedFiles = listSavedHandoffs(handoffFiles);
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("resume 1 start with the failing test"));
+    await clock.settle();
+
+    expect(handoffSteps).toEqual([
+      "clear",
+      "submit:First recap\n\nExtra context from the user: start with the failing test",
     ]);
-    expect(store.get(HANDOFFS_KEY)).toEqual([
-      storedHandoff(1, "First recap"),
-      storedHandoff(2, "Second recap"),
+    expect(listSavedHandoffs(handoffFiles)).toEqual(savedFiles);
+  }
+);
+
+testWithSession(
+  "resume with words and no id adds them to the latest handoff as extra context",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    seedHandoff(handoffFiles, 2, "Second recap");
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("resume start with the failing test"));
+    await clock.settle();
+
+    expect(handoffSteps).toEqual([
+      "clear",
+      "submit:Second recap\n\nExtra context from the user: start with the failing test",
     ]);
   }
 );
 
 testWithSession(
-  "--resume with an unknown id names it and points to the list",
+  "resume with an unknown id names it and points to the list",
   [],
-  async ($, on) => {
-    mockStore(on, { [HANDOFFS_KEY]: [storedHandoff(1, "First recap")] });
+  async ($, on, handoffFiles) => {
+    seedHandoff(handoffFiles, 1, "First recap");
 
-    const reply = await $.command.run(handoff("--resume 9"));
+    const reply = await $.command.run(handoff("resume 9"));
 
     expect(reply.text).toBe(
-      "No handoff #9. Run /handoff --list to see the stored handoffs."
+      "No handoff #9 for repo. Run /handoff list to see its handoffs."
     );
   }
 );
 
-testWithSession("--resume without an id shows the list", [], async ($, on) => {
-  mockStore(on, { [HANDOFFS_KEY]: [storedHandoff(1, "First recap")] });
+testWithSession(
+  "resume with nothing saved for the project says so",
+  [],
+  async ($) => {
+    const reply = await $.command.run(handoff("resume"));
 
-  const reply = await $.command.run(handoff("--resume"));
-
-  expect(reply.text).toBe(
-    [
-      "#1  2026-11-09 14:32  /repo  First recap",
-      "",
-      "Run /handoff --resume <id> to continue one in a new session.",
-    ].join("\n")
-  );
-});
+    expect(reply.text).toBe(
+      "No handoffs for repo yet. Run /handoff to create one."
+    );
+  }
+);
 
 testWithSession(
-  "--save stores the recap, writes it to a file and reports both without touching the composer",
+  "save writes the recap to a file and reports its id and path without touching the composer",
   CONVERSATION,
-  async ($, on) => {
+  async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const store = mockStore(on, {
-      [HANDOFFS_KEY]: [storedHandoff(2, "Older recap")],
-    });
+    seedHandoff(handoffFiles, 2, "Older recap");
     answerRecap(on);
     let fills = 0;
     let submits = 0;
@@ -1448,39 +1510,162 @@ testWithSession(
       submits += 1;
       return { text: e.text };
     });
-    const writtenFiles = collectWrittenFiles(on);
+
+    const reply = await $.command.run(handoff("save the auth change"));
+
+    expect(reply.text).toBe(
+      `Saved as handoff #3 in ${handoffPath(3, "resume-prompt")}. Run /handoff resume 3 to continue it in a new session.`
+    );
+    expect(handoffFiles.get(handoffPath(3, "resume-prompt"))).toBe(
+      handoffText("Resume prompt", NOVEMBER_NINTH, "the auth change")
+    );
+    expect(fills).toBe(0);
+    expect(submits).toBe(0);
+  }
+);
+
+testWithSession(
+  "the old dashed flags still pick their action",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    answerRecap(on);
 
     const reply = await $.command.run(handoff("--save the auth change"));
 
-    expect(reply.text).toBe(
-      "Saved as handoff #3 in .claude/handoffs/2026-11-09-1432-handoff-3.md. Run /handoff --resume 3 to continue it in a new session."
+    expect(reply.text).toContain("Saved as handoff #1");
+    expect(handoffFiles.get(handoffPath(1, "resume-prompt"))).toContain(
+      "focus: the auth change"
     );
-    expect(writtenFiles).toEqual([
-      {
-        path: "/repo/.claude/handoffs/2026-11-09-1432-handoff-3.md",
-        text: "Resume prompt\n",
-      },
-    ]);
-    expect(fills).toBe(0);
-    expect(submits).toBe(0);
-    expect(store.get(HANDOFFS_KEY)).toEqual([
-      storedHandoff(2, "Older recap"),
-      { ...storedHandoff(3, "Resume prompt"), focus: "the auth change" },
+  }
+);
+
+testWithSession(
+  "handoffs kept in the plugin store by earlier versions are filed as files once",
+  [],
+  async ($, on, handoffFiles, store) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    seedStore(store, {
+      [HANDOFFS_KEY]: [
+        storedHandoff(1, "First recap"),
+        { ...storedHandoff(2, "Second recap"), focus: "the parser" },
+      ],
+    });
+
+    const reply = await $.command.run(handoff("list"));
+
+    expect(reply.text).toContain("#2  2026-11-09 14:32  Second recap");
+    expect(listSavedHandoffs(handoffFiles)).toEqual({
+      [handoffPath(1, "first-recap")]: handoffText("First recap"),
+      [handoffPath(2, "second-recap")]: handoffText(
+        "Second recap",
+        NOVEMBER_NINTH,
+        "the parser"
+      ),
+    });
+    expect(store.has(HANDOFFS_KEY)).toBe(false);
+  }
+);
+
+const PROJECT_NAME_BY_GIT_FOLDER = {
+  "/src/claude-kit/.git": "claude-kit",
+  "/src/thing.git": "thing",
+  "/src/thing/.bare": "thing",
+  "/src/parent/.git/modules/library": "library",
+};
+
+for (const [commonGitFolder, projectName] of Object.entries(
+  PROJECT_NAME_BY_GIT_FOLDER
+)) {
+  test(
+    `a worktree whose repository is ${commonGitFolder} files its handoffs under ${projectName}`,
+    { options: { writer: "haiku" } },
+    async ($, on) => {
+      on("session.cwd", () => ({ value: "/worktrees/feature-branch" }));
+      on("session.messages", () => ({ value: CONVERSATION }));
+      mock.clock(on, { now: NOVEMBER_NINTH });
+      mockStore(on);
+      answerRecap(on);
+      ranCommands.length = 0;
+      const handoffFiles = mockHandoffFiles(on, commonGitFolder);
+
+      await $.command.run(handoff("save"));
+
+      expect([...handoffFiles.keys()]).toEqual([
+        handoffPath(1, "resume-prompt", projectName),
+      ]);
+      expect(ranCommands[0]).toEqual([
+        "git",
+        "-C",
+        "/worktrees/feature-branch",
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ]);
+    }
+  );
+}
+
+test(
+  "a folder outside git files its handoffs under its own name",
+  { options: { writer: "haiku" } },
+  async ($, on) => {
+    on("session.cwd", () => ({ value: "/scratch/My Notes" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    mockStore(on);
+    answerRecap(on);
+    const handoffFiles = mockHandoffFiles(on, "");
+
+    await $.command.run(handoff("save"));
+
+    expect([...handoffFiles.keys()]).toEqual([
+      handoffPath(1, "resume-prompt", "My-Notes"),
     ]);
   }
 );
 
+test(
+  "HANDOFFS_DIR moves the handoffs folder",
+  { options: { writer: "haiku" } },
+  async ($, on) => {
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    mockStore(on);
+    answerRecap(on);
+    const handoffFiles = mockHandoffFiles(on, "/repo/.git", {
+      HANDOFFS_DIR: "/elsewhere",
+    });
+
+    await $.command.run(handoff("save"));
+
+    expect([...handoffFiles.keys()]).toEqual([
+      "/elsewhere/repo/001-resume-prompt.md",
+    ]);
+  }
+);
+
+testWithSession("open starts the viewer", [], async ($) => {
+  ranCommands.length = 0;
+
+  const reply = await $.command.run(handoff("open"));
+
+  expect(ranCommands).toHaveLength(1);
+  expect(ranCommands[0]!.join(" ")).toMatch(/bin\/handoffs --background$/);
+  expect(reply.text).toBe("Handoffs are opening in the browser.");
+});
+
 const PLAN_SEPARATOR = "---handoff---";
 
 testWithSession(
-  "--each stores one handoff per suggested plan and lists their ids",
+  "each stores one handoff per suggested plan and lists their ids",
   CONVERSATION,
-  async ($, on) => {
+  async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const store = mockStore(on, {
-      [HANDOFFS_KEY]: [storedHandoff(2, "Older recap")],
-    });
+    seedHandoff(handoffFiles, 2, "Older recap");
     answerRecap(
       on,
       `Add a context meter\n\nShow usage.\n${PLAN_SEPARATOR}\n\`\`\`\nBuild a plans runner\n\`\`\`\n${PLAN_SEPARATOR}\n`
@@ -1491,7 +1676,7 @@ testWithSession(
       return { isFilled: true };
     });
 
-    const reply = await $.command.run(handoff("--each"));
+    const reply = await $.command.run(handoff("each"));
 
     expect(reply.text).toBe(
       [
@@ -1499,20 +1684,24 @@ testWithSession(
         "#3  Add a context meter",
         "#4  Build a plans runner",
         "",
-        "Run /handoff --resume <id> to continue one in a new session.",
+        RESUME_HINT,
       ].join("\n")
     );
     expect(fills).toBe(0);
-    expect(store.get(HANDOFFS_KEY)).toEqual([
-      storedHandoff(2, "Older recap"),
-      storedHandoff(3, "Add a context meter\n\nShow usage."),
-      storedHandoff(4, "Build a plans runner"),
-    ]);
+    expect(listSavedHandoffs(handoffFiles)).toEqual({
+      [handoffPath(2, "older-recap")]: handoffText("Older recap"),
+      [handoffPath(3, "add-a-context-meter")]: handoffText(
+        "Add a context meter\n\nShow usage."
+      ),
+      [handoffPath(4, "build-a-plans-runner")]: handoffText(
+        "Build a plans runner"
+      ),
+    });
   }
 );
 
 testWithSession(
-  "--each keeps the latest assistant message whole and asks for one handoff per plan",
+  "each keeps the latest assistant message whole and asks for one handoff per plan",
   [
     buildSessionMessage("user", "x".repeat(1600)),
     buildSessionMessage("assistant", "p".repeat(4000)),
@@ -1521,7 +1710,6 @@ testWithSession(
   async ($, on) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    mockStore(on);
     const requests: { system: string; prompt: string }[] = [];
     on("model.complete", (_, e) => {
       requests.push({ system: e.system ?? "", prompt: e.prompt });
@@ -1530,7 +1718,7 @@ testWithSession(
       };
     });
 
-    await $.command.run(handoff("--each the plugin ideas"));
+    await $.command.run(handoff("each the plugin ideas"));
 
     expect(requests[0]!.prompt).toContain(`assistant: ${"p".repeat(4000)}\n`);
     expect(requests[0]!.prompt).not.toContain("x".repeat(1501));
@@ -1542,18 +1730,17 @@ testWithSession(
 );
 
 testWithSession(
-  "--each with a reply holding no plans says so and stores nothing",
+  "each with a reply holding no plans says so and stores nothing",
   CONVERSATION,
-  async ($, on) => {
+  async ($, on, handoffFiles, store) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const store = mockStore(on);
     answerRecap(on, `\n${PLAN_SEPARATOR}\n  \n`);
 
-    const reply = await $.command.run(handoff("--each"));
+    const reply = await $.command.run(handoff("each"));
 
     expect(reply.text).toBe("No suggested plans found to hand off.");
-    expect(store.has(HANDOFFS_KEY)).toBe(false);
+    expect(handoffFiles.size).toBe(0);
   }
 );
 
@@ -1574,62 +1761,62 @@ const autocomplete = ($: Engine, text: string) =>
 const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
   reply.suggestions.map((suggestion) => suggestion.text);
 
-test("typing a dash after /handoff suggests every flag", async ($, on) => {
+test("typing the first word after /handoff suggests every action", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
-  const reply = await autocomplete($, "/handoff -");
+  const reply = await autocomplete($, "/handoff ");
 
   expect(suggestedTexts(reply)).toEqual([
-    "--new",
-    "--save",
-    "--each",
-    "--list",
-    "--resume",
+    "new",
+    "save",
+    "each",
+    "list",
+    "resume",
+    "open",
   ]);
   expect(reply.suggestions[0]!.description).toContain("fresh session");
 });
 
-test("a partly typed /handoff flag narrows the suggestions", async ($, on) => {
+test("a partly typed /handoff action narrows the suggestions", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
-  const reply = await autocomplete($, "/handoff the auth --re");
+  const reply = await autocomplete($, "/handoff re");
 
-  expect(suggestedTexts(reply)).toEqual(["--resume"]);
+  expect(suggestedTexts(reply)).toEqual(["resume"]);
 });
 
-test("words that are not flags or other commands get no /handoff suggestions", async ($, on) => {
+test("later words, other words and other commands get no /handoff suggestions", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
+  const laterWordReply = await autocomplete($, "/handoff the auth re");
   const focusReply = await autocomplete($, "/handoff au");
-  const otherReply = await autocomplete($, "/optimize -");
+  const otherReply = await autocomplete($, "/optimize re");
   const commandReply = await autocomplete($, "/handoff");
 
+  expect(suggestedTexts(laterWordReply)).toEqual([]);
   expect(suggestedTexts(focusReply)).toEqual([]);
   expect(suggestedTexts(otherReply)).toEqual([]);
   expect(suggestedTexts(commandReply)).toEqual([]);
 });
 
-testWithSession(
-  "--save keeps the stored handoff and says so when its file cannot be written",
-  CONVERSATION,
+test(
+  "save shows the recap and says why when its file cannot be written",
+  { options: { writer: "haiku" } },
   async ($, on) => {
-    mock.clock(on, { now: NOVEMBER_NINTH });
-    ignoreToasts(on);
-    const store = mockStore(on);
-    answerRecap(on);
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    on("env.get", () => ({ value: "/home/tester" }));
+    on("process.run", () => answerGit("/repo/.git\n"));
+    on("fs.list", () => ({ value: [] }));
     on("fs.write", () => ({ deny: "the folder is read-only" }));
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    mockStore(on);
+    answerRecap(on);
 
-    const reply = await $.command.run(handoff("--save"));
+    const reply = await $.command.run(handoff("save"));
 
-    expect(reply.text).toContain(
-      "Saved as handoff #1, but .claude/handoffs/2026-11-09-1432-handoff-1.md could not be written ("
-    );
+    expect(reply.text).toContain("The handoff could not be saved (");
     expect(reply.text).toContain("the folder is read-only");
-    expect(reply.text).toContain(
-      "Run /handoff --resume 1 to continue it in a new session."
-    );
-    expect(store.get(HANDOFFS_KEY)).toEqual([
-      storedHandoff(1, "Resume prompt"),
-    ]);
+    expect(reply.text).toContain("The recap:\n\nResume prompt");
   }
 );

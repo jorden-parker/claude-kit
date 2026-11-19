@@ -209,10 +209,10 @@ check                             runs every test suite; --staged runs only stag
   then add an entry to `.claude-plugin/marketplace.json` and a row to the
   plugin table at the top. `tests/repository.test.sh` fails when either is
   missing, and when the two copies of `turn-edits-lib.sh` differ.
-- A command that takes flags (`--save`) or modes (`plan`) completes them: a
-  `prompt.autocomplete` hook in `hooks/register.ts` suggests each one with a
-  short description, with a test for it. Copy the pattern from
-  `plugins/handoff/` (flags) or `plugins/brainstorm/` (modes).
+- A command takes plain words (`save`, `plan`), not dashed flags, and
+  completes them: a `prompt.autocomplete` hook in `hooks/register.ts` suggests
+  each one with a short description, with a test for it. Copy the pattern from
+  `plugins/handoff/` or `plugins/brainstorm/`.
 
 ## Dev
 

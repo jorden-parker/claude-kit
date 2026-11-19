@@ -1314,6 +1314,42 @@ testWithSession(
 );
 
 testWithSession(
+  "--resume <id> with extra context submits the stored recap followed by that context",
+  [],
+  async ($, on) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    const store = mockStore(on, {
+      [HANDOFFS_KEY]: [
+        storedHandoff(1, "First recap"),
+        storedHandoff(2, "Second recap"),
+      ],
+    });
+    const submittedTexts: string[] = [];
+    on("command.run", { command: "clear" }, () => ({ text: "" }));
+    on("prompt.submit", (_, e) => {
+      submittedTexts.push(e.text);
+      return { text: e.text };
+    });
+
+    const reply = await $.command.run(
+      handoff("--resume 2 start with the failing test  ")
+    );
+    expect(reply.text).toBe(HANDING_OFF_MESSAGE);
+
+    await clock.settle();
+
+    expect(submittedTexts).toEqual([
+      "Second recap\n\nExtra context from the user: start with the failing test",
+    ]);
+    expect(store.get(HANDOFFS_KEY)).toEqual([
+      storedHandoff(1, "First recap"),
+      storedHandoff(2, "Second recap"),
+    ]);
+  }
+);
+
+testWithSession(
   "--resume with an unknown id names it and points to the list",
   [],
   async ($, on) => {

@@ -41,7 +41,10 @@ const HANDOFF_FLAG_SUGGESTIONS = [
   { text: "--save", description: "Only store the recap" },
   { text: "--each", description: "Store one handoff per suggested plan" },
   { text: "--list", description: "Show stored handoffs" },
-  { text: "--resume", description: "Continue a stored handoff by id" },
+  {
+    text: "--resume",
+    description: "Continue a stored handoff by id, plus optional extra context",
+  },
 ];
 const PENDING_HANDOFF_KEY = "pendingHandoff";
 const HANDOFFS_KEY = "handoffs";
@@ -119,7 +122,7 @@ The conversation above is what the rules below call "the conversation below".`;
 
 type HandoffArguments =
   | { action: "list" }
-  | { action: "resume"; handoffId: string | undefined }
+  | { action: "resume"; handoffId: string | undefined; extraContext: string }
   | { action: "each"; focus: string }
   | {
       action: "recap";
@@ -131,7 +134,13 @@ type HandoffArguments =
 const parseHandoffArguments = (args: string): HandoffArguments => {
   if (LIST_FLAG.test(args)) return { action: "list" };
   const resumeMatch = RESUME_FLAG.exec(args);
-  if (resumeMatch) return { action: "resume", handoffId: resumeMatch[2] };
+  if (resumeMatch) {
+    return {
+      action: "resume",
+      handoffId: resumeMatch[2],
+      extraContext: args.replace(RESUME_FLAG, " ").trim(),
+    };
+  }
   if (EACH_PLAN_FLAG.test(args)) {
     return { action: "each", focus: args.replace(EACH_PLAN_FLAG, " ").trim() };
   }
@@ -507,9 +516,15 @@ const deliverRecap = async (
   return startNewSessionWithRecap(engine, recapText);
 };
 
+const appendExtraContext = (recap: string, extraContext: string) =>
+  extraContext
+    ? `${recap}\n\nExtra context from the user: ${extraContext}`
+    : recap;
+
 const resumeStoredHandoff = async (
   engine: EngineInterface,
-  handoffId: string | undefined
+  handoffId: string | undefined,
+  extraContext: string
 ) => {
   if (handoffId === undefined) return listStoredHandoffs(engine);
   const handoffs = await readStoredHandoffs(engine);
@@ -517,7 +532,10 @@ const resumeStoredHandoff = async (
     (handoff) => String(handoff.handoffId) === handoffId
   );
   if (!chosenHandoff) return { text: describeMissingHandoff(handoffId) };
-  return startNewSessionWithRecap(engine, chosenHandoff.recap);
+  return startNewSessionWithRecap(
+    engine,
+    appendExtraContext(chosenHandoff.recap, extraContext)
+  );
 };
 
 const readPendingHandoff = async (engine: EngineInterface) => {
@@ -545,9 +563,9 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: "handoff",
       description:
-        "Summarize the session into a prompt that resumes the work; --new continues it in a fresh session; --save only stores it; --each stores one handoff per suggested plan; --list shows stored handoffs; --resume <id> continues one",
+        "Summarize the session into a prompt that resumes the work; --new continues it in a fresh session; --save only stores it; --each stores one handoff per suggested plan; --list shows stored handoffs; --resume <id> [extra context] continues one, with the extra context added to its recap",
       argumentHint:
-        "[--new | --save | --each] [focus] | --list | --resume <id>",
+        "[--new | --save | --each] [focus] | --list | --resume <id> [extra context]",
     });
     await resumePendingHandoff($);
 
@@ -558,7 +576,11 @@ export const register: Register = (on, options) => {
     const handoffArguments = parseHandoffArguments(e.args);
     if (handoffArguments.action === "list") return listStoredHandoffs($);
     if (handoffArguments.action === "resume") {
-      return resumeStoredHandoff($, handoffArguments.handoffId);
+      return resumeStoredHandoff(
+        $,
+        handoffArguments.handoffId,
+        handoffArguments.extraContext
+      );
     }
     const recapBuild = await buildRecap($, handoffArguments, isHaikuWriter);
     if (recapBuild.delegationPrefix !== undefined) {

@@ -20,7 +20,9 @@ Every recap is also kept in the plugin store, the latest 50, so earlier handoffs
 
 `/handoff --list` shows the stored handoffs, newest first: id, time (UTC), working directory and the recap's first line.
 
-`/handoff --resume <id>` hands off to a new session seeded with that stored recap, the way `--new` does for the current session. With no id it shows the list.
+`/handoff --resume <id> [extra context]` hands off to a new session seeded with that stored recap, the way `--new` does for the current session. With no id it shows the list.
+
+Anything after the id is extra context for the new session: `/handoff --resume 3 start with the failing test` submits recap #3 followed by `Extra context from the user: start with the failing test`. The stored recap itself is not changed.
 
 The recap uses the last 40 messages of the conversation. Nothing beyond the conversation is added. With no messages it says "Nothing to recap yet."
 

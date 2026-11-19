@@ -10,7 +10,7 @@ This command runs through the `mcp__handoff__run_handoff` tool. The user's argum
 
 Pick one case from the flags in the arguments. Call the tool once.
 
-**Case 1: `--list` or `--resume <id>`.** Call `mcp__handoff__run_handoff` with `args` set to the arguments exactly as written. Do not set `modelReply`. Show the tool's reply to the user, word for word.
+**Case 1: `--list` or `--resume <id> [extra context]`.** Call `mcp__handoff__run_handoff` with `args` set to the arguments exactly as written. Do not set `modelReply`. Show the tool's reply to the user, word for word.
 
 **Case 2: anything else** (no flag, `--save`, `--new` or `--each`).
 

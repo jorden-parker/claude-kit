@@ -1,7 +1,7 @@
 {
   "name": "handoff",
-  "version": "0.7.0",
-  "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session; --save stores it; --each stores one per suggested plan; --list and --resume <id> revisit stored handoffs",
+  "version": "0.8.0",
+  "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session; --save stores it; --each stores one per suggested plan; --list and --resume <id> [extra context] revisit stored handoffs",
   "userConfig": {
     "writer": {
       "type": "string",

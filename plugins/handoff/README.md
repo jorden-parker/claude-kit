@@ -26,7 +26,15 @@ The recap uses the last 40 messages of the conversation. Nothing beyond the conv
 
 When the composer cannot take the text (a headless run, or a dialog holding the keys), the recap is copied to the clipboard and printed instead. The recap is also handed to the model as hidden context, so a follow-up like "continue from that" refers to the recap.
 
-The recap is written by Haiku. A rate-limited, overloaded or failing API is retried after 1, 2 and 4 seconds; if Haiku still returns an API error, the recap is built once by a fork of the session: the main conversation's own request, on its own model, with the recap rules as the last message. That is the one request shape the session is known to get through, and it costs more than Haiku, as it reads the whole conversation. A session that has not answered a message since it started or was resumed has nothing to fork, and the error line then says to send one message first. A call that still fails names the HTTP status and error kind, as in `Could not build the recap (API error 400, invalid_request).`
+The recap is written by Haiku in the background. A rate-limited, overloaded or failing API is retried after 1, 2 and 4 seconds. If Haiku still returns an API error, `/handoff` says so (`Haiku could not write the recap (API error 429, rate_limit). Writing it in the conversation instead…`) and asks the conversation itself: it submits the recap rules as a normal turn, the session's own model answers, and when that turn ends the answer is stored, filled or handed off as the flags ask, with the result printed beneath it. A normal turn is retried by Claude Code and waits for a proxy's `retry-after`, which a background request does not, so this gets through an API proxy that refuses background requests. It costs more than Haiku, as the turn reads the whole conversation, and the recap stays in the transcript.
+
+## Settings
+
+The row appears in `/config` under the plugin.
+
+| Row          | Default | What it does                                                                                                                                                                                |
+| ------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recap writer | `haiku` | Who writes the recap: `haiku` or `conversation`. `conversation` skips Haiku and its retries and asks the conversation at once, for a machine whose API proxy always refuses the Haiku call. |
 
 ## Install
 

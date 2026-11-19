@@ -255,7 +255,7 @@ testWithSession(
 );
 
 testWithSession(
-  "a failed model call returns the error line",
+  "a model call that fails without an API error returns the error line",
   CONVERSATION,
   async ($, on) => {
     let copies = 0;
@@ -263,97 +263,288 @@ testWithSession(
       copies += 1;
       return { value: { isCopied: true } };
     });
-    const models: string[] = [];
-    let forkCount = 0;
-    on("model.complete", (_, e) => {
-      models.push(e.model);
-      return { value: REJECTED_REPLY };
-    });
-    on("model.fork", () => {
-      forkCount += 1;
-      return { value: REJECTED_REPLY };
-    });
+    on("model.complete", () => ({
+      value: { isAnswered: false, reason: "aborted", usage: MODEL_USAGE },
+    }));
 
     const reply = await $.command.run(handoff(""));
 
-    expect(models).toEqual(["haiku"]);
-    expect(forkCount).toBe(1);
-    expect(reply.text).toBe(
-      "Could not build the recap (API error 400, invalid_request)."
-    );
+    expect(reply.text).toBe("Could not build the recap (aborted).");
     expect(copies).toBe(0);
   }
 );
 
+const RECAP_TURN_ID = "turn-recap";
+const WRITING_IN_CONVERSATION_MESSAGE =
+  "Writing the recap in the conversation…";
+const SAVED_FIRST_HANDOFF_MESSAGE =
+  "Saved as handoff #1. Run /handoff --resume 1 to continue it in a new session.";
+
+const answerTurns = (on: On) => {
+  on("turn.start", (_, e) => ({ turnId: e.turnId }));
+  on("turn.complete", (_, e) => ({ text: e.answer }));
+};
+
+const collectSubmittedPrompts = (on: On) => {
+  const submittedPrompts: string[] = [];
+  on("prompt.submit", (_, e) => {
+    submittedPrompts.push(e.text);
+    return { text: e.text };
+  });
+  return submittedPrompts;
+};
+
+const endRecapTurn = async ($: Engine, promptText: string, answer: string) => {
+  await $.turn.start({ text: promptText, turnId: RECAP_TURN_ID });
+  return $.turn.complete({
+    answer,
+    durationMs: 1,
+    isAborted: false,
+    turnId: RECAP_TURN_ID,
+    reason: "answer",
+  });
+};
+
+const testWithConversationWriter = (name: string, body: TestBody) =>
+  test(name, { options: { writer: "conversation" } }, ($, on) => {
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    return body($, on);
+  });
+
 testWithSession(
-  "an API error on haiku forks the session's own request and --save stores the recap",
+  "an API error on haiku asks the conversation to write the recap",
   CONVERSATION,
   async ($, on) => {
-    mock.clock(on);
+    const clock = mock.clock(on);
     mockStore(on);
-    const forkPrompts: string[] = [];
+    const submittedPrompts = collectSubmittedPrompts(on);
     on("model.complete", () => ({ value: REJECTED_REPLY }));
-    on("model.fork", (_, e) => {
-      forkPrompts.push(e.prompt);
-      return {
-        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
-      };
-    });
 
     const reply = await $.command.run(handoff("--save the failing test"));
 
-    expect(forkPrompts).toHaveLength(1);
-    expect(forkPrompts[0]).toContain("The conversation above is");
-    expect(forkPrompts[0]).toContain("Output only the prompt");
-    expect(forkPrompts[0]).toContain("<focus>\nthe failing test\n</focus>");
-    expect(reply.text).toContain("Saved as handoff #1.");
-  }
-);
-
-testWithSession(
-  "a session with nothing to fork reports haiku's API error and says to send a message first",
-  CONVERSATION,
-  async ($, on) => {
-    on("model.complete", () => ({ value: REJECTED_REPLY }));
-    on("model.fork", () => ({
-      value: { isAnswered: false, reason: "nothing-to-fork" },
-    }));
-
-    const reply = await $.command.run(handoff("--save"));
-
     expect(reply.text).toBe(
-      "Could not build the recap (API error 400, invalid_request). The session's own model cannot be tried until this session has answered a message: send one, then run /handoff again."
+      "Haiku could not write the recap (API error 400, invalid_request). Writing it in the conversation instead…"
+    );
+    expect(submittedPrompts).toEqual([]);
+
+    await clock.settle();
+
+    expect(submittedPrompts).toHaveLength(1);
+    expect(submittedPrompts[0]).toContain("Do not use any tools");
+    expect(submittedPrompts[0]).toContain("Output only the prompt");
+    expect(submittedPrompts[0]).toContain(
+      "<focus>\nthe failing test\n</focus>"
     );
   }
 );
 
 testWithSession(
-  "a call rate-limited on haiku and on the fork waits less than the hook's 10 second budget",
+  "--save stores the recap the conversation wrote and reports its id beneath the answer",
   CONVERSATION,
   async ($, on) => {
-    const models: string[] = [];
-    const waits: number[] = [];
-    let forkCount = 0;
-    on("clock.sleep", (_, e) => {
-      waits.push(e.ms);
-      return { value: undefined };
+    const clock = mock.clock(on);
+    const store = mockStore(on);
+    answerTurns(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    on("model.complete", () => ({ value: REJECTED_REPLY }));
+
+    await $.command.run(handoff("--save"));
+    await clock.settle();
+    const turnResult = await endRecapTurn(
+      $,
+      submittedPrompts[0] ?? "",
+      "Resume prompt"
+    );
+
+    expect(turnResult.text).toBe(SAVED_FIRST_HANDOFF_MESSAGE);
+    expect(store.get("handoffs")).toEqual([
+      {
+        handoffId: 1,
+        createdAt: 0,
+        cwd: "/repo",
+        focus: "",
+        recap: "Resume prompt",
+      },
+    ]);
+  }
+);
+
+testWithSession(
+  "another turn that ends while a recap is awaited is left alone",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    const store = mockStore(on);
+    answerTurns(on);
+    collectSubmittedPrompts(on);
+    on("model.complete", () => ({ value: REJECTED_REPLY }));
+
+    await $.command.run(handoff("--save"));
+    await clock.settle();
+    await $.turn.start({ text: "Something else", turnId: "turn-other" });
+    const turnResult = await $.turn.complete({
+      answer: "Unrelated answer",
+      durationMs: 1,
+      isAborted: false,
+      turnId: "turn-other",
+      reason: "answer",
     });
+
+    expect(turnResult.text).toBe("Unrelated answer");
+    expect(store.has("handoffs")).toBe(false);
+  }
+);
+
+testWithSession(
+  "a recap turn that ends with no answer reports the empty reply and stores nothing",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    const store = mockStore(on);
+    answerTurns(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    on("model.complete", () => ({ value: REJECTED_REPLY }));
+
+    await $.command.run(handoff("--save"));
+    await clock.settle();
+    const turnResult = await endRecapTurn($, submittedPrompts[0] ?? "", "");
+
+    expect(turnResult.text).toBe("Could not build the recap (empty reply).");
+    expect(store.has("handoffs")).toBe(false);
+  }
+);
+
+testWithSession(
+  "a call rate-limited on every haiku try waits 7 seconds, under the hook's 10 second budget",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    const models: string[] = [];
+    const submittedPrompts = collectSubmittedPrompts(on);
     on("model.complete", (_, e) => {
       models.push(e.model);
       return { value: RATE_LIMITED_REPLY };
     });
-    on("model.fork", () => {
-      forkCount += 1;
-      return { value: RATE_LIMITED_REPLY };
+
+    const pendingReply = $.command.run(handoff("--save"));
+    await clock.settle();
+    await clock.advance(7000);
+    const reply = await pendingReply;
+    await clock.settle();
+
+    expect(models).toEqual(["haiku", "haiku", "haiku", "haiku"]);
+    expect(reply.text).toBe(
+      "Haiku could not write the recap (API error 429, rate_limit). Writing it in the conversation instead…"
+    );
+    expect(submittedPrompts).toHaveLength(1);
+  }
+);
+
+testWithConversationWriter(
+  "the conversation writer setting asks the conversation without calling haiku",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    let modelCalls = 0;
+    const submittedPrompts = collectSubmittedPrompts(on);
+    on("model.complete", () => {
+      modelCalls += 1;
+      return { value: REJECTED_REPLY };
     });
 
     const reply = await $.command.run(handoff("--save"));
+    await clock.settle();
 
-    expect(waits).toEqual([1000, 2000, 4000]);
-    expect(models).toEqual(["haiku", "haiku", "haiku", "haiku"]);
-    expect(forkCount).toBe(1);
-    expect(reply.text).toBe(
-      "Could not build the recap (API error 429, rate_limit)."
+    expect(reply.text).toBe(WRITING_IN_CONVERSATION_MESSAGE);
+    expect(modelCalls).toBe(0);
+    expect(submittedPrompts).toHaveLength(1);
+  }
+);
+
+test(
+  "the conversation writer says there is nothing to recap in an empty session",
+  { options: { writer: "conversation" } },
+  async ($, on) => {
+    const submittedPrompts = collectSubmittedPrompts(on);
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: [] }));
+
+    const reply = await $.command.run(handoff("--save"));
+
+    expect(reply.text).toBe("Nothing to recap yet.");
+    expect(submittedPrompts).toEqual([]);
+  }
+);
+
+testWithConversationWriter(
+  "--each splits the recap the conversation wrote into one handoff per plan",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("--each"));
+    await clock.settle();
+    const turnResult = await endRecapTurn(
+      $,
+      submittedPrompts[0] ?? "",
+      "Plan A\n---handoff---\nPlan B"
+    );
+
+    expect(submittedPrompts[0]).toContain("write one prompt per plan");
+    expect(turnResult.text).toContain(
+      "Saved 2 handoffs, one per suggested plan:"
+    );
+  }
+);
+
+testWithConversationWriter(
+  "a recap the conversation wrote is filled into the composer",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    const fills: string[] = [];
+    on("prompt.fill", (_, e) => {
+      fills.push(e.text);
+      return { isFilled: true };
+    });
+
+    await $.command.run(handoff(""));
+    await clock.settle();
+    const turnResult = await endRecapTurn(
+      $,
+      submittedPrompts[0] ?? "",
+      "Resume prompt"
+    );
+
+    expect(fills).toEqual(["Resume prompt"]);
+    expect(turnResult.text).toBe(FILLED_MESSAGE);
+  }
+);
+
+testWithConversationWriter(
+  "a refused composer copies the conversation's recap without printing it twice",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    on("prompt.fill", refuseFill);
+    on("ui.copy", () => ({ value: { isCopied: true } }));
+
+    await $.command.run(handoff(""));
+    await clock.settle();
+    const turnResult = await endRecapTurn(
+      $,
+      submittedPrompts[0] ?? "",
+      "Resume prompt"
+    );
+
+    expect(turnResult.text).toBe(
+      "The recap is the message above.\n\n(Copied to clipboard)"
     );
   }
 );

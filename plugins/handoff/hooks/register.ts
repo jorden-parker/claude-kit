@@ -1,6 +1,7 @@
 import type {
   EngineInterface,
   ModelCompleteResult,
+  PluginOptions,
   Register,
 } from "claude-code";
 
@@ -112,11 +113,8 @@ const buildRecapPrompt = (
   return `Working directory: ${workingDirectory}\n\nConversation:\n${recentMessages}${describeFocus(focus)}`;
 };
 
-const FORK_PREAMBLE = `Stop the work here. You have no tools for this message: answer it straight away.
+const CONVERSATION_PREAMBLE = `Stop the work here. Do not use any tools for this message: answer it straight away.
 The conversation above is what the rules below call "the conversation below".`;
-
-const buildForkPrompt = (rules: string, focus: string) =>
-  `${FORK_PREAMBLE}\n\n${rules}${describeFocus(focus)}`;
 
 type HandoffArguments =
   | { action: "list" }
@@ -205,7 +203,12 @@ const listStoredHandoffs = async (engine: EngineInterface) => {
   return { text: [...handoffLines, "", RESUME_HINT].join("\n") };
 };
 
-type RecapBuild = { recap: string; failure?: undefined } | { failure: string };
+type RecapRequest = Extract<HandoffArguments, { focus: string }>;
+
+type RecapBuild =
+  | { recap: string; failure?: undefined; conversationNotice?: undefined }
+  | { failure: string; conversationNotice?: undefined }
+  | { conversationNotice: string; failure?: undefined };
 
 type RecapStyle = {
   rules: string;
@@ -225,9 +228,25 @@ const PER_PLAN_RECAP_STYLE: RecapStyle = {
   timeoutMs: 60000,
 };
 
+const chooseRecapStyle = (request: RecapRequest) =>
+  request.action === "each" ? PER_PLAN_RECAP_STYLE : SINGLE_RECAP_STYLE;
+
+const buildConversationPrompt = (request: RecapRequest) =>
+  `${CONVERSATION_PREAMBLE}\n\n${chooseRecapStyle(request).rules}${describeFocus(request.focus)}`;
+
 const RECAP_MODEL = "haiku";
-const NOTHING_TO_FORK_HINT =
-  "The session's own model cannot be tried until this session has answered a message: send one, then run /handoff again.";
+const CONVERSATION_WRITER = "conversation";
+const EMPTY_REPLY_MESSAGE = "Could not build the recap (empty reply).";
+const RECAP_ABOVE_MESSAGE = "The recap is the message above.";
+const WRITING_IN_CONVERSATION_MESSAGE =
+  "Writing the recap in the conversation…";
+const describeHaikuRefusal = (apiError: string) =>
+  `Haiku could not write the recap (${apiError}). Writing it in the conversation instead…`;
+
+const readStringOption = (options: PluginOptions, key: string) => {
+  const optionValue = options[key];
+  return typeof optionValue === "string" ? optionValue.trim() : "";
+};
 const BACKOFF_DELAYS_MS = [1000, 2000, 4000];
 const TRANSIENT_API_ERRORS = new Set([
   "rate_limit",
@@ -260,24 +279,42 @@ const describeUnansweredReply = (
     ? `API error ${reply.status ?? "with no response"}, ${reply.error}`
     : reply.reason;
 
+const askConversationForRecap = (
+  engine: EngineInterface,
+  request: RecapRequest
+) => {
+  engine.clock.after(
+    0,
+    () =>
+      void engine.prompt.submit({
+        text: buildConversationPrompt(request),
+        asUser: true,
+      })
+  );
+};
+
 const buildRecap = async (
   engine: EngineInterface,
-  focus: string,
-  style: RecapStyle = SINGLE_RECAP_STYLE
+  request: RecapRequest,
+  isConversationWriter: boolean
 ): Promise<RecapBuild> => {
+  const style = chooseRecapStyle(request);
   const recentMessages = await describeRecentMessages(
     engine,
     style.shouldKeepLatestAssistantWhole
   );
   if (!recentMessages) return { failure: NO_RECAP_MESSAGE };
+  if (isConversationWriter) {
+    return { conversationNotice: WRITING_IN_CONVERSATION_MESSAGE };
+  }
 
   engine.ui.toast("Building recap…");
   const prompt = buildRecapPrompt(
     await engine.session.cwd(),
     recentMessages,
-    focus
+    request.focus
   );
-  let reply = await completeWithBackoff(engine, () =>
+  const reply = await completeWithBackoff(engine, () =>
     engine.model.complete({
       model: RECAP_MODEL,
       system: style.rules,
@@ -286,26 +323,16 @@ const buildRecap = async (
       timeoutMs: style.timeoutMs,
     })
   );
-  if (!reply.isAnswered && reply.reason === "api-error") {
-    const forkReply = await engine.model.fork({
-      prompt: buildForkPrompt(style.rules, focus),
-    });
-    if (!forkReply.isAnswered && forkReply.reason === "nothing-to-fork") {
-      return {
-        failure: `Could not build the recap (${describeUnansweredReply(reply)}). ${NOTHING_TO_FORK_HINT}`,
-      };
-    }
-    reply = forkReply;
-  }
 
   if (!reply.isAnswered) {
-    return {
-      failure: `Could not build the recap (${describeUnansweredReply(reply)}).`,
-    };
+    const unansweredReason = describeUnansweredReply(reply);
+    return reply.reason === "api-error"
+      ? { conversationNotice: describeHaikuRefusal(unansweredReason) }
+      : { failure: `Could not build the recap (${unansweredReason}).` };
   }
 
   const recap = stripWrappingCodeFence(reply.text);
-  if (!recap) return { failure: "Could not build the recap (empty reply)." };
+  if (!recap) return { failure: EMPTY_REPLY_MESSAGE };
   return { recap };
 };
 
@@ -315,10 +342,12 @@ const splitPlanRecaps = (text: string) =>
     .map(stripWrappingCodeFence)
     .filter((planRecap) => planRecap);
 
-const storeHandoffPerPlan = async (engine: EngineInterface, focus: string) => {
-  const recapBuild = await buildRecap(engine, focus, PER_PLAN_RECAP_STYLE);
-  if (recapBuild.failure !== undefined) return { text: recapBuild.failure };
-  const planRecaps = splitPlanRecaps(recapBuild.recap);
+const storePlanHandoffs = async (
+  engine: EngineInterface,
+  recapText: string,
+  focus: string
+) => {
+  const planRecaps = splitPlanRecaps(recapText);
   if (planRecaps.length === 0) return { text: NO_PLANS_MESSAGE };
 
   const savedHandoffs: StoredHandoff[] = [];
@@ -340,14 +369,16 @@ const storeHandoffPerPlan = async (engine: EngineInterface, focus: string) => {
 
 const offerRecapInThisSession = async (
   engine: EngineInterface,
-  recap: string
+  recap: string,
+  isRecapOnScreen = false
 ) => {
   const fillResult = await engine.prompt.fill({ text: recap, mode: "replace" });
   if (fillResult.isFilled) return { text: FILLED_MESSAGE, context: [recap] };
 
   const copy = await engine.ui.copy({ text: recap });
+  const shownRecap = isRecapOnScreen ? RECAP_ABOVE_MESSAGE : recap;
   return {
-    text: copy.isCopied ? `${recap}\n\n(Copied to clipboard)` : recap,
+    text: copy.isCopied ? `${shownRecap}\n\n(Copied to clipboard)` : shownRecap,
     context: [recap],
   };
 };
@@ -379,6 +410,25 @@ const startNewSessionWithRecap = async (
   return { text: HANDING_OFF_MESSAGE };
 };
 
+const deliverRecap = async (
+  engine: EngineInterface,
+  request: RecapRequest,
+  recapText: string,
+  isRecapOnScreen: boolean
+) => {
+  if (request.action === "each") {
+    return storePlanHandoffs(engine, recapText, request.focus);
+  }
+  const savedHandoff = await storeHandoff(engine, recapText, request.focus);
+  if (request.isSaveOnly) {
+    return { text: describeSavedHandoff(savedHandoff.handoffId) };
+  }
+  if (!request.isNewSession) {
+    return offerRecapInThisSession(engine, recapText, isRecapOnScreen);
+  }
+  return startNewSessionWithRecap(engine, recapText);
+};
+
 const resumeStoredHandoff = async (
   engine: EngineInterface,
   handoffId: string | undefined
@@ -406,7 +456,13 @@ const resumePendingHandoff = async (engine: EngineInterface) => {
   if (fillResult.isFilled) await engine.store.delete(PENDING_HANDOFF_KEY);
 };
 
-export const register: Register = (on) => {
+type AwaitedRecap = { request: RecapRequest; turnId?: string };
+
+export const register: Register = (on, options) => {
+  const isConversationWriter =
+    readStringOption(options, "writer") === CONVERSATION_WRITER;
+  let awaitedRecap: AwaitedRecap | undefined;
+
   on("session.start", async ($, e, next) => {
     await $.command.register({
       name: "handoff",
@@ -426,20 +482,39 @@ export const register: Register = (on) => {
     if (handoffArguments.action === "resume") {
       return resumeStoredHandoff($, handoffArguments.handoffId);
     }
-    if (handoffArguments.action === "each") {
-      return storeHandoffPerPlan($, handoffArguments.focus);
+    const recapBuild = await buildRecap(
+      $,
+      handoffArguments,
+      isConversationWriter
+    );
+    if (recapBuild.conversationNotice !== undefined) {
+      awaitedRecap = { request: handoffArguments };
+      askConversationForRecap($, handoffArguments);
+      return { text: recapBuild.conversationNotice };
     }
-
-    const { isNewSession, isSaveOnly, focus } = handoffArguments;
-    const recapBuild = await buildRecap($, focus);
     if (recapBuild.failure !== undefined) return { text: recapBuild.failure };
-    const { recap } = recapBuild;
-    const savedHandoff = await storeHandoff($, recap, focus);
+    return deliverRecap($, handoffArguments, recapBuild.recap, false);
+  });
 
-    if (isSaveOnly)
-      return { text: describeSavedHandoff(savedHandoff.handoffId) };
-    if (!isNewSession) return offerRecapInThisSession($, recap);
-    return startNewSessionWithRecap($, recap);
+  on("turn.start", (_, e, next) => {
+    const isRecapTurn =
+      e.agentId === undefined && e.text.includes(CONVERSATION_PREAMBLE);
+    if (awaitedRecap && isRecapTurn) {
+      awaitedRecap = { ...awaitedRecap, turnId: e.turnId };
+    }
+    return next(e);
+  });
+
+  on("turn.complete", async ($, e, next) => {
+    const turnResult = await next(e);
+    if (!awaitedRecap || awaitedRecap.turnId !== e.turnId) return turnResult;
+    const { request } = awaitedRecap;
+    awaitedRecap = undefined;
+
+    const recap = stripWrappingCodeFence(e.answer);
+    if (!recap) return { ...turnResult, text: EMPTY_REPLY_MESSAGE };
+    const delivery = await deliverRecap($, request, recap, true);
+    return { ...turnResult, text: delivery.text };
   });
 
   on("prompt.autocomplete", { token: /^-/ }, async (_, e, next) => {

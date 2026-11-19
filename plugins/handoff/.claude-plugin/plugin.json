@@ -1,5 +1,14 @@
 {
   "name": "handoff",
-  "version": "0.2.4",
-  "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session; --save stores it; --each stores one per suggested plan; --list and --resume <id> revisit stored handoffs"
+  "version": "0.3.0",
+  "description": "/handoff summarizes the session into a prompt a fresh session can pick up; --new continues it in a fresh session; --save stores it; --each stores one per suggested plan; --list and --resume <id> revisit stored handoffs",
+  "userConfig": {
+    "writer": {
+      "type": "string",
+      "title": "Recap writer",
+      "description": "Who writes the recap. haiku (the default) asks Haiku in the background and falls back to the conversation when the API refuses. conversation skips Haiku and has the session's own model write the recap as a normal turn, for an API proxy that refuses background requests.",
+      "default": "haiku",
+      "options": ["haiku", "conversation"]
+    }
+  }
 }

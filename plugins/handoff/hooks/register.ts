@@ -226,6 +226,8 @@ const PER_PLAN_RECAP_STYLE: RecapStyle = {
 };
 
 const RECAP_MODEL = "haiku";
+const NOTHING_TO_FORK_HINT =
+  "The session's own model cannot be tried until this session has answered a message: send one, then run /handoff again.";
 const BACKOFF_DELAYS_MS = [1000, 2000, 4000];
 const TRANSIENT_API_ERRORS = new Set([
   "rate_limit",
@@ -288,9 +290,12 @@ const buildRecap = async (
     const forkReply = await engine.model.fork({
       prompt: buildForkPrompt(style.rules, focus),
     });
-    if (forkReply.isAnswered || forkReply.reason !== "nothing-to-fork") {
-      reply = forkReply;
+    if (!forkReply.isAnswered && forkReply.reason === "nothing-to-fork") {
+      return {
+        failure: `Could not build the recap (${describeUnansweredReply(reply)}). ${NOTHING_TO_FORK_HINT}`,
+      };
     }
+    reply = forkReply;
   }
 
   if (!reply.isAnswered) {

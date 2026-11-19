@@ -26,7 +26,7 @@ The recap uses the last 40 messages of the conversation. Nothing beyond the conv
 
 When the composer cannot take the text (a headless run, or a dialog holding the keys), the recap is copied to the clipboard and printed instead. The recap is also handed to the model as hidden context, so a follow-up like "continue from that" refers to the recap.
 
-The recap is written by Haiku. A rate-limited, overloaded or failing API is retried after 1, 2 and 4 seconds; if Haiku still returns an API error, the recap is built once by a fork of the session: the main conversation's own request, on its own model, with the recap rules as the last message. That is the one request shape the session is known to get through, and it costs more than Haiku, as it reads the whole conversation. A call that still fails names the HTTP status and error kind, as in `Could not build the recap (API error 400, invalid_request).`
+The recap is written by Haiku. A rate-limited, overloaded or failing API is retried after 1, 2 and 4 seconds; if Haiku still returns an API error, the recap is built once by a fork of the session: the main conversation's own request, on its own model, with the recap rules as the last message. That is the one request shape the session is known to get through, and it costs more than Haiku, as it reads the whole conversation. A session that has not answered a message since it started or was resumed has nothing to fork, and the error line then says to send one message first. A call that still fails names the HTTP status and error kind, as in `Could not build the recap (API error 400, invalid_request).`
 
 ## Install
 

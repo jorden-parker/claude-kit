@@ -311,7 +311,7 @@ testWithSession(
 );
 
 testWithSession(
-  "a session with nothing to fork reports the API error haiku gave",
+  "a session with nothing to fork reports haiku's API error and says to send a message first",
   CONVERSATION,
   async ($, on) => {
     on("model.complete", () => ({ value: REJECTED_REPLY }));
@@ -322,7 +322,7 @@ testWithSession(
     const reply = await $.command.run(handoff("--save"));
 
     expect(reply.text).toBe(
-      "Could not build the recap (API error 400, invalid_request)."
+      "Could not build the recap (API error 400, invalid_request). The session's own model cannot be tried until this session has answered a message: send one, then run /handoff again."
     );
   }
 );

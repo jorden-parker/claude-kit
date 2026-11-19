@@ -1,6 +1,6 @@
 {
   "name": "handoff",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "scripts": {
     "test": "claude plugin test .",
     "typecheck": "tsc -p ."

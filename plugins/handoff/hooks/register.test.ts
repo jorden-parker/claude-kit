@@ -316,12 +316,17 @@ const RECAP_AGENT_ID = "agent-recap";
 const SUBAGENT_WRITING_MESSAGE = "A subagent is writing the recap…";
 
 const collectSpawnedAgents = (on: On) => {
-  const spawnedAgents: { prompt: string; agentType: string }[] = [];
+  const spawnedAgents: {
+    prompt: string;
+    agentType: string;
+    model: string | undefined;
+  }[] = [];
   on("agent.spawn", (_, e) => {
     const agentToolInput = e as unknown as { subagent_type?: string };
     spawnedAgents.push({
       prompt: e.prompt,
       agentType: agentToolInput.subagent_type ?? e.subagentType,
+      model: e.model,
     });
     return { model: "claude-opus-5-5", agentId: RECAP_AGENT_ID };
   });
@@ -363,7 +368,7 @@ const testWithSubagentWriter = (name: string, body: TestBody) =>
   });
 
 testWithSession(
-  "an API error on haiku starts a fork subagent to write the recap",
+  "an API error on haiku starts a Haiku subagent with the same conversation digest",
   CONVERSATION,
   async ($, on) => {
     const spawnedAgents = collectSpawnedAgents(on);
@@ -376,9 +381,14 @@ testWithSession(
       "Haiku could not write the recap (API error 400, invalid_request). A subagent is writing the recap…"
     );
     expect(spawnedAgents).toHaveLength(1);
-    expect(spawnedAgents[0]?.agentType).toBe("fork");
+    expect(spawnedAgents[0]?.agentType).toBe("general-purpose");
+    expect(spawnedAgents[0]?.model).toBe("haiku");
     expect(spawnedAgents[0]?.prompt).toContain("Do not use any tools");
     expect(spawnedAgents[0]?.prompt).toContain("Output only the prompt");
+    expect(spawnedAgents[0]?.prompt).toContain("Working directory: /repo");
+    expect(spawnedAgents[0]?.prompt).toContain(
+      "user: Fix the login bug in auth.ts"
+    );
     expect(spawnedAgents[0]?.prompt).toContain(
       "<focus>\nthe failing test\n</focus>"
     );
@@ -392,7 +402,7 @@ testWithSession(
   async ($, on) => {
     const clock = mock.clock(on);
     const submittedPrompts = collectSubmittedPrompts(on);
-    on("agent.spawn", () => ({ deny: "forks are off" }));
+    on("agent.spawn", () => ({ deny: "agents are off" }));
     on("model.complete", () => ({ value: REJECTED_REPLY }));
 
     const reply = await $.command.run(handoff("--save"));
@@ -472,19 +482,35 @@ testWithSubagentWriter(
 );
 
 testWithSubagentWriter(
-  "a subagent that ends with no answer reports the empty reply and stores nothing",
+  "a subagent that ends with no answer leaves the recap to the conversation",
   async ($, on) => {
-    mock.clock(on);
+    const clock = mock.clock(on);
     const store = mockStore(on);
     answerTurns(on);
     const spawnedAgents = collectSpawnedAgents(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    const statuses = collectStatuses(on);
     const toasts = collectToasts(on);
 
     await $.command.run(handoff("--save"));
     await endAgentTurn($, RECAP_AGENT_ID, spawnedAgents[0]?.prompt ?? "", "");
+    await clock.settle();
 
-    expect(toasts).toEqual(["Could not build the recap (empty reply)."]);
+    expect(submittedPrompts).toHaveLength(1);
+    expect(submittedPrompts[0]).toContain("The conversation above is");
+    expect(statuses).toEqual([
+      SUBAGENT_WRITING_MESSAGE,
+      WRITING_IN_CONVERSATION_MESSAGE,
+    ]);
+    expect(toasts).toEqual([]);
     expect(store.has("handoffs")).toBe(false);
+
+    const turnResult = await endRecapTurn(
+      $,
+      submittedPrompts[0] ?? "",
+      "Resume prompt"
+    );
+    expect(turnResult.text).toBe(SAVED_FIRST_HANDOFF_MESSAGE);
   }
 );
 
@@ -571,6 +597,63 @@ testWithConversationWriter(
     await endRecapTurn($, submittedPrompts[0] ?? "", "Resume prompt");
 
     expect(statuses).toEqual([WRITING_IN_CONVERSATION_MESSAGE, undefined]);
+  }
+);
+
+const submitAgentReport = ($: Engine, agentId: string) =>
+  $.prompt.submit({
+    text: `<agent-message from="${agentId}">\n[Subagent hand-back] The final report of a subagent.\n</agent-message>`,
+    origin: { kind: "peer" },
+    wait: false,
+  });
+
+testWithSubagentWriter(
+  "the recap subagent's report is kept out of the conversation",
+  async ($, on) => {
+    mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    ignoreToasts(on);
+    const spawnedAgents = collectSpawnedAgents(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("--save"));
+    await endAgentTurn(
+      $,
+      RECAP_AGENT_ID,
+      spawnedAgents[0]?.prompt ?? "",
+      "Resume prompt"
+    );
+    const submitResult = await submitAgentReport($, RECAP_AGENT_ID);
+
+    expect(submitResult.drop).toBe(
+      "The handoff subagent finished; its result is in the status line."
+    );
+    expect(submittedPrompts).toEqual([]);
+  }
+);
+
+testWithSubagentWriter(
+  "another subagent's report reaches the conversation",
+  async ($, on) => {
+    mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    ignoreToasts(on);
+    const spawnedAgents = collectSpawnedAgents(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("--save"));
+    await endAgentTurn(
+      $,
+      RECAP_AGENT_ID,
+      spawnedAgents[0]?.prompt ?? "",
+      "Resume prompt"
+    );
+    const submitResult = await submitAgentReport($, "agent-other");
+
+    expect(submitResult.drop).toBe(undefined);
+    expect(submittedPrompts).toHaveLength(1);
   }
 );
 

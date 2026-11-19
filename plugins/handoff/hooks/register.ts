@@ -208,10 +208,11 @@ type RecapRequest = Extract<HandoffArguments, { focus: string }>;
 type RecapBuild =
   | { recap: string; failure?: undefined; delegationPrefix?: undefined }
   | { failure: string; delegationPrefix?: undefined }
-  | { delegationPrefix: string; failure?: undefined };
+  | { delegationPrefix: string; digest: string; failure?: undefined };
 
 type AwaitedRecap = {
   request: RecapRequest;
+  promptText: string;
   turnId?: string;
   agentId?: string;
 };
@@ -243,8 +244,12 @@ const buildConversationPrompt = (request: RecapRequest) =>
 const RECAP_MODEL = "haiku";
 const SUBAGENT_WRITER = "subagent";
 const CONVERSATION_WRITER = "conversation";
-const RECAP_AGENT_TYPE = "fork";
+const RECAP_AGENT_TYPE = "general-purpose";
+const AGENT_PREAMBLE =
+  "Do not use any tools for this task: answer straight away from the conversation below.";
 const RECAP_AGENT_DESCRIPTION = "Write the handoff recap";
+const RECAP_AGENT_DONE_NOTICE =
+  "The handoff subagent finished; its result is in the status line.";
 const OUTCOME_TOAST_MS = 15000;
 const SUBAGENT_WRITING_MESSAGE = "A subagent is writing the recap…";
 const EMPTY_REPLY_MESSAGE = "Could not build the recap (empty reply).";
@@ -290,43 +295,48 @@ const describeUnansweredReply = (
     ? `API error ${reply.status ?? "with no response"}, ${reply.error}`
     : reply.reason;
 
+type RecapDelegation = { awaitedRecap: AwaitedRecap; routeNotice: string };
+
 const askConversationForRecap = (
   engine: EngineInterface,
   request: RecapRequest
-) => {
+): RecapDelegation => {
+  const promptText = buildConversationPrompt(request);
   engine.clock.after(
     0,
-    () =>
-      void engine.prompt.submit({
-        text: buildConversationPrompt(request),
-        asUser: true,
-      })
+    () => void engine.prompt.submit({ text: promptText, asUser: true })
   );
+  return {
+    awaitedRecap: { request, promptText },
+    routeNotice: WRITING_IN_CONVERSATION_MESSAGE,
+  };
 };
+
+const buildAgentPrompt = (request: RecapRequest, digest: string) =>
+  `${AGENT_PREAMBLE}\n\n${chooseRecapStyle(request).rules}\n\n${digest}`;
 
 const delegateRecap = async (
   engine: EngineInterface,
   request: RecapRequest,
+  digest: string,
   canUseSubagent: boolean
-): Promise<{ awaitedRecap: AwaitedRecap; routeNotice: string }> => {
+): Promise<RecapDelegation> => {
   if (canUseSubagent) {
+    const promptText = buildAgentPrompt(request, digest);
     const spawnResult = await engine.agent.spawn({
-      prompt: buildConversationPrompt(request),
+      prompt: promptText,
       description: RECAP_AGENT_DESCRIPTION,
       subagentType: RECAP_AGENT_TYPE,
+      model: RECAP_MODEL,
     });
     if (spawnResult.deny === undefined) {
       return {
-        awaitedRecap: { request, agentId: spawnResult.agentId },
+        awaitedRecap: { request, promptText, agentId: spawnResult.agentId },
         routeNotice: SUBAGENT_WRITING_MESSAGE,
       };
     }
   }
-  askConversationForRecap(engine, request);
-  return {
-    awaitedRecap: { request },
-    routeNotice: WRITING_IN_CONVERSATION_MESSAGE,
-  };
+  return askConversationForRecap(engine, request);
 };
 
 const isAwaitedTurn = (
@@ -347,19 +357,19 @@ const buildRecap = async (
     style.shouldKeepLatestAssistantWhole
   );
   if (!recentMessages) return { failure: NO_RECAP_MESSAGE };
-  if (!isHaikuWriter) return { delegationPrefix: "" };
-
-  engine.ui.toast("Building recap…");
-  const prompt = buildRecapPrompt(
+  const digest = buildRecapPrompt(
     await engine.session.cwd(),
     recentMessages,
     request.focus
   );
+  if (!isHaikuWriter) return { delegationPrefix: "", digest };
+
+  engine.ui.toast("Building recap…");
   const reply = await completeWithBackoff(engine, () =>
     engine.model.complete({
       model: RECAP_MODEL,
       system: style.rules,
-      prompt,
+      prompt: digest,
       effort: "low",
       timeoutMs: style.timeoutMs,
     })
@@ -368,7 +378,7 @@ const buildRecap = async (
   if (!reply.isAnswered) {
     const unansweredReason = describeUnansweredReply(reply);
     return reply.reason === "api-error"
-      ? { delegationPrefix: describeHaikuRefusal(unansweredReason) }
+      ? { delegationPrefix: describeHaikuRefusal(unansweredReason), digest }
       : { failure: `Could not build the recap (${unansweredReason}).` };
   }
 
@@ -503,6 +513,7 @@ export const register: Register = (on, options) => {
     writer !== SUBAGENT_WRITER && writer !== CONVERSATION_WRITER;
   let awaitedRecap: AwaitedRecap | undefined;
   let hasPinnedOutcome = false;
+  let recapAgentId: string | undefined;
 
   on("session.start", async ($, e, next) => {
     await $.command.register({
@@ -528,9 +539,11 @@ export const register: Register = (on, options) => {
       const delegation = await delegateRecap(
         $,
         handoffArguments,
+        recapBuild.digest,
         writer !== CONVERSATION_WRITER
       );
       awaitedRecap = delegation.awaitedRecap;
+      recapAgentId = delegation.awaitedRecap.agentId;
       $.ui.status(delegation.routeNotice);
       return {
         text: `${recapBuild.delegationPrefix}${delegation.routeNotice}`,
@@ -540,8 +553,18 @@ export const register: Register = (on, options) => {
     return deliverRecap($, handoffArguments, recapBuild.recap, false);
   });
 
+  on("prompt.submit", (_, e, next) => {
+    const isRecapAgentReport =
+      e.origin?.kind === "peer" &&
+      recapAgentId !== undefined &&
+      e.text.includes(`<agent-message from="${recapAgentId}">`);
+    if (!isRecapAgentReport) return next(e);
+    recapAgentId = undefined;
+    return { drop: RECAP_AGENT_DONE_NOTICE };
+  });
+
   on("turn.start", ($, e, next) => {
-    if (awaitedRecap && e.text.includes(CONVERSATION_PREAMBLE)) {
+    if (awaitedRecap && e.text.includes(awaitedRecap.promptText)) {
       awaitedRecap = { ...awaitedRecap, turnId: e.turnId };
     }
     if (hasPinnedOutcome && e.agentId === undefined) {
@@ -558,7 +581,14 @@ export const register: Register = (on, options) => {
     awaitedRecap = undefined;
 
     const isConversationTurn = e.agentId === undefined;
+    recapAgentId = e.agentId;
     const recap = stripWrappingCodeFence(e.answer);
+    if (!recap && !isConversationTurn) {
+      const delegation = askConversationForRecap($, request);
+      awaitedRecap = delegation.awaitedRecap;
+      $.ui.status(delegation.routeNotice);
+      return turnResult;
+    }
     const outcome = recap
       ? (await deliverRecap($, request, recap, isConversationTurn)).text
       : EMPTY_REPLY_MESSAGE;

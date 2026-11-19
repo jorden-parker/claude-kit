@@ -312,42 +312,241 @@ const testWithConversationWriter = (name: string, body: TestBody) =>
     return body($, on);
   });
 
+const RECAP_AGENT_ID = "agent-recap";
+const SUBAGENT_WRITING_MESSAGE = "A subagent is writing the recap…";
+
+const collectSpawnedAgents = (on: On) => {
+  const spawnedAgents: { prompt: string; agentType: string }[] = [];
+  on("agent.spawn", (_, e) => {
+    const agentToolInput = e as unknown as { subagent_type?: string };
+    spawnedAgents.push({
+      prompt: e.prompt,
+      agentType: agentToolInput.subagent_type ?? e.subagentType,
+    });
+    return { model: "claude-opus-5-5", agentId: RECAP_AGENT_ID };
+  });
+  return spawnedAgents;
+};
+
+const collectToasts = (on: On) => {
+  const toasts: string[] = [];
+  on("ui.toast", (_, e) => {
+    toasts.push(e.text);
+    return { value: undefined };
+  });
+  return toasts;
+};
+
+const endAgentTurn = async (
+  $: Engine,
+  agentId: string,
+  promptText: string,
+  answer: string
+) => {
+  const turnId = `turn-of-${agentId}`;
+  await $.turn.start({ text: promptText, turnId, agentId });
+  return $.turn.complete({
+    answer,
+    durationMs: 1,
+    isAborted: false,
+    turnId,
+    agentId,
+    reason: "answer",
+  });
+};
+
+const testWithSubagentWriter = (name: string, body: TestBody) =>
+  test(name, { options: { writer: "subagent" } }, ($, on) => {
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    return body($, on);
+  });
+
 testWithSession(
-  "an API error on haiku asks the conversation to write the recap",
+  "an API error on haiku starts a fork subagent to write the recap",
   CONVERSATION,
   async ($, on) => {
-    const clock = mock.clock(on);
-    mockStore(on);
+    const spawnedAgents = collectSpawnedAgents(on);
     const submittedPrompts = collectSubmittedPrompts(on);
     on("model.complete", () => ({ value: REJECTED_REPLY }));
 
     const reply = await $.command.run(handoff("--save the failing test"));
 
     expect(reply.text).toBe(
-      "Haiku could not write the recap (API error 400, invalid_request). Writing it in the conversation instead…"
+      "Haiku could not write the recap (API error 400, invalid_request). A subagent is writing the recap…"
     );
-    expect(submittedPrompts).toEqual([]);
-
-    await clock.settle();
-
-    expect(submittedPrompts).toHaveLength(1);
-    expect(submittedPrompts[0]).toContain("Do not use any tools");
-    expect(submittedPrompts[0]).toContain("Output only the prompt");
-    expect(submittedPrompts[0]).toContain(
+    expect(spawnedAgents).toHaveLength(1);
+    expect(spawnedAgents[0]?.agentType).toBe("fork");
+    expect(spawnedAgents[0]?.prompt).toContain("Do not use any tools");
+    expect(spawnedAgents[0]?.prompt).toContain("Output only the prompt");
+    expect(spawnedAgents[0]?.prompt).toContain(
       "<focus>\nthe failing test\n</focus>"
     );
+    expect(submittedPrompts).toEqual([]);
   }
 );
 
 testWithSession(
-  "--save stores the recap the conversation wrote and reports its id beneath the answer",
+  "a subagent that cannot start leaves the recap to the conversation",
   CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    on("agent.spawn", () => ({ deny: "forks are off" }));
+    on("model.complete", () => ({ value: REJECTED_REPLY }));
+
+    const reply = await $.command.run(handoff("--save"));
+    await clock.settle();
+
+    expect(reply.text).toBe(
+      "Haiku could not write the recap (API error 400, invalid_request). Writing the recap in the conversation…"
+    );
+    expect(submittedPrompts).toHaveLength(1);
+  }
+);
+
+testWithSubagentWriter(
+  "the subagent writer setting starts the subagent without calling haiku",
+  async ($, on) => {
+    const spawnedAgents = collectSpawnedAgents(on);
+    let modelCalls = 0;
+    on("model.complete", () => {
+      modelCalls += 1;
+      return { value: REJECTED_REPLY };
+    });
+
+    const reply = await $.command.run(handoff("--save"));
+
+    expect(reply.text).toBe(SUBAGENT_WRITING_MESSAGE);
+    expect(modelCalls).toBe(0);
+    expect(spawnedAgents).toHaveLength(1);
+  }
+);
+
+testWithSubagentWriter(
+  "--save stores the recap the subagent wrote and reports its id in a toast",
+  async ($, on) => {
+    mock.clock(on);
+    const store = mockStore(on);
+    answerTurns(on);
+    const spawnedAgents = collectSpawnedAgents(on);
+    const toasts = collectToasts(on);
+
+    await $.command.run(handoff("--save"));
+    const turnResult = await endAgentTurn(
+      $,
+      RECAP_AGENT_ID,
+      spawnedAgents[0]?.prompt ?? "",
+      "Resume prompt"
+    );
+
+    expect(turnResult.text).toBe("Resume prompt");
+    expect(toasts).toEqual([SAVED_FIRST_HANDOFF_MESSAGE]);
+    expect(store.get("handoffs")).toEqual([
+      {
+        handoffId: 1,
+        createdAt: 0,
+        cwd: "/repo",
+        focus: "",
+        recap: "Resume prompt",
+      },
+    ]);
+  }
+);
+
+testWithSubagentWriter(
+  "another subagent that ends while a recap is awaited is left alone",
+  async ($, on) => {
+    mock.clock(on);
+    const store = mockStore(on);
+    answerTurns(on);
+    collectSpawnedAgents(on);
+    const toasts = collectToasts(on);
+
+    await $.command.run(handoff("--save"));
+    await endAgentTurn($, "agent-other", "Read README.md", "Unrelated report");
+
+    expect(toasts).toEqual([]);
+    expect(store.has("handoffs")).toBe(false);
+  }
+);
+
+testWithSubagentWriter(
+  "a subagent that ends with no answer reports the empty reply and stores nothing",
+  async ($, on) => {
+    mock.clock(on);
+    const store = mockStore(on);
+    answerTurns(on);
+    const spawnedAgents = collectSpawnedAgents(on);
+    const toasts = collectToasts(on);
+
+    await $.command.run(handoff("--save"));
+    await endAgentTurn($, RECAP_AGENT_ID, spawnedAgents[0]?.prompt ?? "", "");
+
+    expect(toasts).toEqual(["Could not build the recap (empty reply)."]);
+    expect(store.has("handoffs")).toBe(false);
+  }
+);
+
+testWithSubagentWriter(
+  "a recap the subagent wrote is filled into the composer",
+  async ($, on) => {
+    mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    const spawnedAgents = collectSpawnedAgents(on);
+    const toasts = collectToasts(on);
+    const fills: string[] = [];
+    on("prompt.fill", (_, e) => {
+      fills.push(e.text);
+      return { isFilled: true };
+    });
+
+    await $.command.run(handoff(""));
+    await endAgentTurn(
+      $,
+      RECAP_AGENT_ID,
+      spawnedAgents[0]?.prompt ?? "",
+      "Resume prompt"
+    );
+
+    expect(fills).toEqual(["Resume prompt"]);
+    expect(toasts).toEqual([FILLED_MESSAGE]);
+  }
+);
+
+testWithSession(
+  "a call rate-limited on every haiku try waits 7 seconds, under the hook's 10 second budget",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on);
+    const models: string[] = [];
+    const spawnedAgents = collectSpawnedAgents(on);
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return { value: RATE_LIMITED_REPLY };
+    });
+
+    const pendingReply = $.command.run(handoff("--save"));
+    await clock.settle();
+    await clock.advance(7000);
+    const reply = await pendingReply;
+
+    expect(models).toEqual(["haiku", "haiku", "haiku", "haiku"]);
+    expect(reply.text).toBe(
+      "Haiku could not write the recap (API error 429, rate_limit). A subagent is writing the recap…"
+    );
+    expect(spawnedAgents).toHaveLength(1);
+  }
+);
+
+testWithConversationWriter(
+  "--save stores the recap the conversation wrote and reports its id beneath the answer",
   async ($, on) => {
     const clock = mock.clock(on);
     const store = mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
-    on("model.complete", () => ({ value: REJECTED_REPLY }));
 
     await $.command.run(handoff("--save"));
     await clock.settle();
@@ -370,15 +569,13 @@ testWithSession(
   }
 );
 
-testWithSession(
+testWithConversationWriter(
   "another turn that ends while a recap is awaited is left alone",
-  CONVERSATION,
   async ($, on) => {
     const clock = mock.clock(on);
     const store = mockStore(on);
     answerTurns(on);
     collectSubmittedPrompts(on);
-    on("model.complete", () => ({ value: REJECTED_REPLY }));
 
     await $.command.run(handoff("--save"));
     await clock.settle();
@@ -396,15 +593,13 @@ testWithSession(
   }
 );
 
-testWithSession(
+testWithConversationWriter(
   "a recap turn that ends with no answer reports the empty reply and stores nothing",
-  CONVERSATION,
   async ($, on) => {
     const clock = mock.clock(on);
     const store = mockStore(on);
     answerTurns(on);
     const submittedPrompts = collectSubmittedPrompts(on);
-    on("model.complete", () => ({ value: REJECTED_REPLY }));
 
     await $.command.run(handoff("--save"));
     await clock.settle();
@@ -412,32 +607,6 @@ testWithSession(
 
     expect(turnResult.text).toBe("Could not build the recap (empty reply).");
     expect(store.has("handoffs")).toBe(false);
-  }
-);
-
-testWithSession(
-  "a call rate-limited on every haiku try waits 7 seconds, under the hook's 10 second budget",
-  CONVERSATION,
-  async ($, on) => {
-    const clock = mock.clock(on);
-    const models: string[] = [];
-    const submittedPrompts = collectSubmittedPrompts(on);
-    on("model.complete", (_, e) => {
-      models.push(e.model);
-      return { value: RATE_LIMITED_REPLY };
-    });
-
-    const pendingReply = $.command.run(handoff("--save"));
-    await clock.settle();
-    await clock.advance(7000);
-    const reply = await pendingReply;
-    await clock.settle();
-
-    expect(models).toEqual(["haiku", "haiku", "haiku", "haiku"]);
-    expect(reply.text).toBe(
-      "Haiku could not write the recap (API error 429, rate_limit). Writing it in the conversation instead…"
-    );
-    expect(submittedPrompts).toHaveLength(1);
   }
 );
 

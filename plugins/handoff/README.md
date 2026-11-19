@@ -26,15 +26,17 @@ The recap uses the last 40 messages of the conversation. Nothing beyond the conv
 
 When the composer cannot take the text (a headless run, or a dialog holding the keys), the recap is copied to the clipboard and printed instead. The recap is also handed to the model as hidden context, so a follow-up like "continue from that" refers to the recap.
 
-The recap is written by Haiku in the background. A rate-limited, overloaded or failing API is retried after 1, 2 and 4 seconds. If Haiku still returns an API error, `/handoff` says so (`Haiku could not write the recap (API error 429, rate_limit). Writing it in the conversation instead…`) and asks the conversation itself: it submits the recap rules as a normal turn, the session's own model answers, and when that turn ends the answer is stored, filled or handed off as the flags ask, with the result printed beneath it. A normal turn is retried by Claude Code and waits for a proxy's `retry-after`, which a background request does not, so this gets through an API proxy that refuses background requests. It costs more than Haiku, as the turn reads the whole conversation, and the recap stays in the transcript.
+The recap is written by Haiku in the background. A rate-limited, overloaded or failing API is retried after 1, 2 and 4 seconds. If Haiku still returns an API error, `/handoff` says so (`Haiku could not write the recap (API error 429, rate_limit). A subagent is writing the recap…`) and starts a subagent: a fork of the session, which sees the whole conversation and runs on the session's own model. When the subagent ends, its answer is stored, filled or handed off as the flags ask, and a toast reports the result. The recap stays out of the transcript. A background request is sent once, with no retry, and an API proxy can refuse it every time while subagents and normal turns still get through; this route is for that case. It costs more than Haiku, as the fork reads the whole conversation.
+
+If the subagent cannot start, the conversation writes the recap instead: `/handoff` submits the recap rules as a normal turn, and the result is printed beneath that turn's answer.
 
 ## Settings
 
 The row appears in `/config` under the plugin.
 
-| Row          | Default | What it does                                                                                                                                                                                |
-| ------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Recap writer | `haiku` | Who writes the recap: `haiku` or `conversation`. `conversation` skips Haiku and its retries and asks the conversation at once, for a machine whose API proxy always refuses the Haiku call. |
+| Row          | Default | What it does                                                                                                                                                                                                                                                                                                      |
+| ------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recap writer | `haiku` | Who writes the recap: `haiku`, `subagent` or `conversation`. `subagent` skips Haiku and its retries and starts the subagent at once, for a machine whose API proxy always refuses the Haiku call. `conversation` has the session's own model write the recap as a normal turn, which leaves it in the transcript. |
 
 ## Install
 

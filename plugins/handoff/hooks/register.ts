@@ -206,9 +206,15 @@ const listStoredHandoffs = async (engine: EngineInterface) => {
 type RecapRequest = Extract<HandoffArguments, { focus: string }>;
 
 type RecapBuild =
-  | { recap: string; failure?: undefined; conversationNotice?: undefined }
-  | { failure: string; conversationNotice?: undefined }
-  | { conversationNotice: string; failure?: undefined };
+  | { recap: string; failure?: undefined; delegationPrefix?: undefined }
+  | { failure: string; delegationPrefix?: undefined }
+  | { delegationPrefix: string; failure?: undefined };
+
+type AwaitedRecap = {
+  request: RecapRequest;
+  turnId?: string;
+  agentId?: string;
+};
 
 type RecapStyle = {
   rules: string;
@@ -235,13 +241,18 @@ const buildConversationPrompt = (request: RecapRequest) =>
   `${CONVERSATION_PREAMBLE}\n\n${chooseRecapStyle(request).rules}${describeFocus(request.focus)}`;
 
 const RECAP_MODEL = "haiku";
+const SUBAGENT_WRITER = "subagent";
 const CONVERSATION_WRITER = "conversation";
+const RECAP_AGENT_TYPE = "fork";
+const RECAP_AGENT_DESCRIPTION = "Write the handoff recap";
+const OUTCOME_TOAST_MS = 15000;
+const SUBAGENT_WRITING_MESSAGE = "A subagent is writing the recap…";
 const EMPTY_REPLY_MESSAGE = "Could not build the recap (empty reply).";
 const RECAP_ABOVE_MESSAGE = "The recap is the message above.";
 const WRITING_IN_CONVERSATION_MESSAGE =
   "Writing the recap in the conversation…";
 const describeHaikuRefusal = (apiError: string) =>
-  `Haiku could not write the recap (${apiError}). Writing it in the conversation instead…`;
+  `Haiku could not write the recap (${apiError}). `;
 
 const readStringOption = (options: PluginOptions, key: string) => {
   const optionValue = options[key];
@@ -293,10 +304,42 @@ const askConversationForRecap = (
   );
 };
 
+const delegateRecap = async (
+  engine: EngineInterface,
+  request: RecapRequest,
+  canUseSubagent: boolean
+): Promise<{ awaitedRecap: AwaitedRecap; routeNotice: string }> => {
+  if (canUseSubagent) {
+    const spawnResult = await engine.agent.spawn({
+      prompt: buildConversationPrompt(request),
+      description: RECAP_AGENT_DESCRIPTION,
+      subagentType: RECAP_AGENT_TYPE,
+    });
+    if (spawnResult.deny === undefined) {
+      return {
+        awaitedRecap: { request, agentId: spawnResult.agentId },
+        routeNotice: SUBAGENT_WRITING_MESSAGE,
+      };
+    }
+  }
+  askConversationForRecap(engine, request);
+  return {
+    awaitedRecap: { request },
+    routeNotice: WRITING_IN_CONVERSATION_MESSAGE,
+  };
+};
+
+const isAwaitedTurn = (
+  awaitedRecap: AwaitedRecap,
+  turn: { turnId: string; agentId?: string }
+) =>
+  awaitedRecap.turnId === turn.turnId ||
+  (turn.agentId !== undefined && awaitedRecap.agentId === turn.agentId);
+
 const buildRecap = async (
   engine: EngineInterface,
   request: RecapRequest,
-  isConversationWriter: boolean
+  isHaikuWriter: boolean
 ): Promise<RecapBuild> => {
   const style = chooseRecapStyle(request);
   const recentMessages = await describeRecentMessages(
@@ -304,9 +347,7 @@ const buildRecap = async (
     style.shouldKeepLatestAssistantWhole
   );
   if (!recentMessages) return { failure: NO_RECAP_MESSAGE };
-  if (isConversationWriter) {
-    return { conversationNotice: WRITING_IN_CONVERSATION_MESSAGE };
-  }
+  if (!isHaikuWriter) return { delegationPrefix: "" };
 
   engine.ui.toast("Building recap…");
   const prompt = buildRecapPrompt(
@@ -327,7 +368,7 @@ const buildRecap = async (
   if (!reply.isAnswered) {
     const unansweredReason = describeUnansweredReply(reply);
     return reply.reason === "api-error"
-      ? { conversationNotice: describeHaikuRefusal(unansweredReason) }
+      ? { delegationPrefix: describeHaikuRefusal(unansweredReason) }
       : { failure: `Could not build the recap (${unansweredReason}).` };
   }
 
@@ -456,11 +497,10 @@ const resumePendingHandoff = async (engine: EngineInterface) => {
   if (fillResult.isFilled) await engine.store.delete(PENDING_HANDOFF_KEY);
 };
 
-type AwaitedRecap = { request: RecapRequest; turnId?: string };
-
 export const register: Register = (on, options) => {
-  const isConversationWriter =
-    readStringOption(options, "writer") === CONVERSATION_WRITER;
+  const writer = readStringOption(options, "writer");
+  const isHaikuWriter =
+    writer !== SUBAGENT_WRITER && writer !== CONVERSATION_WRITER;
   let awaitedRecap: AwaitedRecap | undefined;
 
   on("session.start", async ($, e, next) => {
@@ -482,24 +522,24 @@ export const register: Register = (on, options) => {
     if (handoffArguments.action === "resume") {
       return resumeStoredHandoff($, handoffArguments.handoffId);
     }
-    const recapBuild = await buildRecap(
-      $,
-      handoffArguments,
-      isConversationWriter
-    );
-    if (recapBuild.conversationNotice !== undefined) {
-      awaitedRecap = { request: handoffArguments };
-      askConversationForRecap($, handoffArguments);
-      return { text: recapBuild.conversationNotice };
+    const recapBuild = await buildRecap($, handoffArguments, isHaikuWriter);
+    if (recapBuild.delegationPrefix !== undefined) {
+      const delegation = await delegateRecap(
+        $,
+        handoffArguments,
+        writer !== CONVERSATION_WRITER
+      );
+      awaitedRecap = delegation.awaitedRecap;
+      return {
+        text: `${recapBuild.delegationPrefix}${delegation.routeNotice}`,
+      };
     }
     if (recapBuild.failure !== undefined) return { text: recapBuild.failure };
     return deliverRecap($, handoffArguments, recapBuild.recap, false);
   });
 
   on("turn.start", (_, e, next) => {
-    const isRecapTurn =
-      e.agentId === undefined && e.text.includes(CONVERSATION_PREAMBLE);
-    if (awaitedRecap && isRecapTurn) {
+    if (awaitedRecap && e.text.includes(CONVERSATION_PREAMBLE)) {
       awaitedRecap = { ...awaitedRecap, turnId: e.turnId };
     }
     return next(e);
@@ -507,14 +547,18 @@ export const register: Register = (on, options) => {
 
   on("turn.complete", async ($, e, next) => {
     const turnResult = await next(e);
-    if (!awaitedRecap || awaitedRecap.turnId !== e.turnId) return turnResult;
+    if (!awaitedRecap || !isAwaitedTurn(awaitedRecap, e)) return turnResult;
     const { request } = awaitedRecap;
     awaitedRecap = undefined;
 
+    const isConversationTurn = e.agentId === undefined;
     const recap = stripWrappingCodeFence(e.answer);
-    if (!recap) return { ...turnResult, text: EMPTY_REPLY_MESSAGE };
-    const delivery = await deliverRecap($, request, recap, true);
-    return { ...turnResult, text: delivery.text };
+    const outcome = recap
+      ? (await deliverRecap($, request, recap, isConversationTurn)).text
+      : EMPTY_REPLY_MESSAGE;
+    if (isConversationTurn) return { ...turnResult, text: outcome };
+    $.ui.toast(outcome, { timeoutMs: OUTCOME_TOAST_MS });
+    return turnResult;
   });
 
   on("prompt.autocomplete", { token: /^-/ }, async (_, e, next) => {

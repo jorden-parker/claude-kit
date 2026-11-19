@@ -21,6 +21,22 @@ const MODEL_USAGE = {
 const FILLED_MESSAGE =
   "Recap filled into the composer. Edit it or press Enter.";
 
+const REJECTED_REPLY = {
+  isAnswered: false,
+  reason: "api-error",
+  status: 400,
+  error: "invalid_request",
+  usage: MODEL_USAGE,
+} as const;
+
+const RATE_LIMITED_REPLY = {
+  isAnswered: false,
+  reason: "api-error",
+  status: 429,
+  error: "rate_limit",
+  usage: MODEL_USAGE,
+} as const;
+
 const buildSessionMessage = (role: "user" | "assistant", text: string) => ({
   role,
   text,
@@ -247,20 +263,75 @@ testWithSession(
       copies += 1;
       return { value: { isCopied: true } };
     });
-    on("model.complete", () => ({
-      value: {
-        isAnswered: false,
-        reason: "api-error",
-        status: 500,
-        error: "server_error",
-        usage: MODEL_USAGE,
-      },
-    }));
+    const models: string[] = [];
+    on("session.model", () => ({ value: "claude-opus-5-5" }));
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return { value: REJECTED_REPLY };
+    });
 
     const reply = await $.command.run(handoff(""));
 
-    expect(reply.text).toBe("Could not build the recap (api-error).");
+    expect(models).toEqual(["haiku", "claude-opus-5-5"]);
+    expect(reply.text).toBe(
+      "Could not build the recap (API error 400, invalid_request)."
+    );
     expect(copies).toBe(0);
+  }
+);
+
+testWithSession(
+  "an API error on haiku retries on the session's model and --save stores the recap",
+  CONVERSATION,
+  async ($, on) => {
+    mock.clock(on);
+    mockStore(on);
+    const models: string[] = [];
+    on("session.model", () => ({ value: "claude-opus-5-5" }));
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return {
+        value:
+          models.length === 1
+            ? REJECTED_REPLY
+            : { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+      };
+    });
+
+    const reply = await $.command.run(handoff("--save"));
+
+    expect(models).toEqual(["haiku", "claude-opus-5-5"]);
+    expect(reply.text).toContain("Saved as handoff #1.");
+  }
+);
+
+testWithSession(
+  "a rate-limited call is retried on haiku after backing off",
+  CONVERSATION,
+  async ($, on) => {
+    mockStore(on);
+    const models: string[] = [];
+    const waits: number[] = [];
+    on("clock.now", () => ({ value: 0 }));
+    on("clock.sleep", (_, e) => {
+      waits.push(e.ms);
+      return { value: undefined };
+    });
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return {
+        value:
+          models.length < 3
+            ? RATE_LIMITED_REPLY
+            : { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+      };
+    });
+
+    const reply = await $.command.run(handoff("--save"));
+
+    expect(models).toEqual(["haiku", "haiku", "haiku"]);
+    expect(waits).toEqual([1000, 2000]);
+    expect(reply.text).toContain("Saved as handoff #1.");
   }
 );
 

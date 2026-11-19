@@ -1,4 +1,8 @@
-import type { EngineInterface, Register } from "claude-code";
+import type {
+  EngineInterface,
+  ModelCompleteResult,
+  Register,
+} from "claude-code";
 
 const RECAP_RULES = `You write a prompt that a fresh coding-agent session could receive to continue the work in the conversation below.
 The working directory and the conversation are the only sources: invent nothing they do not contain.
@@ -213,6 +217,39 @@ const PER_PLAN_RECAP_STYLE: RecapStyle = {
   timeoutMs: 60000,
 };
 
+const RECAP_MODEL = "haiku";
+const BACKOFF_DELAYS_MS = [1000, 2000, 4000];
+const TRANSIENT_API_ERRORS = new Set([
+  "rate_limit",
+  "overloaded",
+  "server_error",
+]);
+
+const isTransientFailure = (reply: ModelCompleteResult) =>
+  !reply.isAnswered &&
+  reply.reason === "api-error" &&
+  TRANSIENT_API_ERRORS.has(reply.error);
+
+const completeWithBackoff = async (
+  engine: EngineInterface,
+  complete: () => Promise<ModelCompleteResult>
+) => {
+  let reply = await complete();
+  for (const delayMs of BACKOFF_DELAYS_MS) {
+    if (!isTransientFailure(reply)) break;
+    await engine.clock.sleep(delayMs);
+    reply = await complete();
+  }
+  return reply;
+};
+
+const describeUnansweredReply = (
+  reply: Extract<ModelCompleteResult, { isAnswered: false }>
+) =>
+  reply.reason === "api-error"
+    ? `API error ${reply.status ?? "with no response"}, ${reply.error}`
+    : reply.reason;
+
 const buildRecap = async (
   engine: EngineInterface,
   focus: string,
@@ -225,16 +262,31 @@ const buildRecap = async (
   if (!recentMessages) return { failure: NO_RECAP_MESSAGE };
 
   engine.ui.toast("Building recap…");
-  const reply = await engine.model.complete({
-    model: "haiku",
-    system: style.rules,
-    prompt: buildRecapPrompt(await engine.session.cwd(), recentMessages, focus),
-    effort: "low",
-    timeoutMs: style.timeoutMs,
-  });
+  const prompt = buildRecapPrompt(
+    await engine.session.cwd(),
+    recentMessages,
+    focus
+  );
+  const recapWith = (model: string) =>
+    completeWithBackoff(engine, () =>
+      engine.model.complete({
+        model,
+        system: style.rules,
+        prompt,
+        effort: "low",
+        timeoutMs: style.timeoutMs,
+      })
+    );
+  let reply = await recapWith(RECAP_MODEL);
+  if (!reply.isAnswered && reply.reason === "api-error") {
+    const sessionModel = await engine.session.model();
+    if (sessionModel !== RECAP_MODEL) reply = await recapWith(sessionModel);
+  }
 
   if (!reply.isAnswered) {
-    return { failure: `Could not build the recap (${reply.reason}).` };
+    return {
+      failure: `Could not build the recap (${describeUnansweredReply(reply)}).`,
+    };
   }
 
   const recap = stripWrappingCodeFence(reply.text);

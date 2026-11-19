@@ -500,6 +500,40 @@ testWithEmptySession(
   }
 );
 
+test(
+  "a call rate-limited on every model waits less than the hook's 10 second budget",
+  CLOUD_OPTIONS,
+  async ($, on) => {
+    const models: string[] = [];
+    const waits: number[] = [];
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: [] }));
+    on("session.model", () => ({ value: "claude-opus-5-5" }));
+    on("clock.sleep", (_, e) => {
+      waits.push(e.ms);
+      return { value: undefined };
+    });
+    on("model.complete", (_, e) => {
+      models.push(e.model);
+      return { value: RATE_LIMIT_REPLY };
+    });
+
+    const reply = await $.command.run(optimize("fix bug"));
+
+    expect(waits).toEqual([1000, 2000, 4000]);
+    expect(models).toEqual([
+      "sonnet",
+      "sonnet",
+      "sonnet",
+      "sonnet",
+      "claude-opus-5-5",
+    ]);
+    expect(reply.text).toBe(
+      "Could not optimize the prompt (API error 429, rate_limit)."
+    );
+  }
+);
+
 testWithEmptySession(
   "an API error is not retried when the session already runs the configured model",
   async ($, on) => {

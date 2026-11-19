@@ -406,21 +406,21 @@ const rewriteInTheCloud = async (
   system: string,
   prompt: string
 ): Promise<RewriteReply> => {
-  const rewriteWith = (model: string) =>
-    completeWithBackoff(engine, () =>
-      engine.model.complete({
-        model,
-        system,
-        prompt,
-        effort: "low",
-        timeoutMs: 15000,
-      })
-    );
-  let reply = await rewriteWith(optimizerModel);
+  const rewriteOnce = (model: string) =>
+    engine.model.complete({
+      model,
+      system,
+      prompt,
+      effort: "low",
+      timeoutMs: 15000,
+    });
+  let reply = await completeWithBackoff(engine, () =>
+    rewriteOnce(optimizerModel)
+  );
   if (!reply.isAnswered && reply.reason === "api-error") {
     const sessionModel = await engine.session.model();
     if (sessionModel !== optimizerModel) {
-      reply = await rewriteWith(sessionModel);
+      reply = await rewriteOnce(sessionModel);
     }
   }
   return reply.isAnswered

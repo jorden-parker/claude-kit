@@ -10,7 +10,7 @@ import {
 import { join, resolve } from "node:path";
 import type { PluginDescription } from "./host-tools";
 
-type TargetName = "qwen" | "pi" | "opencode";
+type TargetName = "qwen" | "pi" | "opencode" | "crush";
 
 type Target = {
   bundleName: string;
@@ -18,8 +18,15 @@ type Target = {
   startStatement: string;
   commandFolder: string;
   argumentsPlaceholder: string;
-  hostsCommandHooks: boolean;
+  hookBundle?: HookBundle;
   writeManifest: (staged: StagedPlugin) => void;
+};
+
+type HookBundle = {
+  bundleName: string;
+  hooksPath: string;
+  starterName: string;
+  startStatement: string;
 };
 
 type StagedPlugin = {
@@ -38,7 +45,20 @@ const PORTABLE_COMMAND_FOLDER = "portable-commands";
 const PORTABLE_ARGUMENTS_PLACEHOLDER = "{{args}}";
 const ENTRY_NAME = "plugin-host-entry.ts";
 const DESCRIBE_BUNDLE_NAME = "plugin-host-describe.mjs";
-const PI_HOOK_BUNDLE_NAME = "pi-hooks-extension.js";
+const CLAUDE_HOOKS_PATH = join("hooks", "hooks.json");
+const PORTABLE_HOOK_FOLDER = "portable-hooks";
+const PI_HOOK_BUNDLE: HookBundle = {
+  bundleName: "pi-hooks-extension.js",
+  hooksPath: CLAUDE_HOOKS_PATH,
+  starterName: "createPiHookExtension",
+  startStatement: "export default createPiHookExtension(hookHost);",
+};
+const CRUSH_HOOK_BUNDLE: HookBundle = {
+  bundleName: "crush-hooks.mjs",
+  hooksPath: join(PORTABLE_HOOK_FOLDER, "crush.json"),
+  starterName: "runCrushHooks",
+  startStatement: "await runCrushHooks(hookHost);",
+};
 
 const writeJson = (filePath: string, content: unknown) =>
   writeFileSync(filePath, `${JSON.stringify(content, null, 2)}\n`);
@@ -58,7 +78,6 @@ const TARGETS: Record<TargetName, Target> = {
     startStatement: "await serveQwenPlugin(plugin);",
     commandFolder: "commands",
     argumentsPlaceholder: "{{args}}",
-    hostsCommandHooks: false,
     writeManifest: ({ pluginName, stagedFolder, hasBundle, target }) => {
       if (!hasBundle) return;
       writeJson(join(stagedFolder, ".mcp.json"), {
@@ -77,7 +96,7 @@ const TARGETS: Record<TargetName, Target> = {
     startStatement: "export default createPiPluginExtension(plugin);",
     commandFolder: "prompts",
     argumentsPlaceholder: "$ARGUMENTS",
-    hostsCommandHooks: true,
+    hookBundle: PI_HOOK_BUNDLE,
     writeManifest: ({
       pluginName,
       pluginVersion,
@@ -92,7 +111,7 @@ const TARGETS: Record<TargetName, Target> = {
       ]);
       const extensionPaths = [
         ...(hasBundle ? [`./${target.bundleName}`] : []),
-        ...(hasHookBundle ? [`./${PI_HOOK_BUNDLE_NAME}`] : []),
+        ...(hasHookBundle ? [`./${PI_HOOK_BUNDLE.bundleName}`] : []),
       ];
       writeJson(join(stagedFolder, "package.json"), {
         name: `claude-kit-${pluginName}`,
@@ -112,7 +131,15 @@ const TARGETS: Record<TargetName, Target> = {
     startStatement: "await serveOpenCodePlugin(plugin);",
     commandFolder: "commands",
     argumentsPlaceholder: "$ARGUMENTS",
-    hostsCommandHooks: false,
+    writeManifest: () => {},
+  },
+  crush: {
+    bundleName: "plugin-host-server.mjs",
+    starterName: "serveOpenCodePlugin",
+    startStatement: "await serveOpenCodePlugin(plugin);",
+    commandFolder: "commands",
+    argumentsPlaceholder: "$ARGUMENTS",
+    hookBundle: CRUSH_HOOK_BUNDLE,
     writeManifest: () => {},
   },
 };
@@ -167,19 +194,48 @@ const bundlePlugin = (
     bundleName
   );
 
-const bundleHookExtension = (pluginName: string, stagedFolder: string) =>
+const bundleHooks = (
+  pluginName: string,
+  stagedFolder: string,
+  hookBundle: HookBundle
+) =>
   buildEntry(
     pluginName,
     [
       `import { dirname } from "node:path";`,
       `import { fileURLToPath } from "node:url";`,
-      `import { createPiHookExtension } from ${JSON.stringify(join(HOST_FOLDER, "targets.ts"))};`,
-      `export default createPiHookExtension({ pluginRoot: dirname(fileURLToPath(import.meta.url)) });`,
+      `import { ${hookBundle.starterName} } from ${JSON.stringify(join(HOST_FOLDER, "targets.ts"))};`,
+      `const hookHost = { pluginName: ${JSON.stringify(pluginName)}, pluginRoot: dirname(fileURLToPath(import.meta.url)) };`,
+      hookBundle.startStatement,
       "",
     ],
     stagedFolder,
-    PI_HOOK_BUNDLE_NAME
+    hookBundle.bundleName
   );
+
+const findHostedHookBundle = (pluginFolder: string, target: Target) => {
+  const hooksPath = join(pluginFolder, target.hookBundle?.hooksPath ?? "");
+  return target.hookBundle !== undefined &&
+    existsSync(hooksPath) &&
+    readJson(hooksPath).hooks !== undefined
+    ? target.hookBundle
+    : undefined;
+};
+
+const removeUnhostedHooks = (
+  stagedFolder: string,
+  hostedHooksPath: string | undefined
+) => {
+  if (hostedHooksPath !== CLAUDE_HOOKS_PATH) {
+    rmSync(join(stagedFolder, CLAUDE_HOOKS_PATH), { force: true });
+  }
+  if (!hostedHooksPath?.startsWith(PORTABLE_HOOK_FOLDER)) {
+    rmSync(join(stagedFolder, PORTABLE_HOOK_FOLDER), {
+      recursive: true,
+      force: true,
+    });
+  }
+};
 
 const describeStagedPlugin = async (
   pluginName: string,
@@ -268,7 +324,9 @@ const stageCommands = (
 
 const findTarget = (targetName: string) => {
   const target = TARGETS[targetName as TargetName];
-  if (!target) throw new Error(`Unknown target ${targetName}: use qwen, pi or opencode.`);
+  if (!target) {
+    throw new Error(`Unknown target ${targetName}: use ${Object.keys(TARGETS).join(", ")}.`);
+  }
   return target;
 };
 
@@ -286,15 +344,12 @@ const stagePlugin = async (
   const { name: pluginName, version: pluginVersion } = readJson(
     join(pluginFolder, ".claude-plugin", "plugin.json")
   );
-  const hooksFile: HooksFile = readJson(
-    join(pluginFolder, "hooks", "hooks.json")
-  );
+  const hooksFile: HooksFile = readJson(join(pluginFolder, CLAUDE_HOOKS_PATH));
   const [hooksModule] = hooksFile.modules ?? [];
   const hooksModulePath = hooksModule
     ? resolve(pluginFolder, "hooks", hooksModule)
     : undefined;
-  const hasCommandHooks =
-    target.hostsCommandHooks && hooksFile.hooks !== undefined;
+  const hostedHookBundle = findHostedHookBundle(pluginFolder, target);
 
   const description: PluginDescription = hooksModulePath
     ? await describeStagedPlugin(pluginName, hooksModulePath, stagedFolder)
@@ -321,17 +376,16 @@ const stagePlugin = async (
       target.startStatement
     );
   }
-  if (hasCommandHooks) {
-    await bundleHookExtension(pluginName, stagedFolder);
-  } else {
-    rmSync(join(stagedFolder, "hooks", "hooks.json"), { force: true });
+  if (hostedHookBundle) {
+    await bundleHooks(pluginName, stagedFolder, hostedHookBundle);
   }
+  removeUnhostedHooks(stagedFolder, hostedHookBundle?.hooksPath);
   target.writeManifest({
     pluginName,
     pluginVersion,
     stagedFolder,
     hasBundle,
-    hasHookBundle: hasCommandHooks,
+    hasHookBundle: hostedHookBundle !== undefined,
     target,
   });
 };

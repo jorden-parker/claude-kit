@@ -150,3 +150,137 @@ test("opencode: agents become subagents without Claude-only model names and keep
   expect(frontmatter).not.toMatch(/^(name|model|tools):/m);
   expect(frontmatter).toContain("permission:\n  edit: deny\n  bash: deny\n");
 });
+
+const readCrushFile = (targetHome: string, ...pathParts: string[]) =>
+  readFile(join(targetHome, ...pathParts), "utf8");
+
+const runCrushHook = async (
+  installedFolder: string,
+  workingDirectory: string,
+  toolCall: Record<string, unknown>
+) => {
+  const hook = Bun.spawn(["node", join(installedFolder, "crush-hooks.mjs")], {
+    cwd: workingDirectory,
+    stdin: new Blob([
+      JSON.stringify({
+        event: "PreToolUse",
+        session_id: "crush-session",
+        cwd: workingDirectory,
+        ...toolCall,
+      }),
+    ]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return {
+    exitCode: await hook.exited,
+    stdout: await new Response(hook.stdout).text(),
+    stderr: await new Response(hook.stderr).text(),
+  };
+};
+
+test("crush: the MCP server is declared in a crushrc fragment that the user's crushrc sources", async () => {
+  const { targetHome, installedFolder } = await installPlugin("crush", "brainstorm");
+  const fragmentPath = join(targetHome, "claude-kit", "brainstorm.crushrc");
+  const generatedPath = join(targetHome, "claude-kit", "crushrc");
+  expect(await readFile(fragmentPath, "utf8")).toBe(
+    `mcp add brainstorm --command node --args '${join(installedFolder, "plugin-host-server.mjs")}'\n`
+  );
+  expect(await readFile(generatedPath, "utf8")).toBe(`source '${fragmentPath}'\n`);
+  expect(await readCrushFile(targetHome, "crushrc")).toBe(
+    `if [ -f '${generatedPath}' ]; then source '${generatedPath}'; fi\n`
+  );
+});
+
+test("crush: commands and skills are copied and call tools by Crush's names, and agents are left out", async () => {
+  const { targetHome } = await installPlugin("crush", "brainstorm");
+  const commandText = await readCrushFile(targetHome, "commands", "brainstorm.md");
+  expect(commandText).toContain("`mcp_brainstorm_run_brainstorm`");
+  expect(commandText).not.toContain("mcp__");
+  expect(commandText).toContain("<arguments>\n$ARGUMENTS\n</arguments>");
+  expect(
+    await readCrushFile(targetHome, "skills", "build-plans", "SKILL.md")
+  ).not.toContain("mcp__brainstorm__");
+  expect(existsSync(join(targetHome, "agents"))).toBe(false);
+});
+
+test("crush: the hooks of portable-hooks/crush.json run before the tools they match", async () => {
+  const { targetHome, installedFolder, workingDirectory } = await installPlugin(
+    "crush",
+    "guards"
+  );
+  expect(await readCrushFile(targetHome, "claude-kit", "guards.crushrc")).toBe(
+    `hook add PreToolUse --matcher '^(bash|view)$' --command 'node "${join(installedFolder, "crush-hooks.mjs")}"' --name claude-kit-guards --timeout 605\n`
+  );
+
+  const denied = await runCrushHook(installedFolder, workingDirectory, {
+    tool_name: "bash",
+    tool_input: { command: "git log" },
+  });
+  expect(denied.exitCode).toBe(2);
+  expect(denied.stderr).toContain("git log");
+
+  const allowed = await runCrushHook(installedFolder, workingDirectory, {
+    tool_name: "bash",
+    tool_input: { command: "git status --short" },
+  });
+  expect(allowed).toEqual({ exitCode: 0, stdout: "", stderr: "" });
+});
+
+test("crush: a hook's advice reaches the model as context, and multiedit counts as an edit", async () => {
+  const { installedFolder, workingDirectory } = await installPlugin("crush", "tdd");
+  await Bun.write(join(workingDirectory, "package.json"), '{"scripts":{"test":"true"}}');
+  await Bun.write(join(workingDirectory, "source.ts"), "export const one = 1;\n");
+
+  const advised = await runCrushHook(installedFolder, workingDirectory, {
+    tool_name: "multiedit",
+    tool_input: {
+      file_path: join(workingDirectory, "source.ts"),
+      edits: [{ old_string: "1", new_string: "2" }],
+    },
+  });
+
+  expect(advised.exitCode).toBe(0);
+  expect(JSON.parse(advised.stdout).context.join("\n")).toContain("TDD reminder");
+});
+
+test("crush: rules and output styles are added as context files without frontmatter", async () => {
+  const rules = await installPlugin("crush", "tdd");
+  expect(await readCrushFile(rules.targetHome, "claude-kit", "tdd.crushrc")).toContain(
+    `option context-path '${join(rules.installedFolder, "context", "tdd.md")}'\n`
+  );
+
+  const style = await installPlugin("crush", "adhd-style");
+  expect(
+    await readCrushFile(style.targetHome, "claude-kit", "adhd-style.crushrc")
+  ).toBe(
+    `option context-path '${join(style.installedFolder, "output-styles", "adhd.md")}'\n`
+  );
+  expect(
+    await readFile(join(style.installedFolder, "output-styles", "adhd.md"), "utf8")
+  ).not.toStartWith("---");
+});
+
+test("crush: syncing again keeps one source line and the user's own crushrc lines", async () => {
+  const { targetHome, environment } = await installPlugin("crush", "brainstorm");
+  const userConfigPath = join(targetHome, "crushrc");
+  await Bun.write(
+    userConfigPath,
+    `option metrics false\n${await readFile(userConfigPath, "utf8")}`
+  );
+
+  await Bun.spawn([join(import.meta.dirname, "..", "sync-crush"), "handoff"], {
+    env: environment,
+    stdout: "ignore",
+  }).exited;
+
+  const generatedPath = join(targetHome, "claude-kit", "crushrc");
+  expect(await readFile(userConfigPath, "utf8")).toBe(
+    `option metrics false\nif [ -f '${generatedPath}' ]; then source '${generatedPath}'; fi\n`
+  );
+  expect(await readCrushFile(targetHome, "claude-kit", "crushrc")).toBe(
+    ["brainstorm", "handoff"]
+      .map((pluginName) => `source '${join(targetHome, "claude-kit", `${pluginName}.crushrc`)}'\n`)
+      .join("")
+  );
+});

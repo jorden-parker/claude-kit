@@ -8,18 +8,21 @@ const COMMAND_PATH_BY_TARGET: Record<TargetName, string> = {
   qwen: join("commands", "handoff.md"),
   pi: join("prompts", "handoff.md"),
   opencode: join("commands", "handoff.md"),
+  crush: join("commands", "handoff.md"),
 };
 
 const ARGUMENTS_PLACEHOLDER_BY_TARGET: Record<TargetName, string> = {
   qwen: "{{args}}",
   pi: "$ARGUMENTS",
   opencode: "$ARGUMENTS",
+  crush: "$ARGUMENTS",
 };
 
 const RUN_TOOL_NAME_BY_TARGET: Record<TargetName, string> = {
   qwen: "mcp__handoff__run_handoff",
   pi: "mcp__handoff__run_handoff",
   opencode: "handoff_run_handoff",
+  crush: "mcp_handoff_run_handoff",
 };
 
 let handoffsRoot = "";

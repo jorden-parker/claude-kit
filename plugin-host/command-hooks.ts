@@ -14,7 +14,7 @@ export type HookOutcome = {
   stderr: string;
 };
 
-const DEFAULT_TIMEOUT_SECONDS = 60;
+export const DEFAULT_TIMEOUT_SECONDS = 60;
 const PLUGIN_ROOT_PLACEHOLDER = "${CLAUDE_PLUGIN_ROOT}";
 
 export const readHooksFile = (hooksFilePath: string): HooksFile =>

@@ -286,6 +286,13 @@ for (const target of TARGET_NAMES) {
           await readFile(join(plugin.targetHome, "opencode.json"), "utf8")
         );
         expect(Object.keys(openCodeConfig.mcp.servers)).toEqual(["ui-design"]);
+      } else if (target === "crush") {
+        expect(
+          await readFile(
+            join(plugin.targetHome, "claude-kit", "ui-design.crushrc"),
+            "utf8"
+          )
+        ).toStartWith("mcp add ui-design --command node ");
       } else {
         const mcpConfig = JSON.parse(
           await readFile(join(plugin.installedFolder, ".mcp.json"), "utf8")

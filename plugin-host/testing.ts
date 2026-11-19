@@ -12,11 +12,18 @@ import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import type { Outcome } from "./engine";
 
-export const TARGET_NAMES = ["qwen", "pi", "opencode"] as const;
+export const TARGET_NAMES = ["qwen", "pi", "opencode", "crush"] as const;
 export type TargetName = (typeof TARGET_NAMES)[number];
 
+const TOOL_PREFIX_COMPOSERS: Partial<
+  Record<TargetName, (pluginName: string) => string>
+> = {
+  opencode: (pluginName) => `${pluginName}_`,
+  crush: (pluginName) => `mcp_${pluginName}_`,
+};
+
 export const composeToolPrefix = (target: TargetName, pluginName: string) =>
-  target === "opencode" ? `${pluginName}_` : `mcp__${pluginName}__`;
+  TOOL_PREFIX_COMPOSERS[target]?.(pluginName) ?? `mcp__${pluginName}__`;
 
 export type InstallOptions = {
   fakeCommands?: Record<string, string>;
@@ -31,6 +38,7 @@ const BUILT_IN_FAKE_COMMANDS: Record<string, string> = {
   qwen: COPY_INSTALLED_EXTENSION,
   pi: "exit 0",
   opencode: `[ "$1" = "--version" ] && echo "\${FAKE_OPENCODE_VERSION:-2.1.2}"; exit 0`,
+  crush: "exit 0",
   open: LOG_INVOCATION,
   "xdg-open": LOG_INVOCATION,
 };
@@ -73,6 +81,7 @@ export const installPlugin = async (
     QWEN_HOME: targetHome,
     PI_CODING_AGENT_DIR: targetHome,
     OPENCODE_CONFIG_DIR: targetHome,
+    CRUSH_GLOBAL_CONFIG: targetHome,
     FAKE_COMMAND_LOG: commandLogPath,
   };
   await runFile(join(REPOSITORY_ROOT, `sync-${target}`), [pluginName], {

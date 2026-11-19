@@ -35,12 +35,21 @@ uses_command_hooks() {
   [ -f "$1/hooks/hooks.json" ] && jq -e 'has("hooks")' "$1/hooks/hooks.json" >/dev/null
 }
 
+hosts_command_hooks() {
+  case "$1" in
+    pi) uses_command_hooks "$2" ;;
+    crush) [ -f "$2/portable-hooks/crush.json" ] ;;
+    *) return 1 ;;
+  esac
+}
+
 stage_plugin() {
-  local target="$1" plugin_folder="$2" staged_folder="$3"
+  local target="$1" plugin_folder="$2" staged_folder="$3" output_style_exclude=(--exclude output-styles)
+  [ "$target" = crush ] && output_style_exclude=()
   mkdir -p "$staged_folder"
-  rsync -a --delete --exclude node_modules --exclude tests --exclude .git --exclude output-styles \
-    "$plugin_folder/" "$staged_folder/"
-  if uses_module_api "$plugin_folder" || { [ "$target" = pi ] && uses_command_hooks "$plugin_folder"; }; then
+  rsync -a --delete --exclude node_modules --exclude tests --exclude .git \
+    ${output_style_exclude[@]+"${output_style_exclude[@]}"} "$plugin_folder/" "$staged_folder/"
+  if uses_module_api "$plugin_folder" || hosts_command_hooks "$target" "$plugin_folder"; then
     bun "$repository_root/plugin-host/build.ts" "$target" "$plugin_folder" "$staged_folder"
   fi
 }

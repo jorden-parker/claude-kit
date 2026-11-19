@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="Usage: ./sync-crush [plugin...]
+Installs this repo's plugins into Crush: skills, commands, an MCP server for each register.ts plugin's tools, the PreToolUse hooks named in portable-hooks/crush.json, and rules and output styles as context files. Run it again after changes.
+Without arguments it syncs every plugin under plugins/ and removes plugins that left the repo.
+CRUSH_GLOBAL_CONFIG overrides ~/.config/crush."
+
+source "$(dirname "$0")/plugin-host/sync-lib.sh"
+exit_after_usage_request "$usage" "${1:-}"
+
+config_folder="${CRUSH_GLOBAL_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/crush}"
+staging_root="$config_folder/claude-kit"
+installer="$repository_root/plugin-host/crush-install.ts"
+failed_plugins=()
+synced_plugin_names=()
+
+has_crush_loadable_parts() {
+  local part_name
+  uses_module_api "$1" && return 0
+  for part_name in skills commands portable-commands portable-hooks/crush.json context output-styles; do
+    [ -e "$1/$part_name" ] && return 0
+  done
+  return 1
+}
+
+describe_install() {
+  local plugin_folder="$1" staged_folder="$2" description="installed"
+  [ -f "$staged_folder/plugin-host-server.mjs" ] &&
+    description="$description. Its tools run through an MCP server; panes, autocomplete and composer fill stay in Claude Code"
+  if [ -f "$staged_folder/crush-hooks.mjs" ]; then
+    description="$description. Only its hooks in portable-hooks/crush.json run, since Crush has hooks before a tool call and no others"
+  elif uses_command_hooks "$plugin_folder"; then
+    description="$description. Its Claude Code command hooks are not ported, since none of them can run before a tool call"
+  fi
+  [ -d "$plugin_folder/agents" ] &&
+    description="$description. Its agents are left out, since Crush has no user-defined subagents"
+  echo "$description"
+}
+
+sync_plugin() {
+  local plugin_folder="${1%/}" plugin_name staged_folder problem
+  plugin_name="$(read_plugin_name "$plugin_folder")"
+  staged_folder="$staging_root/$plugin_name"
+  synced_plugin_names+=("$plugin_name")
+
+  if ! has_crush_loadable_parts "$plugin_folder"; then
+    bun "$installer" remove "$config_folder" "$plugin_name"
+    echo "$plugin_name: skipped. Nothing in it loads in Crush"
+    return 0
+  fi
+
+  if ! problem="$(stage_plugin crush "$plugin_folder" "$staged_folder" 2>&1 &&
+    bun "$installer" install "$config_folder" "$plugin_name" "$staged_folder" 2>&1)"; then
+    echo "$plugin_name: FAILED to install. $problem"
+    failed_plugins+=("$plugin_name")
+    return 0
+  fi
+  echo "$plugin_name: $(describe_install "$plugin_folder" "$staged_folder")"
+}
+
+remove_plugins_gone_from_repo() {
+  local manifest plugin_name
+  for manifest in "$staging_root"/*.files; do
+    [ -f "$manifest" ] || continue
+    plugin_name="$(basename "$manifest" .files)"
+    [[ " ${synced_plugin_names[*]} " == *" $plugin_name "* ]] && continue
+    bun "$installer" remove "$config_folder" "$plugin_name"
+    echo "$plugin_name: removed, since it is no longer in this repo"
+  done
+}
+
+require_commands crush jq rsync bun node
+mkdir -p "$staging_root"
+select_plugin_folders "$@"
+for plugin_folder in "${plugin_folders[@]}"; do sync_plugin "$plugin_folder"; done
+[ "$#" -eq 0 ] && remove_plugins_gone_from_repo
+report_failed_plugins ${failed_plugins[@]+"${failed_plugins[@]}"}

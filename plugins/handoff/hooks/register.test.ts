@@ -1820,3 +1820,304 @@ test(
     expect(reply.text).toContain("The recap:\n\nResume prompt");
   }
 );
+
+const BOX_PANE = {
+  plugin: "handoff",
+  component: "Pane",
+  requestId: "handoff",
+  surface: "terminal",
+  props: {
+    title: "Handoff",
+    isFocused: true,
+    bodyColumns: 60,
+    placement: "inline",
+    scroll: { offset: 0, bodyRows: 9 },
+    view: {},
+  },
+} as const;
+
+const NOTES_BOX_MESSAGE =
+  "Add notes for the next session in the box, then press Enter. Esc cancels.";
+const RESUME_BOX_MESSAGE =
+  "Pick a handoff in the box and add notes if you like. Esc cancels.";
+
+const placeBoxPane = (on: On, isPlaced = true) => {
+  const paneCalls: string[] = [];
+  on("ui.open", (_, e) => {
+    paneCalls.push(`open:${e.title}`);
+    return {
+      value: isPlaced
+        ? { isPlaced: true as const }
+        : { isPlaced: false as const, reason: "no-surface" as const },
+    };
+  });
+  on("ui.close", () => {
+    paneCalls.push("close");
+    return { value: undefined };
+  });
+  return paneCalls;
+};
+
+testWithSession(
+  "new with no focus opens the notes box, then hands off with the notes added",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    const toasts = collectToasts(on);
+    const paneCalls = placeBoxPane(on);
+    let modelCalls = 0;
+    on("model.complete", () => {
+      modelCalls += 1;
+      return {
+        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+      };
+    });
+    const handoffSteps = collectHandoffSteps(on);
+
+    const reply = await $.command.run(handoff("new"));
+
+    expect(reply.text).toBe(NOTES_BOX_MESSAGE);
+    expect(paneCalls).toEqual(["open:Handoff notes"]);
+    expect(modelCalls).toBe(0);
+
+    const box = await $.ui.mount(BOX_PANE);
+    await box.input({ key: "notes", text: " start with the failing test \n" });
+    await clock.settle();
+
+    expect(paneCalls).toEqual(["open:Handoff notes", "close"]);
+    expect(handoffSteps).toEqual([
+      "clear",
+      "submit:Resume prompt\n\nExtra context from the user: start with the failing test",
+    ]);
+    expect(handoffFiles.get(handoffPath(1, "resume-prompt"))).toContain(
+      "Extra context from the user: start with the failing test"
+    );
+    expect(toasts).toEqual(["Building recap…", HANDING_OFF_MESSAGE]);
+  }
+);
+
+testWithSession(
+  "pressing Enter on an empty notes box hands off without notes",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    placeBoxPane(on);
+    answerRecap(on);
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("new"));
+    const box = await $.ui.mount(BOX_PANE);
+    await box.input({ key: "notes", text: "" });
+    await clock.settle();
+
+    expect(handoffSteps).toEqual(["clear", "submit:Resume prompt"]);
+  }
+);
+
+testWithSession(
+  "the box's button hands off with the notes typed so far",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    placeBoxPane(on);
+    answerRecap(on);
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("new"));
+    const box = await $.ui.mount(BOX_PANE);
+    await box.input({ key: "notes", text: "ship it", kind: "change" });
+    await box.press({ key: "continue" });
+    await clock.settle();
+
+    expect(handoffSteps).toEqual([
+      "clear",
+      "submit:Resume prompt\n\nExtra context from the user: ship it",
+    ]);
+  }
+);
+
+testWithSession(
+  "save with no focus takes notes in the box and writes them into the file",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    const toasts = collectToasts(on);
+    placeBoxPane(on);
+    answerRecap(on);
+
+    const reply = await $.command.run(handoff("save"));
+    expect(reply.text).toBe(NOTES_BOX_MESSAGE);
+    const box = await $.ui.mount(BOX_PANE);
+    await box.input({ key: "notes", text: "the deploy is on Monday" });
+
+    expect(handoffFiles.get(handoffPath(1, "resume-prompt"))).toBe(
+      handoffText(
+        "Resume prompt\n\nExtra context from the user: the deploy is on Monday"
+      )
+    );
+    expect(toasts).toEqual([
+      "Building recap…",
+      `Saved as handoff #1 in ${handoffPath(1, "resume-prompt")}. Run /handoff resume 1 to continue it in a new session.`,
+    ]);
+  }
+);
+
+testWithSession(
+  "a focus after new or save skips the box",
+  CONVERSATION,
+  async ($, on) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    const paneCalls = placeBoxPane(on);
+    answerRecap(on);
+
+    const reply = await $.command.run(handoff("save the auth change"));
+
+    expect(reply.text).toContain("Saved as handoff #1");
+    expect(paneCalls).toEqual([]);
+  }
+);
+
+testWithSession(
+  "the box's Cancel button closes it and cancels the handoff",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    const toasts = collectToasts(on);
+    const paneCalls = placeBoxPane(on);
+
+    await $.command.run(handoff("save"));
+    const box = await $.ui.mount(BOX_PANE);
+    await box.press({ key: "cancel" });
+
+    expect(paneCalls).toEqual(["open:Handoff notes", "close"]);
+    expect(toasts).toEqual(["Handoff cancelled."]);
+    expect(handoffFiles.size).toBe(0);
+  }
+);
+
+testWithSession(
+  "a box that cannot be placed is closed and the handoff runs at once",
+  CONVERSATION,
+  async ($, on) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    const paneCalls = placeBoxPane(on, false);
+    answerRecap(on);
+    const handoffSteps = collectHandoffSteps(on);
+
+    const reply = await $.command.run(handoff("new"));
+    await clock.settle();
+
+    expect(reply.text).toBe(HANDING_OFF_MESSAGE);
+    expect(paneCalls).toEqual(["open:Handoff notes", "close"]);
+    expect(handoffSteps).toEqual(["clear", "submit:Resume prompt"]);
+  }
+);
+
+testWithSession(
+  "resume with nothing after it opens a picker, and a pick resumes that handoff with the notes",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    const paneCalls = placeBoxPane(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    seedHandoff(handoffFiles, 2, "Second recap");
+    const handoffSteps = collectHandoffSteps(on);
+
+    const reply = await $.command.run(handoff("resume"));
+    expect(reply.text).toBe(RESUME_BOX_MESSAGE);
+    expect(paneCalls).toEqual(["open:Resume a handoff"]);
+    expect(handoffSteps).toEqual([]);
+
+    const box = await $.ui.mount(BOX_PANE);
+    const picker = await box.find({ type: "Select" });
+    expect(picker?.props.options).toEqual([
+      { value: "2", label: "#2  2026-11-09 14:32  Second recap" },
+      { value: "1", label: "#1  2026-11-09 14:32  First recap" },
+    ]);
+    await box.input({ key: "notes", text: "skip the docs", kind: "change" });
+    await box.select({ key: "handoff", value: "1" });
+    await clock.settle();
+
+    expect(handoffSteps).toEqual([
+      "clear",
+      "submit:First recap\n\nExtra context from the user: skip the docs",
+    ]);
+  }
+);
+
+testWithSession(
+  "Enter in the picker's notes resumes the latest handoff",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    placeBoxPane(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    seedHandoff(handoffFiles, 2, "Second recap");
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("resume"));
+    const box = await $.ui.mount(BOX_PANE);
+    await box.input({ key: "notes", text: "" });
+    await clock.settle();
+
+    expect(handoffSteps).toEqual(["clear", "submit:Second recap"]);
+  }
+);
+
+testWithSession(
+  "resume with nothing saved says so without opening the picker",
+  [],
+  async ($, on) => {
+    const paneCalls = placeBoxPane(on);
+
+    const reply = await $.command.run(handoff("resume"));
+
+    expect(reply.text).toBe(
+      "No handoffs for repo yet. Run /handoff to create one."
+    );
+    expect(paneCalls).toEqual([]);
+  }
+);
+
+testWithSession(
+  "the box draws its field, picker and buttons on every surface",
+  [],
+  async ($, on, handoffFiles) => {
+    placeBoxPane(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    await $.command.run(handoff("resume"));
+
+    for (const surface of [
+      "terminal",
+      "desktop",
+      "vscode",
+      "mobile",
+    ] as const) {
+      const box = await $.ui.mount({ ...BOX_PANE, surface });
+
+      expect(await box.find({ type: "Input" })).toBeDefined();
+      expect(await box.find({ type: "Select" })).toBeDefined();
+      expect(await box.findAll({ type: "Button" })).toHaveLength(2);
+      await box.unmount();
+    }
+  }
+);
+
+testWithSession(
+  "the box drawn with nothing pending shows a hint instead of a field",
+  [],
+  async ($) => {
+    const box = await $.ui.mount(BOX_PANE);
+
+    expect(await box.find({ type: "Input" })).toBeUndefined();
+    expect(
+      (await box.find({ type: "Text", text: /\/handoff new/ }))?.text
+    ).toBe("Run /handoff new, save or resume to use this box.");
+  }
+);

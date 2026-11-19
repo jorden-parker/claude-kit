@@ -3,6 +3,7 @@ import type {
   ModelCompleteResult,
   PluginOptions,
   Register,
+  RenderElement,
 } from "claude-code";
 
 const RECAP_RULES = `You write a prompt that a fresh coding-agent session could receive to continue the work in the conversation below.
@@ -70,6 +71,45 @@ const describeResumeCommand = (handoffId: number) =>
   `Run /handoff resume ${handoffId} to continue it in a new session.`;
 
 type HandoffFile = { handoffId: number; path: string };
+
+const BOX_PANE_ID = "handoff";
+const BOX_ROWS = 9;
+const NOTES_INPUT_ROWS = 3;
+const NOTES_BOX_TITLE = "Handoff notes";
+const RESUME_BOX_TITLE = "Resume a handoff";
+const NOTES_BOX_MESSAGE =
+  "Add notes for the next session in the box, then press Enter. Esc cancels.";
+const RESUME_BOX_MESSAGE =
+  "Pick a handoff in the box and add notes if you like. Esc cancels.";
+const CANCELLED_MESSAGE = "Handoff cancelled.";
+const CLOSED_BOX_HINT = "Run /handoff new, save or resume to use this box.";
+
+type SingleRecapRequest = Extract<HandoffArguments, { action: "recap" }>;
+
+type HandoffBox = { notes: string } & (
+  | { kind: "notes"; request: SingleRecapRequest }
+  | {
+      kind: "resume";
+      chosenHandoffId: number;
+      handoffOptions: { value: string; label: string }[];
+    }
+);
+
+const BOX_WORDING = {
+  notes: {
+    heading: "Notes for the next session",
+    placeholder: "Optional: anything the recap should carry along",
+    submitLabel: "hand off",
+    keysHint: "Enter hands off · Tab moves · Esc cancels",
+  },
+  resume: {
+    heading: "Resume a handoff",
+    placeholder: "Optional: extra context for the new session",
+    submitLabel: "resume",
+    keysHint:
+      "Enter resumes the latest · Tab to the list to pick another · Esc cancels",
+  },
+};
 
 type HandoffDraft = {
   recap: string;
@@ -141,6 +181,7 @@ type HandoffArguments =
       isNewSession: boolean;
       isSaveOnly: boolean;
       focus: string;
+      notes: string;
     };
 
 const parseHandoffArguments = (args: string): HandoffArguments => {
@@ -166,6 +207,7 @@ const parseHandoffArguments = (args: string): HandoffArguments => {
     isNewSession: subcommand === "new",
     isSaveOnly: subcommand === "save",
     focus: isRecapSubcommand ? laterWords : args.trim(),
+    notes: "",
   };
 };
 
@@ -315,6 +357,13 @@ const fileLegacyHandoffs = async (engine: EngineInterface) => {
   }
 };
 
+const describeListedHandoff = (handoff: {
+  handoffId: number;
+  created: string;
+  recap: string;
+}) =>
+  `#${handoff.handoffId}  ${handoff.created.slice(0, 16).replace("T", " ")}  ${summarizeRecap(handoff.recap)}`;
+
 const listProjectHandoffs = async (engine: EngineInterface) => {
   const { projectName, folderPath } = await findHandoffFolder(
     engine,
@@ -333,10 +382,7 @@ const listProjectHandoffs = async (engine: EngineInterface) => {
   return {
     text: [
       `Handoffs for ${projectName}, newest first:`,
-      ...shownHandoffs.map(
-        (handoff) =>
-          `#${handoff.handoffId}  ${handoff.created.slice(0, 16).replace("T", " ")}  ${summarizeRecap(handoff.recap)}`
-      ),
+      ...shownHandoffs.map(describeListedHandoff),
       ...(olderCount > 0 ? [`…and ${olderCount} older.`] : []),
       "",
       RESUME_HINT,
@@ -650,9 +696,10 @@ const deliverRecap = async (
   if (request.action === "each") {
     return savePlanHandoffs(engine, recapText, request.focus);
   }
+  const recapWithNotes = appendExtraContext(recapText, request.notes);
   const saveOutcome = await saveSessionHandoff(
     engine,
-    recapText,
+    recapWithNotes,
     request.focus
   ).catch(describeError);
   const saveFailure =
@@ -663,15 +710,59 @@ const deliverRecap = async (
     return {
       text:
         typeof saveOutcome === "string"
-          ? `${saveFailure} The recap:\n\n${recapText}`
+          ? `${saveFailure} The recap:\n\n${recapWithNotes}`
           : `Saved as handoff #${saveOutcome.handoffId} in ${saveOutcome.path}. ${describeResumeCommand(saveOutcome.handoffId)}`,
     };
   }
   if (saveFailure) engine.ui.toast(saveFailure);
   if (!request.isNewSession) {
-    return offerRecapInThisSession(engine, recapText, isRecapOnScreen);
+    return offerRecapInThisSession(engine, recapWithNotes, isRecapOnScreen);
   }
-  return startNewSessionWithRecap(engine, recapText);
+  return startNewSessionWithRecap(engine, recapWithNotes);
+};
+
+const buildResumeBox = async (
+  engine: EngineInterface
+): Promise<HandoffBox | undefined> => {
+  const { folderPath } = await findHandoffFolder(
+    engine,
+    await engine.session.cwd()
+  );
+  const handoffFiles = await listHandoffFiles(engine, folderPath);
+  const [latestFile] = handoffFiles;
+  if (!latestFile) return undefined;
+  const listedHandoffs = await Promise.all(
+    handoffFiles
+      .slice(0, LISTED_HANDOFF_LIMIT)
+      .map((file) => readHandoff(engine, file))
+  );
+  return {
+    kind: "resume",
+    notes: "",
+    chosenHandoffId: latestFile.handoffId,
+    handoffOptions: listedHandoffs.map((handoff) => ({
+      value: String(handoff.handoffId),
+      label: describeListedHandoff(handoff),
+    })),
+  };
+};
+
+const placeBoxPane = async (engine: EngineInterface, title: string) => {
+  try {
+    const openResult = await engine.ui.open({
+      id: BOX_PANE_ID,
+      title,
+      focus: true,
+      closeOnEscape: true,
+      holdToasts: true,
+      rows: BOX_ROWS,
+    });
+    if (openResult?.isPlaced) return true;
+    if (openResult) await engine.ui.close({ id: BOX_PANE_ID });
+    return false;
+  } catch {
+    return false;
+  }
 };
 
 const appendExtraContext = (recap: string, extraContext: string) =>
@@ -735,11 +826,75 @@ const resumePendingHandoff = async (engine: EngineInterface) => {
   if (fillResult.isFilled) await engine.store.delete(PENDING_HANDOFF_KEY);
 };
 
+const cancelBox = async (
+  engine: EngineInterface,
+  progress: HandoffProgress
+) => {
+  progress.openBox = undefined;
+  await engine.ui.close({ id: BOX_PANE_ID });
+  engine.ui.toast(CANCELLED_MESSAGE);
+};
+
+type HandoffProgress = {
+  writer: string;
+  awaitedRecap: AwaitedRecap | undefined;
+  recapAgentId: string | undefined;
+  openBox: HandoffBox | undefined;
+};
+
+const runRecap = async (
+  engine: EngineInterface,
+  progress: HandoffProgress,
+  request: RecapRequest
+) => {
+  const recapStart = await startRecap(engine, request, progress.writer);
+  if (recapStart.delegation !== undefined) {
+    const { delegation, delegationPrefix } = recapStart;
+    progress.awaitedRecap = delegation.awaitedRecap;
+    progress.recapAgentId = delegation.awaitedRecap.agentId;
+    engine.ui.status(delegation.routeNotice);
+    return { text: `${delegationPrefix}${delegation.routeNotice}` };
+  }
+  if (recapStart.failure !== undefined) return { text: recapStart.failure };
+  return deliverRecap(engine, request, recapStart.recap, false);
+};
+
+const showBox = async (
+  engine: EngineInterface,
+  progress: HandoffProgress,
+  title: string,
+  box: HandoffBox
+) => {
+  progress.openBox = box;
+  const isBoxPlaced = await placeBoxPane(engine, title);
+  if (!isBoxPlaced) progress.openBox = undefined;
+  return isBoxPlaced;
+};
+
+const finishBox = async (
+  engine: EngineInterface,
+  progress: HandoffProgress
+) => {
+  const box = progress.openBox;
+  if (!box) return;
+  progress.openBox = undefined;
+  await engine.ui.close({ id: BOX_PANE_ID });
+  const notes = box.notes.trim();
+  const outcome =
+    box.kind === "resume"
+      ? await resumeSavedHandoff(engine, box.chosenHandoffId, notes)
+      : await runRecap(engine, progress, { ...box.request, notes });
+  engine.ui.toast(outcome.text, { timeoutMs: OUTCOME_TOAST_MS });
+};
+
 export const register: Register = (on, options) => {
-  const writer = readStringOption(options, "writer");
-  let awaitedRecap: AwaitedRecap | undefined;
+  const progress: HandoffProgress = {
+    writer: readStringOption(options, "writer"),
+    awaitedRecap: undefined,
+    recapAgentId: undefined,
+    openBox: undefined,
+  };
   let hasPinnedOutcome = false;
-  let recapAgentId: string | undefined;
 
   on("session.start", async ($, e, next) => {
     await $.command.register({
@@ -760,37 +915,117 @@ export const register: Register = (on, options) => {
     await fileLegacyHandoffs($);
     if (handoffArguments.action === "list") return listProjectHandoffs($);
     if (handoffArguments.action === "resume") {
+      const isBareResume =
+        handoffArguments.handoffId === undefined &&
+        !handoffArguments.extraContext;
+      const resumeBox = isBareResume ? await buildResumeBox($) : undefined;
+      if (
+        resumeBox &&
+        (await showBox($, progress, RESUME_BOX_TITLE, resumeBox))
+      ) {
+        return { text: RESUME_BOX_MESSAGE };
+      }
       return resumeSavedHandoff(
         $,
         handoffArguments.handoffId,
         handoffArguments.extraContext
       );
     }
-    const recapStart = await startRecap($, handoffArguments, writer);
-    if (recapStart.delegation !== undefined) {
-      const { delegation, delegationPrefix } = recapStart;
-      awaitedRecap = delegation.awaitedRecap;
-      recapAgentId = delegation.awaitedRecap.agentId;
-      $.ui.status(delegation.routeNotice);
-      return { text: `${delegationPrefix}${delegation.routeNotice}` };
+    const isBareRecapAction =
+      handoffArguments.action === "recap" &&
+      (handoffArguments.isNewSession || handoffArguments.isSaveOnly) &&
+      !handoffArguments.focus;
+    if (
+      isBareRecapAction &&
+      (await showBox($, progress, NOTES_BOX_TITLE, {
+        kind: "notes",
+        notes: "",
+        request: handoffArguments,
+      }))
+    ) {
+      return { text: NOTES_BOX_MESSAGE };
     }
-    if (recapStart.failure !== undefined) return { text: recapStart.failure };
-    return deliverRecap($, handoffArguments, recapStart.recap, false);
+    return runRecap($, progress, handoffArguments);
+  });
+
+  on("ui.render", { component: "Pane", requestId: BOX_PANE_ID }, ($, e) => {
+    const { Box, Text, Input, Select, Button } = $.ui.resolve(e);
+    const box = progress.openBox;
+    if (!box)
+      return h(Text, { dimColor: true }, CLOSED_BOX_HINT) as RenderElement;
+    const wording = BOX_WORDING[box.kind];
+    return h(
+      Box,
+      { flexDirection: "column", gap: 1 },
+      h(Text, { bold: true }, wording.heading),
+      h(Input, {
+        key: "notes",
+        placeholder: wording.placeholder,
+        submitLabel: wording.submitLabel,
+        rows: NOTES_INPUT_ROWS,
+        autoFocus: true,
+        onInput: (typedNotes: string) => {
+          box.notes = typedNotes;
+        },
+        onSubmit: (typedNotes: string) => {
+          box.notes = typedNotes;
+          return finishBox($, progress);
+        },
+      }),
+      box.kind === "resume"
+        ? h(Select, {
+            key: "handoff",
+            label: "Handoff",
+            options: box.handoffOptions,
+            value: String(box.chosenHandoffId),
+            onSelect: (chosenValue: string) => {
+              box.chosenHandoffId = Number(chosenValue);
+              return finishBox($, progress);
+            },
+          })
+        : null,
+      h(
+        Box,
+        { flexDirection: "row", gap: 2 },
+        h(
+          Button,
+          {
+            key: "continue",
+            variant: "primary",
+            onPress: () => finishBox($, progress),
+          },
+          box.kind === "resume" ? "Resume" : "Hand off"
+        ),
+        h(
+          Button,
+          {
+            key: "cancel",
+            role: "dismiss",
+            onPress: () => cancelBox($, progress),
+          },
+          "Cancel"
+        )
+      ),
+      h(Text, { dimColor: true }, wording.keysHint)
+    ) as RenderElement;
   });
 
   on("prompt.submit", (_, e, next) => {
     const isRecapAgentReport =
       e.origin?.kind === "peer" &&
-      recapAgentId !== undefined &&
-      e.text.includes(`<agent-message from="${recapAgentId}">`);
+      progress.recapAgentId !== undefined &&
+      e.text.includes(`<agent-message from="${progress.recapAgentId}">`);
     if (!isRecapAgentReport) return next(e);
-    recapAgentId = undefined;
+    progress.recapAgentId = undefined;
     return { drop: RECAP_AGENT_DONE_NOTICE };
   });
 
   on("turn.start", ($, e, next) => {
-    if (awaitedRecap && e.text.includes(awaitedRecap.promptText)) {
-      awaitedRecap = { ...awaitedRecap, turnId: e.turnId };
+    if (
+      progress.awaitedRecap &&
+      e.text.includes(progress.awaitedRecap.promptText)
+    ) {
+      progress.awaitedRecap = { ...progress.awaitedRecap, turnId: e.turnId };
     }
     if (hasPinnedOutcome && e.agentId === undefined) {
       $.ui.status(undefined);
@@ -801,16 +1036,17 @@ export const register: Register = (on, options) => {
 
   on("turn.complete", async ($, e, next) => {
     const turnResult = await next(e);
-    if (!awaitedRecap || !isAwaitedTurn(awaitedRecap, e)) return turnResult;
-    const { request } = awaitedRecap;
-    awaitedRecap = undefined;
+    if (!progress.awaitedRecap || !isAwaitedTurn(progress.awaitedRecap, e))
+      return turnResult;
+    const { request } = progress.awaitedRecap;
+    progress.awaitedRecap = undefined;
 
     const isConversationTurn = e.agentId === undefined;
-    recapAgentId = e.agentId;
+    progress.recapAgentId = e.agentId;
     const recap = stripWrappingCodeFence(e.answer);
     if (!recap && !isConversationTurn) {
       const delegation = askConversationForRecap($, request);
-      awaitedRecap = delegation.awaitedRecap;
+      progress.awaitedRecap = delegation.awaitedRecap;
       $.ui.status(delegation.routeNotice);
       return turnResult;
     }

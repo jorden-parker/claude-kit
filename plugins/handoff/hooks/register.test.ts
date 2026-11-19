@@ -515,6 +515,65 @@ testWithSubagentWriter(
   }
 );
 
+const collectStatuses = (on: On) => {
+  const statuses: (string | undefined)[] = [];
+  on("ui.status", (_, e) => {
+    statuses.push(e.text);
+    return { value: undefined };
+  });
+  return statuses;
+};
+
+testWithSubagentWriter(
+  "the status line says a subagent is writing, then pins the outcome until the next prompt",
+  async ($, on) => {
+    mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    ignoreToasts(on);
+    const spawnedAgents = collectSpawnedAgents(on);
+    const statuses = collectStatuses(on);
+
+    await $.command.run(handoff("--save"));
+    expect(statuses).toEqual([SUBAGENT_WRITING_MESSAGE]);
+
+    await endAgentTurn(
+      $,
+      RECAP_AGENT_ID,
+      spawnedAgents[0]?.prompt ?? "",
+      "Resume prompt"
+    );
+    expect(statuses).toEqual([
+      SUBAGENT_WRITING_MESSAGE,
+      SAVED_FIRST_HANDOFF_MESSAGE,
+    ]);
+
+    await $.turn.start({ text: "Next task", turnId: "turn-next" });
+    expect(statuses).toEqual([
+      SUBAGENT_WRITING_MESSAGE,
+      SAVED_FIRST_HANDOFF_MESSAGE,
+      undefined,
+    ]);
+  }
+);
+
+testWithConversationWriter(
+  "the status line says the conversation is writing and clears when that turn ends",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    mockStore(on);
+    answerTurns(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    const statuses = collectStatuses(on);
+
+    await $.command.run(handoff("--save"));
+    await clock.settle();
+    await endRecapTurn($, submittedPrompts[0] ?? "", "Resume prompt");
+
+    expect(statuses).toEqual([WRITING_IN_CONVERSATION_MESSAGE, undefined]);
+  }
+);
+
 testWithSession(
   "a call rate-limited on every haiku try waits 7 seconds, under the hook's 10 second budget",
   CONVERSATION,

@@ -502,6 +502,7 @@ export const register: Register = (on, options) => {
   const isHaikuWriter =
     writer !== SUBAGENT_WRITER && writer !== CONVERSATION_WRITER;
   let awaitedRecap: AwaitedRecap | undefined;
+  let hasPinnedOutcome = false;
 
   on("session.start", async ($, e, next) => {
     await $.command.register({
@@ -530,6 +531,7 @@ export const register: Register = (on, options) => {
         writer !== CONVERSATION_WRITER
       );
       awaitedRecap = delegation.awaitedRecap;
+      $.ui.status(delegation.routeNotice);
       return {
         text: `${recapBuild.delegationPrefix}${delegation.routeNotice}`,
       };
@@ -538,9 +540,13 @@ export const register: Register = (on, options) => {
     return deliverRecap($, handoffArguments, recapBuild.recap, false);
   });
 
-  on("turn.start", (_, e, next) => {
+  on("turn.start", ($, e, next) => {
     if (awaitedRecap && e.text.includes(CONVERSATION_PREAMBLE)) {
       awaitedRecap = { ...awaitedRecap, turnId: e.turnId };
+    }
+    if (hasPinnedOutcome && e.agentId === undefined) {
+      $.ui.status(undefined);
+      hasPinnedOutcome = false;
     }
     return next(e);
   });
@@ -556,8 +562,13 @@ export const register: Register = (on, options) => {
     const outcome = recap
       ? (await deliverRecap($, request, recap, isConversationTurn)).text
       : EMPTY_REPLY_MESSAGE;
-    if (isConversationTurn) return { ...turnResult, text: outcome };
+    if (isConversationTurn) {
+      $.ui.status(undefined);
+      return { ...turnResult, text: outcome };
+    }
     $.ui.toast(outcome, { timeoutMs: OUTCOME_TOAST_MS });
+    $.ui.status(outcome);
+    hasPinnedOutcome = true;
     return turnResult;
   });
 

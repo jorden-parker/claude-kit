@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage="Usage: ./sync-opencode [plugin...]
-Installs this repo's plugins into OpenCode: skills, commands, agents, and an MCP server in opencode.json for each register.ts plugin's tools. Run it again after changes.
+Installs this repo's plugins into OpenCode: skills, commands, agents, an MCP server in opencode.json for each register.ts plugin's tools, command hooks as a plugin file (OpenCode 2 and later), and output styles as instructions. Run it again after changes.
 Without arguments it syncs every plugin under plugins/ and removes plugins that left the repo.
 OPENCODE_CONFIG_DIR overrides ~/.config/opencode."
 
@@ -17,15 +17,21 @@ synced_plugin_names=()
 
 has_opencode_loadable_parts() {
   uses_module_api "$1" || [ -d "$1/skills" ] || [ -d "$1/agents" ] ||
-    [ -d "$1/commands" ] || [ -d "$1/portable-commands" ]
+    [ -d "$1/commands" ] || [ -d "$1/portable-commands" ] || [ -d "$1/output-styles" ] ||
+    uses_command_hooks "$1"
 }
 
 describe_install() {
   local plugin_folder="$1" staged_folder="$2" description="installed"
   [ -f "$staged_folder/plugin-host-server.mjs" ] &&
     description="$description. Its tools run through an MCP server; panes, autocomplete and composer fill stay in Claude Code"
-  uses_command_hooks "$plugin_folder" &&
-    description="$description. Its Claude Code command hooks are not ported, since OpenCode runs JavaScript plugins instead"
+  if [ -d "$staged_folder/plugins" ]; then
+    description="$description. Its command hooks run through a plugin file; SubagentStop hooks have no OpenCode event"
+  elif uses_command_hooks "$plugin_folder"; then
+    description="$description. Its command hooks are not ported, since they need OpenCode 2 or later"
+  fi
+  [ -d "$plugin_folder/output-styles" ] &&
+    description="$description. Its output style is always on, listed under instructions"
   echo "$description"
 }
 
@@ -37,11 +43,7 @@ sync_plugin() {
 
   if ! has_opencode_loadable_parts "$plugin_folder"; then
     bun "$installer" remove "$config_folder" "$plugin_name"
-    if uses_command_hooks "$plugin_folder"; then
-      echo "$plugin_name: skipped. Its Claude Code command hooks are not ported, since OpenCode runs JavaScript plugins instead"
-    else
-      echo "$plugin_name: skipped. OpenCode has no output styles"
-    fi
+    echo "$plugin_name: skipped. Nothing in it loads in OpenCode"
     return 0
   fi
 

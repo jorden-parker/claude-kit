@@ -37,7 +37,7 @@ uses_command_hooks() {
 
 hosts_command_hooks() {
   case "$1" in
-    pi) uses_command_hooks "$2" ;;
+    pi | opencode) uses_command_hooks "$2" ;;
     crush) [ -f "$2/portable-hooks/crush.json" ] ;;
     *) return 1 ;;
   esac
@@ -45,7 +45,7 @@ hosts_command_hooks() {
 
 stage_plugin() {
   local target="$1" plugin_folder="$2" staged_folder="$3" output_style_exclude=(--exclude output-styles)
-  [ "$target" = crush ] && output_style_exclude=()
+  case "$target" in crush | opencode) output_style_exclude=() ;; esac
   mkdir -p "$staged_folder"
   rsync -a --delete --exclude node_modules --exclude tests --exclude .git \
     ${output_style_exclude[@]+"${output_style_exclude[@]}"} "$plugin_folder/" "$staged_folder/"

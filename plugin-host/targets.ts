@@ -10,6 +10,7 @@ import {
 } from "./pi-extension";
 
 export { runCrushHooks } from "./crush-hooks";
+export { createOpenCodeHookPlugin } from "./opencode-hooks";
 export { createPiHookExtension } from "./pi-hooks";
 
 type BundledPlugin = Omit<HostedPlugin, "storeFolder">;

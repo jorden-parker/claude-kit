@@ -9,28 +9,11 @@ import {
   toClaudeToolInput,
   toTranscriptLines,
 } from "./pi-hooks";
+import { makeHookPluginRoot } from "./testing";
 
 type PiEventHandler = (event: any, context: any) => any;
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..");
-
-const makePluginRoot = async (
-  hooks: Record<string, unknown>,
-  scripts: Record<string, string> = {}
-) => {
-  const pluginRoot = await mkdtemp(join(tmpdir(), "pi-hooks-plugin-"));
-  await mkdir(join(pluginRoot, "hooks"), { recursive: true });
-  await writeFile(
-    join(pluginRoot, "hooks", "hooks.json"),
-    JSON.stringify({ hooks })
-  );
-  for (const [scriptName, scriptBody] of Object.entries(scripts)) {
-    const scriptPath = join(pluginRoot, "hooks", scriptName);
-    await writeFile(scriptPath, `#!/usr/bin/env bash\n${scriptBody}\n`);
-    await chmod(scriptPath, 0o755);
-  }
-  return pluginRoot;
-};
 
 const hookGroup = (scriptName: string, matcher?: string) => ({
   ...(matcher ? { matcher } : {}),
@@ -88,7 +71,7 @@ const readJsonFile = async (path: string) =>
   JSON.parse(await readFile(path, "utf8"));
 
 test("the bridge registers only the pi events that map to Claude Code hooks", async () => {
-  const pluginRoot = await makePluginRoot({
+  const pluginRoot = await makeHookPluginRoot({
     SessionStart: [hookGroup("noop.sh")],
     PreToolUse: [hookGroup("noop.sh", "Bash")],
     PostToolUse: [hookGroup("noop.sh", "Bash")],
@@ -237,7 +220,7 @@ test("the transcript holds user prompts and Claude Code tool calls, but no tool 
 });
 
 test("SessionStart stdout and additionalContext reach the model once, through before_agent_start", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { SessionStart: [hookGroup("rules.sh"), hookGroup("context.sh")] },
     {
       "rules.sh": `echo "Rules: no comments"`,
@@ -259,7 +242,7 @@ test("SessionStart stdout and additionalContext reach the model once, through be
 });
 
 test("a PreToolUse exit 2 blocks the call, and the hook gets Claude Code's payload", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PreToolUse: [hookGroup("guard.sh", "Bash")] },
     {
       "guard.sh": `cat > "$CLAUDE_PLUGIN_ROOT/seen.json"\necho "Use bun test instead." >&2\nexit 2`,
@@ -285,7 +268,7 @@ test("a PreToolUse exit 2 blocks the call, and the hook gets Claude Code's paylo
 });
 
 test("hooks run with CLAUDE_PLUGIN_ROOT and CLAUDE_PROJECT_DIR set", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PreToolUse: [hookGroup("env.sh", "Bash")] },
     { "env.sh": `printf '%s' "$CLAUDE_PROJECT_DIR" > "$CLAUDE_PLUGIN_ROOT/project-dir.txt"` }
   );
@@ -296,7 +279,7 @@ test("hooks run with CLAUDE_PLUGIN_ROOT and CLAUDE_PROJECT_DIR set", async () =>
 });
 
 test("a hook whose matcher does not match the tool is not run", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PreToolUse: [hookGroup("guard.sh", "Edit|Write")] },
     { "guard.sh": `echo ran > "$CLAUDE_PLUGIN_ROOT/ran.txt"\nexit 2` }
   );
@@ -310,7 +293,7 @@ test("a hook whose matcher does not match the tool is not run", async () => {
 });
 
 test("a PreToolUse permissionDecision of deny blocks the call with its reason", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PreToolUse: [hookGroup("deny.sh", "Bash")] },
     {
       "deny.sh": `echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Not here."}}'`,
@@ -323,7 +306,7 @@ test("a PreToolUse permissionDecision of deny blocks the call with its reason", 
 });
 
 test("PreToolUse additionalContext is appended to that call's result", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PreToolUse: [hookGroup("reminder.sh", "Edit|Write")] },
     {
       "reminder.sh": `echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"TDD reminder: write a failing test."}}'`,
@@ -348,7 +331,7 @@ test("PreToolUse additionalContext is appended to that call's result", async () 
 });
 
 test("PostToolUse updatedToolOutput replaces a bash result's text", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PostToolUse: [hookGroup("trim.sh", "Bash")] },
     {
       "trim.sh": `echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":"short","stderr":""}}}'`,
@@ -364,7 +347,7 @@ test("PostToolUse updatedToolOutput replaces a bash result's text", async () => 
 });
 
 test("a PostToolUse exit 2 feeds its reason back with the result", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PostToolUse: [hookGroup("feedback.sh", "Bash")] },
     { "feedback.sh": `echo "Fix the lint errors first." >&2\nexit 2` }
   );
@@ -383,7 +366,7 @@ test("a PostToolUse exit 2 feeds its reason back with the result", async () => {
 });
 
 test("the bash result reaches PostToolUse with exit_code from pi's failure text", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { PostToolUse: [hookGroup("record.sh", "Bash")] },
     { "record.sh": `cat > "$CLAUDE_PLUGIN_ROOT/post.json"` }
   );
@@ -402,7 +385,7 @@ test("the bash result reaches PostToolUse with exit_code from pi's failure text"
 });
 
 test("a Stop exit 2 asks pi for one more turn, and the follow-up carries stop_hook_active", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { Stop: [hookGroup("gate.sh")] },
     {
       "gate.sh": `input=$(cat)\ncase "$input" in *'"stop_hook_active":true'*) exit 0 ;; esac\necho "Run the tests before finishing." >&2\nexit 2`,
@@ -426,7 +409,7 @@ test("a Stop exit 2 asks pi for one more turn, and the follow-up carries stop_ho
 });
 
 test("an aborted run does not run Stop hooks", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { Stop: [hookGroup("gate.sh")] },
     { "gate.sh": `echo ran > "$CLAUDE_PLUGIN_ROOT/ran.txt"\nexit 2` }
   );
@@ -441,7 +424,7 @@ test("an aborted run does not run Stop hooks", async () => {
 });
 
 test("hooks read a Claude Code-shaped transcript of the current branch", async () => {
-  const pluginRoot = await makePluginRoot(
+  const pluginRoot = await makeHookPluginRoot(
     { Stop: [hookGroup("transcript.sh")] },
     {
       "transcript.sh": `path=$(sed -E 's/.*"transcript_path":"([^"]*)".*/\\1/')\ncp "$path" "$CLAUDE_PLUGIN_ROOT/transcript.jsonl"`,

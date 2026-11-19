@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export type CommandHook = { type: string; command: string; timeout?: number };
 
@@ -150,3 +153,66 @@ export const runCommandHooks = (
       )
     )
   );
+
+type HookEvent = {
+  hooksFile: HooksFile;
+  pluginRoot: string;
+  eventName: string;
+  toolName?: string;
+  sessionId: string;
+  workingDirectory: string;
+  readTranscriptLines: () => string[] | Promise<string[]>;
+  payload: Record<string, unknown>;
+};
+
+export const runEventHooks = async ({
+  hooksFile,
+  pluginRoot,
+  eventName,
+  toolName,
+  sessionId,
+  workingDirectory,
+  readTranscriptLines,
+  payload,
+}: HookEvent): Promise<HookOutcome[]> => {
+  const hookCommands = hookCommandsOf(hooksFile, eventName, toolName);
+  if (hookCommands.length === 0) return [];
+  const transcriptFolder = await mkdtemp(join(tmpdir(), "hooks-transcript-"));
+  try {
+    const transcriptPath = join(transcriptFolder, "transcript.jsonl");
+    const transcriptLines = await readTranscriptLines();
+    await writeFile(
+      transcriptPath,
+      transcriptLines.map((line) => `${line}\n`).join("")
+    );
+    return await runCommandHooks(hookCommands, pluginRoot, workingDirectory, {
+      session_id: sessionId,
+      transcript_path: transcriptPath,
+      cwd: workingDirectory,
+      hook_event_name: eventName,
+      ...payload,
+    });
+  } finally {
+    await rm(transcriptFolder, { recursive: true, force: true });
+  }
+};
+
+export const composeUserTranscriptLine = (messageId: string, content: unknown) =>
+  JSON.stringify({
+    type: "user",
+    uuid: messageId,
+    message: { role: "user", content },
+  });
+
+export const composeToolUseTranscriptLine = (
+  messageId: string,
+  toolUses: { id: string; name: string; input: Record<string, any> }[]
+) =>
+  JSON.stringify({
+    type: "assistant",
+    uuid: messageId,
+    message: {
+      role: "assistant",
+      content: toolUses.map((toolUse) => ({ type: "tool_use", ...toolUse })),
+    },
+  });

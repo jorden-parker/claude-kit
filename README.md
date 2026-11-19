@@ -1,7 +1,8 @@
 # claude-kit
 
 A Claude Code plugin marketplace. Each plugin is one self-contained piece;
-install any of them on its own.
+install any of them on its own. Sync scripts install the same plugins into
+[Qwen Code, pi](#qwen-code-and-pi), [OpenCode](#opencode) and [Crush](#crush).
 
 ## Plugins
 
@@ -173,13 +174,79 @@ user. `./sync-opencode tdd guards` syncs only those. It needs `opencode`, `jq`, 
 - **register.ts plugins** run as an MCP server, built like Qwen Code's and declared in
   `opencode.json` under `mcp.servers` (directly under `mcp` for OpenCode 1.x). The
   store is `~/.config/opencode/claude-kit-store/<plugin>.json`.
-- **Command hooks** (`tdd`, `guards`, `quality-gates`, and `code-style`'s hooks) and
-  **output styles** (`adhd-style`) are not ported and are reported as skipped.
+- **Command hooks** (`tdd`, `guards`, `quality-gates`, and `code-style`'s hooks) run
+  through one plugin file each, `plugins/claude-kit-<plugin>-hooks.js`. This needs
+  OpenCode 2 or later; on 1.x the script reports them as not ported.
+- **Output styles** (`adhd-style`) are listed under `instructions` in `opencode.json`,
+  without their frontmatter. The style is always on; OpenCode cannot switch it.
 - `claude-kit/<plugin>.files` records what each sync wrote. The next sync deletes those
   files first, and a full sync removes plugins that left the repo. A file it did not
   write is never overwritten: that plugin fails until you move the file away.
 - `opencode.jsonc` is never rewritten, since it may hold comments; rename it to
-  `opencode.json` or add the MCP server by hand.
+  `opencode.json` or add the MCP server and instructions by hand.
+
+#### How command hooks run in OpenCode
+
+`plugin-host/opencode-hooks.ts` runs a plugin's unchanged `hooks/hooks.json` command
+hooks inside an OpenCode server plugin. Each hook gets the same stdin JSON and
+environment as in pi, described above.
+
+| Claude Code hook | OpenCode hook | What the bridge does |
+| --- | --- | --- |
+| `SessionStart` | `context`, the first time a session calls the model | stdout and `additionalContext` are added to the system prompt of every model call |
+| `PreToolUse` | `execute.before` | exit 2 or a deny decision fails that call with the reason; `additionalContext` is added to that call's result |
+| `PostToolUse` | `execute.after` | exit 2 or `decision: "block"` feeds the reason back; `updatedToolOutput` replaces the text |
+| `Stop` | `experimental.idle` | exit 2 or a block decision sends the reason as input, and the next stop sets `stop_hook_active` |
+
+- Tool names and inputs take Claude Code's shape: `shell` is `Bash`, `read` is `Read`,
+  `write` is `Write`, `edit` is `Edit` with `old_string`/`new_string`, `subagent` is
+  `Agent`, and `path` becomes an absolute `file_path`. A `patch` call becomes one
+  `Write` for each added file and one `Edit` for each updated file.
+- `transcript_path` is a temporary Claude Code-style JSONL with user prompts and tool
+  calls. It has no tool results, so the `guards` lookup budget never fills there.
+- `SubagentStop` has no OpenCode hook and is skipped. `SessionStart` and `Stop` hooks do
+  not run for a subagent's session. `updatedInput` and `ask` decisions are not reproduced.
+- A mistake inside the bridge is logged and never blocks a tool call.
+- The bridge is written against the OpenCode 2.3.2 source and tested against a stand-in
+  for its plugin API. It has not been run inside OpenCode yet.
+
+### Crush
+
+`./sync-crush` installs the plugins into [Crush](https://github.com/charmbracelet/crush),
+for your user. `./sync-crush tdd guards` syncs only those. It needs `crush`, `jq`,
+`rsync`, `bun` and `node`. `CRUSH_GLOBAL_CONFIG` overrides `~/.config/crush`. The
+generated config was loaded with `crush` 0.96.1.
+
+- **Skills and commands** are copied to `skills/` and `commands/` of the config folder.
+  A command shows in the commands palette as `user:<name>` and asks for `ARGUMENTS`.
+  Claude Code tool names such as `mcp__brainstorm__run_brainstorm` become Crush's
+  `mcp_brainstorm_run_brainstorm`.
+- **register.ts plugins** run as an MCP server, built like Qwen Code's. The store is
+  `~/.config/crush/claude-kit-store/<plugin>.json`.
+- **Rules and output styles** (`context/*.md`, `output-styles/*.md`) are added as
+  context files with `option context-path`, without frontmatter. They are always on.
+- **Agents** are left out, since Crush has no user-defined subagents. `/brainstorm build`,
+  `/small-plans build` and the plan clarity pass cannot delegate there.
+- Each plugin gets one config fragment, `claude-kit/<plugin>.crushrc`, and
+  `claude-kit/crushrc` sources them all. Your own `crushrc` gets one line that sources
+  that file when it exists. Nothing else in `crushrc` or `crush.json` is changed.
+- `claude-kit/<plugin>.files` records the skills and commands each sync wrote, with the
+  same rules as for OpenCode: a file the script did not write is never overwritten.
+
+#### Which hooks run in Crush
+
+Crush runs hooks before a tool call and at no other time. A plugin lists the hooks that
+can run there in `portable-hooks/crush.json`, in the format of `hooks/hooks.json` with
+`PreToolUse` as the only event. `plugin-host/crush-hooks.ts` runs them: `bash` is `Bash`,
+`view` is `Read`, `edit` and `multiedit` are `Edit`, `write` is `Write`. There is no
+`transcript_path`.
+
+| Plugin | Runs in Crush | Stays in Claude Code |
+| --- | --- | --- |
+| `guards` | the Bash, commit and Read guards | output trim, lookup budget, browser check |
+| `quality-gates` | the fallow gate on commit and push | the verification gate at finish |
+| `tdd` | a new implementation file needs a test file written first | recording failing test runs, the green gate at finish |
+| `code-style` | the comment and naming checks, which refuse the edit before it lands | the naming review gate at finish |
 
 ## Design Studio
 
@@ -210,9 +277,9 @@ design-studio/cli.ts "Onboarding screen for a recipe app" --variants 2 --size 9b
 ```
 .claude-plugin/marketplace.json   lists every plugin and its folder
 plugins/<name>/                   one plugin: its own plugin.json, README, package.json and tests
-plugin-host/                      runs register.ts plugins outside Claude Code (engine, MCP server, pi extension, build)
+plugin-host/                      runs register.ts plugins and command hooks outside Claude Code (engine, MCP server, hook bridges, build)
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
-sync-qwen, sync-pi, sync-opencode install the plugins into Qwen Code, pi and OpenCode
+sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
 check                             runs every test suite; --staged runs only staged ones (the pre-commit hook)
 ```
 
@@ -227,6 +294,8 @@ check                             runs every test suite; --staged runs only stag
   then add an entry to `.claude-plugin/marketplace.json` and a row to the
   plugin table at the top. `tests/repository.test.sh` fails when either is
   missing, and when the two copies of `turn-edits-lib.sh` differ.
+- A hook that needs only the tool call, and can run before it, is also listed in
+  `portable-hooks/crush.json`, so `sync-crush` installs it.
 - A command takes plain words (`save`, `plan`), not dashed flags, and
   completes them: a `prompt.autocomplete` hook in `hooks/register.ts` suggests
   each one with a short description, with a test for it. Copy the pattern from

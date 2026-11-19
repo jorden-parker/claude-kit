@@ -151,6 +151,61 @@ test("opencode: agents become subagents without Claude-only model names and keep
   expect(frontmatter).toContain("permission:\n  edit: deny\n  bash: deny\n");
 });
 
+test("opencode: an output style is listed under instructions without its frontmatter", async () => {
+  const { targetHome, installedFolder, environment } = await installPlugin(
+    "opencode",
+    "adhd-style"
+  );
+  const stylePath = join(installedFolder, "output-styles", "adhd.md");
+  expect((await readOpenCodeConfig(targetHome)).instructions).toEqual([stylePath]);
+  expect(await readFile(stylePath, "utf8")).not.toStartWith("---");
+
+  await Bun.spawn([join(import.meta.dirname, "..", "sync-opencode"), "adhd-style"], {
+    env: environment,
+    stdout: "ignore",
+  }).exited;
+  expect((await readOpenCodeConfig(targetHome)).instructions).toEqual([stylePath]);
+});
+
+test("opencode: command hooks are installed as a plugin file that runs them", async () => {
+  const { targetHome, workingDirectory } = await installPlugin("opencode", "guards");
+  const { default: hookPlugin } = await import(
+    join(targetHome, "plugins", "claude-kit-guards-hooks.js")
+  );
+  const toolHooks: Record<string, (event: unknown) => Promise<void>> = {};
+  await hookPlugin.setup({
+    tool: {
+      hook: async (hookName: string, runHook: (event: unknown) => Promise<void>) => {
+        toolHooks[hookName] = runHook;
+      },
+    },
+    session: {
+      hook: async () => {},
+      get: async () => ({ location: { directory: workingDirectory } }),
+      context: async () => [],
+      synthetic: async () => {},
+    },
+  });
+
+  expect(hookPlugin.id).toBe("claude-kit-guards-hooks");
+  await expect(
+    toolHooks["execute.before"]!({
+      tool: "shell",
+      sessionID: "ses_main",
+      id: "call_1",
+      input: { command: "git log" },
+    })
+  ).rejects.toThrow("git log");
+});
+
+test("opencode 1.x: no hook plugin file is installed, since it loads another plugin shape", async () => {
+  const { targetHome } = await installPlugin("opencode", "guards", {
+    fakeCommands: { opencode: `[ "$1" = "--version" ] && echo 1.18.35; exit 0` },
+  });
+  expect(existsSync(join(targetHome, "plugins"))).toBe(false);
+  expect(existsSync(join(targetHome, "agents", "context-scout.md"))).toBe(true);
+});
+
 const readCrushFile = (targetHome: string, ...pathParts: string[]) =>
   readFile(join(targetHome, ...pathParts), "utf8");
 
@@ -159,7 +214,7 @@ const runCrushHook = async (
   workingDirectory: string,
   toolCall: Record<string, unknown>
 ) => {
-  const hook = Bun.spawn(["node", join(installedFolder, "crush-hooks.mjs")], {
+  const hookProcess = Bun.spawn(["node", join(installedFolder, "crush-hooks.mjs")], {
     cwd: workingDirectory,
     stdin: new Blob([
       JSON.stringify({
@@ -173,9 +228,9 @@ const runCrushHook = async (
     stderr: "pipe",
   });
   return {
-    exitCode: await hook.exited,
-    stdout: await new Response(hook.stdout).text(),
-    stderr: await new Response(hook.stderr).text(),
+    exitCode: await hookProcess.exited,
+    stdout: await new Response(hookProcess.stdout).text(),
+    stderr: await new Response(hookProcess.stderr).text(),
   };
 };
 
@@ -245,19 +300,21 @@ test("crush: a hook's advice reaches the model as context, and multiedit counts 
 });
 
 test("crush: rules and output styles are added as context files without frontmatter", async () => {
-  const rules = await installPlugin("crush", "tdd");
-  expect(await readCrushFile(rules.targetHome, "claude-kit", "tdd.crushrc")).toContain(
-    `option context-path '${join(rules.installedFolder, "context", "tdd.md")}'\n`
+  const rulesPlugin = await installPlugin("crush", "tdd");
+  expect(
+    await readCrushFile(rulesPlugin.targetHome, "claude-kit", "tdd.crushrc")
+  ).toContain(
+    `option context-path '${join(rulesPlugin.installedFolder, "context", "tdd.md")}'\n`
   );
 
-  const style = await installPlugin("crush", "adhd-style");
+  const stylePlugin = await installPlugin("crush", "adhd-style");
   expect(
-    await readCrushFile(style.targetHome, "claude-kit", "adhd-style.crushrc")
+    await readCrushFile(stylePlugin.targetHome, "claude-kit", "adhd-style.crushrc")
   ).toBe(
-    `option context-path '${join(style.installedFolder, "output-styles", "adhd.md")}'\n`
+    `option context-path '${join(stylePlugin.installedFolder, "output-styles", "adhd.md")}'\n`
   );
   expect(
-    await readFile(join(style.installedFolder, "output-styles", "adhd.md"), "utf8")
+    await readFile(join(stylePlugin.installedFolder, "output-styles", "adhd.md"), "utf8")
   ).not.toStartWith("---");
 });
 

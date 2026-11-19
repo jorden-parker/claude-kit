@@ -15,10 +15,12 @@ exit 0
 FAKE
 chmod +x "$sandbox/bin/opencode"
 echo "my own skill" > "$config/skills/naming-review/SKILL.md"
-printf '{"model":"anthropic/claude-sonnet-5-5","mcp":{"servers":{"mine":{"type":"local","command":["mine"]}}}}\n' > "$config/opencode.json"
+printf '{"model":"anthropic/claude-sonnet-5-5","instructions":["my-rules.md","/retired/style.md"],"mcp":{"servers":{"mine":{"type":"local","command":["mine"]}}}}\n' > "$config/opencode.json"
+mkdir -p "$config/plugins"
+echo "export default {}" > "$config/plugins/mine.js"
 mkdir -p "$config/commands" "$config/claude-kit/retired"
 echo "old" > "$config/commands/retired.md"
-printf 'commands/retired.md\nmcp retired\n' > "$config/claude-kit/retired.files"
+printf 'commands/retired.md\nmcp retired\ninstruction /retired/style.md\n' > "$config/claude-kit/retired.files"
 jq '.mcp.servers.retired = {"type":"local","command":["old"]}' "$config/opencode.json" > "$sandbox/c" && mv "$sandbox/c" "$config/opencode.json"
 
 run_sync() { PATH="$sandbox/bin:$PATH" OPENCODE_CONFIG_DIR="$config" bash "$sync_script" "$@" 2>&1; }
@@ -34,7 +36,7 @@ expect() {
   fi
 }
 output_has() { grep -qF -- "$1" <<<"$output"; }
-config_query() { jq -e "$1" "$config/opencode.json" >/dev/null; }
+config_query() { jq -e "$@" "$config/opencode.json" >/dev/null; }
 
 output="$(run_sync)"
 sync_status=$?
@@ -52,8 +54,12 @@ expect "portable commands are installed" test -f "$config/commands/optimize.md"
 expect "a plugin removed from the repo loses its command" test ! -e "$config/commands/retired.md"
 expect "a plugin removed from the repo loses its MCP server" config_query '.mcp.servers | has("retired") | not'
 expect "a plugin removed from the repo loses its staged copy" test ! -e "$config/claude-kit/retired"
-expect "command hooks are reported as not ported" output_has "tdd: skipped. Its Claude Code command hooks"
-expect "output styles are reported as not ported" output_has "adhd-style: skipped"
+expect "a plugin removed from the repo loses its instruction" config_query '.instructions | index("/retired/style.md") | not'
+expect "command hooks are installed as a plugin file" test -f "$config/plugins/claude-kit-tdd-hooks.js"
+expect "command hooks are reported as ported" output_has "tdd: installed. Its command hooks run through a plugin file"
+expect "a plugin file it did not write is left alone" grep -qx "export default {}" "$config/plugins/mine.js"
+expect "an output style is listed under instructions" config_query --arg style "$config/claude-kit/adhd-style/output-styles/adhd.md" '.instructions == ["my-rules.md", $style]'
+expect "an output style is reported as always on" output_has "adhd-style: installed. Its output style is always on"
 
 rm "$config/skills/naming-review/SKILL.md"
 rmdir "$config/skills/naming-review"

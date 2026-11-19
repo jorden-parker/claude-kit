@@ -57,6 +57,24 @@ const writeFakeCommands = async (
   }
 };
 
+export const makeHookPluginRoot = async (
+  hooks: Record<string, unknown>,
+  scripts: Record<string, string> = {}
+) => {
+  const pluginRoot = await mkdtemp(join(tmpdir(), "hooks-plugin-"));
+  await mkdir(join(pluginRoot, "hooks"), { recursive: true });
+  await writeFile(
+    join(pluginRoot, "hooks", "hooks.json"),
+    JSON.stringify({ hooks })
+  );
+  for (const [scriptName, scriptBody] of Object.entries(scripts)) {
+    const scriptPath = join(pluginRoot, "hooks", scriptName);
+    await writeFile(scriptPath, `#!/usr/bin/env bash\n${scriptBody}\n`);
+    await chmod(scriptPath, 0o755);
+  }
+  return pluginRoot;
+};
+
 export const installPlugin = async (
   target: TargetName,
   pluginName: string,

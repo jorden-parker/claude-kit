@@ -23,10 +23,11 @@ type Target = {
 };
 
 type HookBundle = {
-  bundleName: string;
+  composeBundleName: (pluginName: string) => string;
   hooksPath: string;
   starterName: string;
   startStatement: string;
+  isInstalledOutsidePlugin: boolean;
 };
 
 type StagedPlugin = {
@@ -47,17 +48,28 @@ const ENTRY_NAME = "plugin-host-entry.ts";
 const DESCRIBE_BUNDLE_NAME = "plugin-host-describe.mjs";
 const CLAUDE_HOOKS_PATH = join("hooks", "hooks.json");
 const PORTABLE_HOOK_FOLDER = "portable-hooks";
+const PI_HOOK_BUNDLE_NAME = "pi-hooks-extension.js";
 const PI_HOOK_BUNDLE: HookBundle = {
-  bundleName: "pi-hooks-extension.js",
+  composeBundleName: () => PI_HOOK_BUNDLE_NAME,
   hooksPath: CLAUDE_HOOKS_PATH,
   starterName: "createPiHookExtension",
   startStatement: "export default createPiHookExtension(hookHost);",
+  isInstalledOutsidePlugin: false,
+};
+const OPENCODE_HOOK_BUNDLE: HookBundle = {
+  composeBundleName: (pluginName) =>
+    join("plugins", `claude-kit-${pluginName}-hooks.js`),
+  hooksPath: CLAUDE_HOOKS_PATH,
+  starterName: "createOpenCodeHookPlugin",
+  startStatement: "export default createOpenCodeHookPlugin(hookHost);",
+  isInstalledOutsidePlugin: true,
 };
 const CRUSH_HOOK_BUNDLE: HookBundle = {
-  bundleName: "crush-hooks.mjs",
+  composeBundleName: () => "crush-hooks.mjs",
   hooksPath: join(PORTABLE_HOOK_FOLDER, "crush.json"),
   starterName: "runCrushHooks",
   startStatement: "await runCrushHooks(hookHost);",
+  isInstalledOutsidePlugin: false,
 };
 
 const writeJson = (filePath: string, content: unknown) =>
@@ -111,7 +123,7 @@ const TARGETS: Record<TargetName, Target> = {
       ]);
       const extensionPaths = [
         ...(hasBundle ? [`./${target.bundleName}`] : []),
-        ...(hasHookBundle ? [`./${PI_HOOK_BUNDLE.bundleName}`] : []),
+        ...(hasHookBundle ? [`./${PI_HOOK_BUNDLE_NAME}`] : []),
       ];
       writeJson(join(stagedFolder, "package.json"), {
         name: `claude-kit-${pluginName}`,
@@ -131,6 +143,7 @@ const TARGETS: Record<TargetName, Target> = {
     startStatement: "await serveOpenCodePlugin(plugin);",
     commandFolder: "commands",
     argumentsPlaceholder: "$ARGUMENTS",
+    hookBundle: OPENCODE_HOOK_BUNDLE,
     writeManifest: () => {},
   },
   crush: {
@@ -205,12 +218,13 @@ const bundleHooks = (
       `import { dirname } from "node:path";`,
       `import { fileURLToPath } from "node:url";`,
       `import { ${hookBundle.starterName} } from ${JSON.stringify(join(HOST_FOLDER, "targets.ts"))};`,
-      `const hookHost = { pluginName: ${JSON.stringify(pluginName)}, pluginRoot: dirname(fileURLToPath(import.meta.url)) };`,
+      `const pluginRoot = ${hookBundle.isInstalledOutsidePlugin ? JSON.stringify(stagedFolder) : "dirname(fileURLToPath(import.meta.url))"};`,
+      `const hookHost = { pluginName: ${JSON.stringify(pluginName)}, pluginRoot };`,
       hookBundle.startStatement,
       "",
     ],
     stagedFolder,
-    hookBundle.bundleName
+    hookBundle.composeBundleName(pluginName)
   );
 
 const findHostedHookBundle = (pluginFolder: string, target: Target) => {

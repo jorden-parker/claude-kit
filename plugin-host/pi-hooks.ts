@@ -1,14 +1,13 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   additionalContextsOf,
   blockingReasonOf,
   definedValues,
-  hookCommandsOf,
+  composeToolUseTranscriptLine,
+  composeUserTranscriptLine,
   readHooksFile,
   replacementTextOf,
-  runCommandHooks,
+  runEventHooks,
   type HookOutcome,
 } from "./command-hooks";
 
@@ -93,7 +92,6 @@ const toolUsesOf = (content: any, workingDirectory: string) =>
     ? content
         .filter((block) => block?.type === "toolCall")
         .map((block) => ({
-          type: "tool_use",
           id: block.id,
           name: toClaudeToolName(block.name),
           input: toClaudeToolInput(block.name, block.arguments, workingDirectory),
@@ -108,23 +106,11 @@ export const toTranscriptLines = (
     if (entry.type !== "message" || !entry.message) return [];
     const { role, content } = entry.message;
     if (role === "user") {
-      return [
-        JSON.stringify({
-          type: "user",
-          uuid: entry.id,
-          message: { role: "user", content: userContentOf(content) },
-        }),
-      ];
+      return [composeUserTranscriptLine(entry.id, userContentOf(content))];
     }
     const toolUses = role === "assistant" ? toolUsesOf(content, workingDirectory) : [];
     return toolUses.length > 0
-      ? [
-          JSON.stringify({
-            type: "assistant",
-            uuid: entry.id,
-            message: { role: "assistant", content: toolUses },
-          }),
-        ]
+      ? [composeToolUseTranscriptLine(entry.id, toolUses)]
       : [];
   });
 
@@ -160,32 +146,18 @@ export const createPiHookExtension =
       toolName: string | undefined,
       payload: Record<string, unknown>,
       context: HookContext
-    ): Promise<HookOutcome[]> => {
-      const hookCommands = hookCommandsOf(hooksFile, eventName, toolName);
-      if (hookCommands.length === 0) return [];
-      const transcriptFolder = await mkdtemp(join(tmpdir(), "pi-hooks-transcript-"));
-      try {
-        const transcriptPath = join(transcriptFolder, "transcript.jsonl");
-        const transcriptLines = toTranscriptLines(
-          context.sessionManager.getBranch(),
-          context.cwd
-        );
-        await writeFile(
-          transcriptPath,
-          transcriptLines.map((line) => `${line}\n`).join("")
-        );
-        const input = {
-          session_id: context.sessionManager.getSessionId(),
-          transcript_path: transcriptPath,
-          cwd: context.cwd,
-          hook_event_name: eventName,
-          ...payload,
-        };
-        return await runCommandHooks(hookCommands, pluginRoot, context.cwd, input);
-      } finally {
-        await rm(transcriptFolder, { recursive: true, force: true });
-      }
-    };
+    ): Promise<HookOutcome[]> =>
+      runEventHooks({
+        hooksFile,
+        pluginRoot,
+        eventName,
+        toolName,
+        sessionId: context.sessionManager.getSessionId(),
+        workingDirectory: context.cwd,
+        readTranscriptLines: () =>
+          toTranscriptLines(context.sessionManager.getBranch(), context.cwd),
+        payload,
+      });
 
     pi.on("session_start", async (event, context) => {
       const outcomes = await dispatch(

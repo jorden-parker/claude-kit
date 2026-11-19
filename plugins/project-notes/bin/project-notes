@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+web_directory="$(cd "$(dirname "$0")/../web" && pwd)"
+viewer_path="${XDG_CACHE_HOME:-$HOME/.cache}/project-notes/viewer-$(printf '%s' "$web_directory" | cksum | cut -d ' ' -f 1)"
+
+if [ ! -x "$viewer_path" ] || [ -n "$(find "$web_directory" -newer "$viewer_path" -print -quit)" ]; then
+  command -v go >/dev/null || fail "The project notes viewer is built with Go on first run: brew install go"
+  mkdir -p "$(dirname "$viewer_path")"
+  (cd "$web_directory" && go build -o "$viewer_path" .) || fail "Could not build the project notes viewer."
+fi
+
+if [ "${1:-}" = "--background" ]; then
+  nohup "$viewer_path" >/dev/null 2>&1 &
+else
+  exec "$viewer_path"
+fi

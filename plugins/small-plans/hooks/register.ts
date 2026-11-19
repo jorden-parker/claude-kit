@@ -28,6 +28,19 @@ const NUMBERED_STEP = /^\d+\.\s/gm;
 const BACKTICKED_TEXT = /`[^`\n]+`/;
 const STATUS_LINE = /^status: .*$/m;
 const COMMAND_NAME = "small-plans";
+const COMMAND_PREFIX = `/${COMMAND_NAME} `;
+const SUBCOMMAND_SUGGESTIONS = [
+  {
+    text: "handoff",
+    description:
+      "Plan what a saved handoff leaves: the newest, or one by id, plus optional extra context",
+  },
+  {
+    text: "build",
+    description: "Have small-model agents implement and review a set",
+  },
+  { text: "open", description: "Browse every plan in the browser" },
+];
 const WRITE_TOOL_NAME = "write_small_plan";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
 const STATUS_TOOL_NAME = "set_small_plan_status";
@@ -464,5 +477,16 @@ export const register: Register = (on) => {
     if (e.tool === (QUALIFIED_STATUS_TOOL_NAME as string))
       return setPlanStatus($, toolInput);
     return next(e);
+  });
+
+  on("prompt.autocomplete", async (_, e, next) => {
+    const isFirstArgument =
+      e.text.startsWith(COMMAND_PREFIX) && e.start === COMMAND_PREFIX.length;
+    if (!isFirstArgument) return next(e);
+    const { suggestions } = await next(e);
+    const matchingSubcommands = SUBCOMMAND_SUGGESTIONS.filter((subcommand) =>
+      subcommand.text.startsWith(e.token)
+    );
+    return { suggestions: [...suggestions, ...matchingSubcommands] };
   });
 };

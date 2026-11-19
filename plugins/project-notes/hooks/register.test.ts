@@ -1,4 +1,8 @@
-import type { On } from "claude-code";
+import type {
+  On,
+  PromptAutocompleteInput,
+  PromptAutocompleteResult,
+} from "claude-code";
 import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const WRITE_TOOL = "mcp__project-notes__write_project_note";
@@ -409,4 +413,46 @@ test("/project-notes organise asks Claude to file the session notes", async ($, 
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain(LIST_TOOL);
   expect(submittedPrompts[0]).toContain(WRITE_TOOL);
+});
+
+const autocompleteAt = (text: string) => {
+  const start = text.search(/\S*$/);
+  return { text, cursor: text.length, token: text.slice(start), start };
+};
+
+type AutocompleteCall = {
+  autocomplete: (
+    input: PromptAutocompleteInput
+  ) => Promise<PromptAutocompleteResult>;
+};
+
+const autocomplete = ($: Engine, text: string) =>
+  ($.prompt as unknown as AutocompleteCall).autocomplete(autocompleteAt(text));
+
+const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
+  reply.suggestions.map((suggestion) => suggestion.text);
+
+test("typing the first word after /project-notes suggests organise", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const emptyReply = await autocomplete($, "/project-notes ");
+  const partReply = await autocomplete($, "/project-notes org");
+
+  expect(suggestedTexts(emptyReply)).toEqual(["organise"]);
+  expect(suggestedTexts(partReply)).toEqual(["organise"]);
+  expect(emptyReply.suggestions[0]!.description).toContain("session notes");
+});
+
+test("later words, /project-note topics and other commands get no /project-notes suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const laterWordReply = await autocomplete($, "/project-notes organise or");
+  const topicReply = await autocomplete($, "/project-note or");
+  const otherReply = await autocomplete($, "/handoff or");
+  const commandReply = await autocomplete($, "/project-notes");
+
+  expect(suggestedTexts(laterWordReply)).toEqual([]);
+  expect(suggestedTexts(topicReply)).toEqual([]);
+  expect(suggestedTexts(otherReply)).toEqual([]);
+  expect(suggestedTexts(commandReply)).toEqual([]);
 });

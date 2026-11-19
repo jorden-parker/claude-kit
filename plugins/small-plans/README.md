@@ -12,6 +12,8 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 | `/small-plans build [set]`                  | Has small-model agents implement and review each plan of a set       |
 | `/small-plans open`                         | Opens every plan in the browser                                      |
 
+Typing `/small-plans ` suggests the actions.
+
 Each planning command has Claude list the work that is left, check it against the project as it is now, and save one plan per small change with the `write_small_plan` tool. Work that waits on a decision only you can make is left out and named in the reply.
 
 No handoff is needed. `handoff` is one source of work among three, and it needs the handoff plugin only to have saved a handoff under `~/.claude/handoffs` (`/handoff save`). Run again on a handoff that already has plans, it keeps them and adds plans only for work they do not cover.

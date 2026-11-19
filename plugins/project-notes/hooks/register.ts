@@ -29,6 +29,13 @@ const SOURCE_LINE_PATTERN = `^${SOURCE_FIELD}`;
 const LEGACY_BATCH_SIZE = 10;
 const MAX_SLUG_LENGTH = 60;
 const VIEWER_BUILD_TIMEOUT_MS = 180_000;
+const NOTES_COMMAND_PREFIX = "/project-notes ";
+const SUBCOMMAND_SUGGESTIONS = [
+  {
+    text: "organise",
+    description: "File the existing session notes as project notes",
+  },
+];
 const WRITE_TOOL_NAME = "write_project_note";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__project-notes__${WRITE_TOOL_NAME}`;
 const LIST_LEGACY_TOOL_NAME = "list_legacy_notes";
@@ -343,5 +350,17 @@ export const register: Register = (on) => {
     if (e.tool === "Skill" && /humanizer/i.test(String(toolInput.skill)))
       isHumanizerLoaded = true;
     return next(e);
+  });
+
+  on("prompt.autocomplete", async (_, e, next) => {
+    const isFirstArgument =
+      e.text.startsWith(NOTES_COMMAND_PREFIX) &&
+      e.start === NOTES_COMMAND_PREFIX.length;
+    if (!isFirstArgument) return next(e);
+    const { suggestions } = await next(e);
+    const matchingSubcommands = SUBCOMMAND_SUGGESTIONS.filter((subcommand) =>
+      subcommand.text.startsWith(e.token)
+    );
+    return { suggestions: [...suggestions, ...matchingSubcommands] };
   });
 };

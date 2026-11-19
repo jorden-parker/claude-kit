@@ -1,4 +1,8 @@
-import type { On } from "claude-code";
+import type {
+  On,
+  PromptAutocompleteInput,
+  PromptAutocompleteResult,
+} from "claude-code";
 import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const WRITE_TOOL = "mcp__small-plans__write_small_plan";
@@ -367,4 +371,52 @@ test("/small-plans build says so when no set matches", async ($, on) => {
 
   expect(reply.text).toContain("No plans");
   expect(submittedPrompts).toHaveLength(0);
+});
+
+const autocompleteAt = (text: string) => {
+  const start = text.search(/\S*$/);
+  return { text, cursor: text.length, token: text.slice(start), start };
+};
+
+type AutocompleteCall = {
+  autocomplete: (
+    input: PromptAutocompleteInput
+  ) => Promise<PromptAutocompleteResult>;
+};
+
+const autocomplete = ($: Engine, text: string) =>
+  ($.prompt as unknown as AutocompleteCall).autocomplete(autocompleteAt(text));
+
+const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
+  reply.suggestions.map((suggestion) => suggestion.text);
+
+test("typing the first word after /small-plans suggests every action", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const reply = await autocomplete($, "/small-plans ");
+
+  expect(suggestedTexts(reply)).toEqual(["handoff", "build", "open"]);
+  expect(reply.suggestions[0]!.description).toContain("saved handoff");
+});
+
+test("a partly typed /small-plans action narrows the suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const reply = await autocomplete($, "/small-plans bu");
+
+  expect(suggestedTexts(reply)).toEqual(["build"]);
+});
+
+test("later words, other words and other commands get no /small-plans suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const laterWordReply = await autocomplete($, "/small-plans add a bu");
+  const workReply = await autocomplete($, "/small-plans da");
+  const otherReply = await autocomplete($, "/handoff op");
+  const commandReply = await autocomplete($, "/small-plans");
+
+  expect(suggestedTexts(laterWordReply)).toEqual([]);
+  expect(suggestedTexts(workReply)).toEqual([]);
+  expect(suggestedTexts(otherReply)).toEqual([]);
+  expect(suggestedTexts(commandReply)).toEqual([]);
 });

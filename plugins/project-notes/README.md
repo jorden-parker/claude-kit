@@ -47,6 +47,8 @@ The files are plain Markdown: edit, move or delete them with any tool. The folde
 
 ## Viewer
 
+Typing `/project-notes ` suggests `organise`.
+
 `/project-notes` opens every note in your browser. It starts a small local web server (a Go program, built on first run, so it needs Go once: `brew install go`) and opens the page.
 
 - The sidebar lists every note, grouped by project, then category, newest first

@@ -267,20 +267,22 @@ const buildRecap = async (
     recentMessages,
     focus
   );
-  const recapWith = (model: string) =>
-    completeWithBackoff(engine, () =>
-      engine.model.complete({
-        model,
-        system: style.rules,
-        prompt,
-        effort: "low",
-        timeoutMs: style.timeoutMs,
-      })
-    );
-  let reply = await recapWith(RECAP_MODEL);
+  const completeRecapOnce = (model: string) =>
+    engine.model.complete({
+      model,
+      system: style.rules,
+      prompt,
+      effort: "low",
+      timeoutMs: style.timeoutMs,
+    });
+  let reply = await completeWithBackoff(engine, () =>
+    completeRecapOnce(RECAP_MODEL)
+  );
   if (!reply.isAnswered && reply.reason === "api-error") {
     const sessionModel = await engine.session.model();
-    if (sessionModel !== RECAP_MODEL) reply = await recapWith(sessionModel);
+    if (sessionModel !== RECAP_MODEL) {
+      reply = await completeRecapOnce(sessionModel);
+    }
   }
 
   if (!reply.isAnswered) {

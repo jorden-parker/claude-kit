@@ -63,6 +63,15 @@ const testWithSession = (
 
 const refuseFill = () => ({ isFilled: false, refusal: "no_composer" as const });
 
+const collectWrittenFiles = (on: On) => {
+  const writtenFiles: { path: string; text: string }[] = [];
+  on("fs.write", (_, e) => {
+    writtenFiles.push({ path: e.path, text: e.text });
+    return { value: undefined };
+  });
+  return writtenFiles;
+};
+
 const handoff = (args: string) => ({
   command: "handoff",
   args,
@@ -278,7 +287,7 @@ const RECAP_TURN_ID = "turn-recap";
 const WRITING_IN_CONVERSATION_MESSAGE =
   "Writing the recap in the conversation…";
 const SAVED_FIRST_HANDOFF_MESSAGE =
-  "Saved as handoff #1. Run /handoff --resume 1 to continue it in a new session.";
+  "Saved as handoff #1 in .claude/handoffs/1970-01-01-0000-handoff-1.md. Run /handoff --resume 1 to continue it in a new session.";
 
 const answerTurns = (on: On) => {
   on("turn.start", (_, e) => ({ turnId: e.turnId }));
@@ -453,6 +462,7 @@ test("with no writer setting the subagent writes the recap without calling haiku
 testWithSubagentWriter(
   "--save stores the recap the subagent wrote and reports its id in a toast",
   async ($, on) => {
+    collectWrittenFiles(on);
     mock.clock(on);
     const store = mockStore(on);
     answerTurns(on);
@@ -501,6 +511,7 @@ testWithSubagentWriter(
 testWithSubagentWriter(
   "a subagent that ends with no answer leaves the recap to the conversation",
   async ($, on) => {
+    collectWrittenFiles(on);
     const clock = mock.clock(on);
     const store = mockStore(on);
     answerTurns(on);
@@ -570,6 +581,7 @@ const collectStatuses = (on: On) => {
 testWithSubagentWriter(
   "the status line says a subagent is writing, then pins the outcome until the next prompt",
   async ($, on) => {
+    collectWrittenFiles(on);
     mock.clock(on);
     mockStore(on);
     answerTurns(on);
@@ -702,6 +714,7 @@ testWithSession(
 testWithConversationWriter(
   "--save stores the recap the conversation wrote and reports its id beneath the answer",
   async ($, on) => {
+    collectWrittenFiles(on);
     const clock = mock.clock(on);
     const store = mockStore(on);
     answerTurns(on);
@@ -881,6 +894,7 @@ testWithSession(
   "a rate-limited call is retried on haiku after backing off",
   CONVERSATION,
   async ($, on) => {
+    collectWrittenFiles(on);
     mockStore(on);
     const models: string[] = [];
     const waits: number[] = [];
@@ -903,7 +917,7 @@ testWithSession(
 
     expect(models).toEqual(["haiku", "haiku", "haiku"]);
     expect(waits).toEqual([1000, 2000]);
-    expect(reply.text).toContain("Saved as handoff #1.");
+    expect(reply.text).toContain("Saved as handoff #1 in ");
   }
 );
 
@@ -1328,7 +1342,7 @@ testWithSession("--resume without an id shows the list", [], async ($, on) => {
 });
 
 testWithSession(
-  "--save stores the recap and reports its id without touching the composer",
+  "--save stores the recap, writes it to a file and reports both without touching the composer",
   CONVERSATION,
   async ($, on) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
@@ -1347,12 +1361,19 @@ testWithSession(
       submits += 1;
       return { text: e.text };
     });
+    const writtenFiles = collectWrittenFiles(on);
 
     const reply = await $.command.run(handoff("--save the auth change"));
 
     expect(reply.text).toBe(
-      "Saved as handoff #3. Run /handoff --resume 3 to continue it in a new session."
+      "Saved as handoff #3 in .claude/handoffs/2026-11-09-1432-handoff-3.md. Run /handoff --resume 3 to continue it in a new session."
     );
+    expect(writtenFiles).toEqual([
+      {
+        path: "/repo/.claude/handoffs/2026-11-09-1432-handoff-3.md",
+        text: "Resume prompt\n",
+      },
+    ]);
     expect(fills).toBe(0);
     expect(submits).toBe(0);
     expect(store.get(HANDOFFS_KEY)).toEqual([
@@ -1500,3 +1521,28 @@ test("words that are not flags or other commands get no /handoff suggestions", a
   expect(suggestedTexts(otherReply)).toEqual([]);
   expect(suggestedTexts(commandReply)).toEqual([]);
 });
+
+testWithSession(
+  "--save keeps the stored handoff and says so when its file cannot be written",
+  CONVERSATION,
+  async ($, on) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    const store = mockStore(on);
+    answerRecap(on);
+    on("fs.write", () => ({ deny: "the folder is read-only" }));
+
+    const reply = await $.command.run(handoff("--save"));
+
+    expect(reply.text).toContain(
+      "Saved as handoff #1, but .claude/handoffs/2026-11-09-1432-handoff-1.md could not be written ("
+    );
+    expect(reply.text).toContain("the folder is read-only");
+    expect(reply.text).toContain(
+      "Run /handoff --resume 1 to continue it in a new session."
+    );
+    expect(store.get(HANDOFFS_KEY)).toEqual([
+      storedHandoff(1, "Resume prompt"),
+    ]);
+  }
+);

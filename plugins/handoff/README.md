@@ -14,7 +14,7 @@ If the session cannot be cleared, the recap is filled into the composer as `/han
 
 Every recap is also kept in the plugin store, the latest 50, so earlier handoffs can be picked up later.
 
-`/handoff --save [focus]` builds the recap and stores it without touching the composer, then prints its id.
+`/handoff --save [focus]` builds the recap, stores it and writes it to a Markdown file in the project, without touching the composer, then prints its id and the file's path. The file is `.claude/handoffs/<date>-<time>-handoff-<id>.md` under the session's working directory, with the date and time in UTC. If the file cannot be written, the handoff is still stored and the reply says why.
 
 `/handoff --each [focus]` writes one handoff per plan suggested in the conversation and stores each without touching the composer, then lists their ids. Use it after Claude proposes several options, such as a ranked list of plugin ideas: each idea becomes its own stored handoff, and `/handoff --resume <id>` starts a fresh session on any one of them. The latest assistant message is sent whole so long lists are not cut off; a focus limits it to the plans it names.
 

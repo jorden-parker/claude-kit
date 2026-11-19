@@ -57,8 +57,9 @@ const describeSavedPlanCount = (planCount: number) =>
   planCount === 1
     ? "Saved 1 handoff, one per suggested plan:"
     : `Saved ${planCount} handoffs, one per suggested plan:`;
-const describeSavedHandoff = (handoffId: number) =>
-  `Saved as handoff #${handoffId}. Run /handoff --resume ${handoffId} to continue it in a new session.`;
+const HANDOFF_FILE_FOLDER = ".claude/handoffs";
+const describeResumeCommand = (handoffId: number) =>
+  `Run /handoff --resume ${handoffId} to continue it in a new session.`;
 const describeMissingHandoff = (handoffId: string) =>
   `No handoff #${handoffId}. Run /handoff --list to see the stored handoffs.`;
 
@@ -177,6 +178,32 @@ const storeHandoff = async (
     [...handoffs, newHandoff].slice(-STORED_HANDOFF_LIMIT)
   );
   return newHandoff;
+};
+
+const buildHandoffFilePath = (handoff: StoredHandoff) => {
+  const minuteStamp = new Date(handoff.createdAt)
+    .toISOString()
+    .slice(0, 16)
+    .replace("T", "-")
+    .replace(":", "");
+  return `${HANDOFF_FILE_FOLDER}/${minuteStamp}-handoff-${handoff.handoffId}.md`;
+};
+
+const describeError = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const saveHandoffFile = async (
+  engine: EngineInterface,
+  handoff: StoredHandoff
+) => {
+  const filePath = buildHandoffFilePath(handoff);
+  const resumeCommand = describeResumeCommand(handoff.handoffId);
+  try {
+    await engine.fs.write(`${handoff.cwd}/${filePath}`, `${handoff.recap}\n`);
+    return `Saved as handoff #${handoff.handoffId} in ${filePath}. ${resumeCommand}`;
+  } catch (error) {
+    return `Saved as handoff #${handoff.handoffId}, but ${filePath} could not be written (${describeError(error)}). ${resumeCommand}`;
+  }
 };
 
 const formatCreatedAt = (createdAt: number) =>
@@ -472,7 +499,7 @@ const deliverRecap = async (
   }
   const savedHandoff = await storeHandoff(engine, recapText, request.focus);
   if (request.isSaveOnly) {
-    return { text: describeSavedHandoff(savedHandoff.handoffId) };
+    return { text: await saveHandoffFile(engine, savedHandoff) };
   }
   if (!request.isNewSession) {
     return offerRecapInThisSession(engine, recapText, isRecapOnScreen);

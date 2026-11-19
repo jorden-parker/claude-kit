@@ -6,17 +6,18 @@ fail() {
   exit 1
 }
 
+section="$(basename "$0")"
 web_directory="$(cd "$(dirname "$0")/../web" && pwd)"
-viewer_path="${XDG_CACHE_HOME:-$HOME/.cache}/small-plans/viewer-$(printf '%s' "$web_directory" | cksum | cut -d ' ' -f 1)"
+viewer_path="${XDG_CACHE_HOME:-$HOME/.cache}/claude-notes/viewer-$(cat "$web_directory"/*.go "$web_directory"/go.* "$web_directory"/index.html | cksum | cut -d ' ' -f 1)"
 
-if [ ! -x "$viewer_path" ] || [ -n "$(find "$web_directory" -newer "$viewer_path" -print -quit)" ]; then
-  command -v go >/dev/null || fail "The small plans viewer is built with Go on first run: brew install go"
+if [ ! -x "$viewer_path" ]; then
+  command -v go >/dev/null || fail "The notes viewer is built with Go on first run: brew install go"
   mkdir -p "$(dirname "$viewer_path")"
-  (cd "$web_directory" && go build -o "$viewer_path" .) || fail "Could not build the small plans viewer."
+  (cd "$web_directory" && go build -o "$viewer_path" .) || fail "Could not build the notes viewer."
 fi
 
 if [ "${1:-}" = "--background" ]; then
-  nohup "$viewer_path" >/dev/null 2>&1 &
+  nohup "$viewer_path" "$section" >/dev/null 2>&1 &
 else
-  exec "$viewer_path"
+  exec "$viewer_path" "$section"
 fi

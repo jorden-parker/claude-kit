@@ -88,6 +88,24 @@ const toProjectName = (folder: string) => {
   return /[A-Za-z0-9]/.test(projectName) ? projectName : "";
 };
 
+const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
+
+const findRepositoryFolder = async (engine: EngineInterface) => {
+  const folder = await engine.session.root();
+  const commonGitFolder = await engine.process
+    .run([
+      "git",
+      "-C",
+      folder,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    ])
+    .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
+    .catch(() => "");
+  return commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") || folder;
+};
+
 const toCreatedTime = (requestedCreated: string) => {
   const createdTime = new Date(requestedCreated || Date.now());
   return (
@@ -152,7 +170,7 @@ const writeProjectNote = async (
   const body = trimText(toolInput.body);
   const source = trimText(toolInput.source);
   const projectName = toProjectName(
-    trimText(toolInput.project) || (await engine.session.root())
+    trimText(toolInput.project) || (await findRepositoryFolder(engine))
   );
   if (!CATEGORIES.includes(category))
     return { deny: `The category must be one of: ${CATEGORIES.join(", ")}.` };
@@ -172,9 +190,9 @@ const writeProjectNote = async (
   );
   const frontMatter = [
     `title: ${title}`,
-    `category: ${category}`,
     `project: ${projectName}`,
     `created: ${created}`,
+    `category: ${category}`,
     ...(source ? [`${SOURCE_FIELD}${source}`] : []),
   ].join("\n");
   await engine.fs.write(notePath, `---\n${frontMatter}\n---\n\n${body}\n`);

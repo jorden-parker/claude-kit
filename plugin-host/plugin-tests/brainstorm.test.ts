@@ -10,11 +10,13 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { startPlugin, TARGET_NAMES } from "../testing";
 
-const BRAINSTORM_FOLDER = join(".claude", "brainstorm");
-const PLANS_FOLDER = join(BRAINSTORM_FOLDER, "plans");
+const PLANS_FOLDER = "plans";
+
+const findBrainstormFolder = (projectFolder: string) =>
+  join(process.env.BRAINSTORM_DIR ?? "", basename(projectFolder));
 const RUN_FOLDER_NAME = "plan-2026-11-09-1200";
 const PLAN_FOLDER_NAME = "01-replay";
 
@@ -119,7 +121,7 @@ const CLEAN_STEP = [
 ].join("\n");
 
 const writeRunFolder = async (projectFolder: string) => {
-  const runFolder = join(projectFolder, PLANS_FOLDER, RUN_FOLDER_NAME);
+  const runFolder = join(findBrainstormFolder(projectFolder), PLANS_FOLDER, RUN_FOLDER_NAME);
   await mkdir(join(runFolder, PLAN_FOLDER_NAME), { recursive: true });
   await writeFile(join(runFolder, "index.md"), CLEAN_INDEX);
   await writeFile(join(runFolder, PLAN_FOLDER_NAME, "plan.md"), CLEAN_PLAN);
@@ -134,6 +136,8 @@ const withPlugin = async (
   const projectFolder = await realpath(
     await mkdtemp(join(tmpdir(), "brainstorm-project-"))
   );
+  const brainstormRoot = await mkdtemp(join(tmpdir(), "brainstorm-root-"));
+  process.env.BRAINSTORM_DIR = brainstormRoot;
   const plugin = await startPlugin(target, "brainstorm", {
     workingDirectory: projectFolder,
   });
@@ -142,36 +146,36 @@ const withPlugin = async (
   } finally {
     await plugin.stop();
     await rm(projectFolder, { recursive: true, force: true });
+    await rm(brainstormRoot, { recursive: true, force: true });
   }
 };
 
 const listBrainstormFiles = async (projectFolder: string) =>
-  (await readdir(join(projectFolder, BRAINSTORM_FOLDER))).sort();
+  (await readdir(findBrainstormFolder(projectFolder))).sort();
 
 const renderSample = (
   plugin: Awaited<ReturnType<typeof startPlugin>>
 ) => plugin.callTool("render_brainstorm", SAMPLE_BRAINSTORM);
 
 for (const target of TARGET_NAMES) {
-  test(`${target}: render_brainstorm saves the page, its data and a gitignore, then opens the page`, async () => {
+  test(`${target}: render_brainstorm saves the page and its data outside the project, then opens the page`, async () => {
     await withPlugin(target, async (plugin, projectFolder) => {
       const outcome = await renderSample(plugin);
 
       expect(outcome.isError).toBe(false);
       const files = await listBrainstormFiles(projectFolder);
-      const stampedNames = files.filter((name) => name !== ".gitignore");
-      expect(stampedNames).toHaveLength(2);
-      const pageName = stampedNames.find((name) => name.endsWith(".html"));
-      const dataName = stampedNames.find((name) => name.endsWith(".json"));
+      expect(files).toHaveLength(2);
+      expect(existsSync(join(projectFolder, ".claude"))).toBe(false);
+      const pageName = files.find((name) => name.endsWith(".html"));
+      const dataName = files.find((name) => name.endsWith(".json"));
       expect(pageName).toMatch(/^brainstorm-\d{4}-\d{2}-\d{2}-\d{4}\.html$/);
       expect(dataName).toBe(pageName!.replace(/\.html$/, ".json"));
-      expect(await readFile(join(projectFolder, BRAINSTORM_FOLDER, ".gitignore"), "utf8")).toBe("*\n");
 
-      const pagePath = join(projectFolder, BRAINSTORM_FOLDER, pageName!);
+      const pagePath = join(findBrainstormFolder(projectFolder), pageName!);
       expect(outcome.text).toBe(`Opened ${pagePath} in the browser.`);
       expect(await readFile(pagePath, "utf8")).toStartWith("<!doctype html>");
       const savedBrainstorm = JSON.parse(
-        await readFile(join(projectFolder, BRAINSTORM_FOLDER, dataName!), "utf8")
+        await readFile(join(findBrainstormFolder(projectFolder), dataName!), "utf8")
       );
       expect(savedBrainstorm.project).toBe("acme-cli");
       expect(savedBrainstorm.ideas.map((idea: { title: string }) => idea.title)).toEqual([
@@ -196,7 +200,7 @@ for (const target of TARGET_NAMES) {
         text: "The brainstorm needs at least one idea with a title and a nextStep.",
         isError: true,
       });
-      expect(existsSync(join(projectFolder, BRAINSTORM_FOLDER))).toBe(false);
+      expect(existsSync(findBrainstormFolder(projectFolder))).toBe(false);
       expect(await plugin.readCommandLog()).toEqual([]);
     });
   });
@@ -336,7 +340,7 @@ for (const target of TARGET_NAMES) {
       const outcome = await plugin.callTool("run_brainstorm", { args: "plan 2" });
 
       expect(outcome.isError).toBe(false);
-      const runFolderPattern = join(projectFolder, PLANS_FOLDER)
+      const runFolderPattern = join(findBrainstormFolder(projectFolder), PLANS_FOLDER)
         .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const acknowledgement = new RegExp(
         `^Planning #2 Replay mode for bug reports into the run folder (${runFolderPattern}/plan-\\d{4}-\\d{2}-\\d{2}-\\d{4})…`

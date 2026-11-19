@@ -8,7 +8,7 @@ import { expect, mock, test, type Engine } from "claude-code/testing";
 const RENDER_TOOL = "mcp__brainstorm__render_brainstorm";
 const CHECK_TOOL = "mcp__brainstorm__check_brainstorm_plan";
 const STATUS_TOOL = "mcp__brainstorm__set_brainstorm_plan_status";
-const BRAINSTORM_FOLDER = "/repo/.claude/brainstorm";
+const BRAINSTORM_FOLDER = "/home/tester/.claude/brainstorm/repo";
 const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
 const NOVEMBER_NINTH_NOON = Date.UTC(2026, 10, 9, 12, 0, 0);
 
@@ -46,9 +46,21 @@ const VALID_INPUT = {
 
 type FileWrite = { path: string; text: string };
 
-const mockEngine = (on: On, openExitCodes: Record<string, number> = {}) => {
+const mockHome = (on: On, environment: Record<string, string> = {}) => {
+  on("env.get", (_, e) => ({
+    value: { HOME: "/home/tester", ...environment }[e.name],
+  }));
+};
+
+const mockEngine = (
+  on: On,
+  openExitCodes: Record<string, number> = {},
+  commonGitFolder = "",
+  environment: Record<string, string> = {}
+) => {
   const writes: FileWrite[] = [];
   const ranCommands: string[][] = [];
+  mockHome(on, environment);
   on("session.cwd", () => ({ value: "/repo" }));
   on("clock.now", () => ({ value: NOVEMBER_NINTH_NOON }));
   on("fs.write", (_, e) => {
@@ -56,12 +68,12 @@ const mockEngine = (on: On, openExitCodes: Record<string, number> = {}) => {
     return { value: undefined };
   });
   on("process.run", (_, e) => {
-    ranCommands.push([...e.argv]);
+    if (e.argv[0] !== "git") ranCommands.push([...e.argv]);
     const exitCode = openExitCodes[e.argv[0] ?? ""] ?? 0;
     return {
       value: {
         exitCode,
-        stdout: "",
+        stdout: e.argv[0] === "git" ? commonGitFolder : "",
         stderr: "",
         isStdoutTruncated: false,
         isStderrTruncated: false,
@@ -213,15 +225,88 @@ test("text from the model is escaped in the page", async ($, on) => {
   expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
 });
 
-test("the brainstorm folder keeps its pages out of git", async ($, on) => {
+test("the brainstorm is saved outside the project, so nothing but the page and its data is written", async ($, on) => {
   const { writes } = mockEngine(on);
 
   await renderBrainstorm($, VALID_INPUT);
 
-  expect(writes).toContainEqual({
-    path: `${BRAINSTORM_FOLDER}/.gitignore`,
-    text: "*\n",
+  expect(writes.map((write) => write.path)).toEqual([
+    `${BRAINSTORM_FOLDER}/brainstorm-2026-11-09-1200.json`,
+    `${BRAINSTORM_FOLDER}/brainstorm-2026-11-09-1200.html`,
+  ]);
+});
+
+test("a worktree saves its brainstorm under the main repository's name", async ($, on) => {
+  const { writes } = mockEngine(on, {}, "/work/acme/.git\n");
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  expect(findPage(writes)?.path).toBe(
+    "/home/tester/.claude/brainstorm/acme/brainstorm-2026-11-09-1200.html"
+  );
+});
+
+test("BRAINSTORM_DIR moves the brainstorm folder", async ($, on) => {
+  const { writes } = mockEngine(on, {}, "", { BRAINSTORM_DIR: "/elsewhere" });
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  expect(findPage(writes)?.path).toBe(
+    "/elsewhere/repo/brainstorm-2026-11-09-1200.html"
+  );
+});
+
+test("a brainstorm folder an earlier version left in the project is moved to the new folder", async ($, on) => {
+  const { ranCommands } = mockEngine(on);
+  on("fs.exists", (_, e) => ({
+    value: e.path === "/repo/.claude/brainstorm",
+  }));
+  on("prompt.submit", (_, e) => ({ text: e.text }));
+
+  await $.command.run(buildBrainstormCommand(""));
+
+  expect(ranCommands).toContainEqual([
+    "mkdir",
+    "-p",
+    "/home/tester/.claude/brainstorm",
+  ]);
+  expect(ranCommands).toContainEqual([
+    "mv",
+    "/repo/.claude/brainstorm",
+    BRAINSTORM_FOLDER,
+  ]);
+});
+
+test("a project folder is left alone when the new folder already holds brainstorms", async ($, on) => {
+  const { ranCommands } = mockEngine(on);
+  on("fs.exists", () => ({ value: true }));
+  on("prompt.submit", (_, e) => ({ text: e.text }));
+
+  await $.command.run(buildBrainstormCommand(""));
+
+  expect(ranCommands.filter(([program]) => program === "mv")).toEqual([]);
+});
+
+test("writing a run file in the brainstorm folder needs no permission, other files still do", async ($, on) => {
+  mockEngine(on);
+  on("tool.check", () => ({ decision: "ask" }));
+
+  const runFileVerdict = await $.tool.check({
+    tool: "Write",
+    input: { file_path: `${PLANS_FOLDER}/plan-2026-11-09-1200/index.md` },
   });
+  const projectFileVerdict = await $.tool.check({
+    tool: "Write",
+    input: { file_path: "/home/tester/.claude/settings.json" },
+  });
+  const escapingVerdict = await $.tool.check({
+    tool: "Write",
+    input: { file_path: `${BRAINSTORM_FOLDER}/../../settings.json` },
+  });
+
+  expect(runFileVerdict.decision).toBe("allow");
+  expect(projectFileVerdict.decision).not.toBe("allow");
+  expect(escapingVerdict.decision).not.toBe("allow");
 });
 
 test("the page opens with xdg-open where open is missing", async ($, on) => {
@@ -260,6 +345,7 @@ test("a brainstorm with no ideas is refused without writing", async ($, on) => {
 });
 
 test("a page that cannot be written is refused with the reason", async ($, on) => {
+  mockHome(on);
   on("session.cwd", () => ({ value: "/repo" }));
   on("clock.now", () => ({ value: NOVEMBER_NINTH_NOON }));
   on("fs.write", () => ({ deny: "EACCES: permission denied" }));
@@ -359,6 +445,7 @@ const listImmediateEntries = (
 };
 
 const mockFileTree = (on: On, fileTexts: Record<string, string>) => {
+  mockHome(on);
   on("session.cwd", () => ({ value: "/repo" }));
   on("fs.read", (_, e) => {
     const fileText = fileTexts[e.path];
@@ -639,6 +726,8 @@ test("brainstorm plan without a saved brainstorm points at /brainstorm", async (
 
 test("brainstorm build hands the build to the build-plans skill and does not repeat its flow", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockHome(on);
+  on("session.cwd", () => ({ value: "/repo" }));
 
   const reply = await $.command.run(buildBrainstormCommand("build"));
   await clock.settle();
@@ -646,6 +735,9 @@ test("brainstorm build hands the build to the build-plans skill and does not rep
   expect(reply.text).toContain("Building");
   expect(submittedPrompts).toHaveLength(1);
   const instructions = submittedPrompts[0] ?? "";
+  expect(instructions).toContain(
+    `The plans folder of this project is ${PLANS_FOLDER}.`
+  );
   expect(instructions).toContain("Skill tool");
   expect(instructions).toContain("brainstorm:build-plans");
   expect(instructions).toContain("follow it exactly");
@@ -657,6 +749,8 @@ test("brainstorm build hands the build to the build-plans skill and does not rep
 
 test("brainstorm build with no run named asks for the newest run", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockHome(on);
+  on("session.cwd", () => ({ value: "/repo" }));
 
   const reply = await $.command.run(buildBrainstormCommand("build"));
   await clock.settle();
@@ -668,6 +762,8 @@ test("brainstorm build with no run named asks for the newest run", async ($, on)
 
 test("brainstorm build passes the named runs to the skill as the user wrote them", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockHome(on);
+  on("session.cwd", () => ({ value: "/repo" }));
 
   const reply = await $.command.run(
     buildBrainstormCommand("build plan-2026-11-08-1500 plans/002-cache")
@@ -682,6 +778,7 @@ test("brainstorm build passes the named runs to the skill as the user wrote them
 
 test("brainstorm build leaves finding the runs to the skill and lists no folder", async ($, on) => {
   const { clock } = recordSubmittedPrompts(on);
+  mockHome(on);
   const listedFolders: string[] = [];
   on("session.cwd", () => ({ value: "/repo" }));
   on("fs.list", (_, e) => {
@@ -826,13 +923,10 @@ test("the check tool answers OK for a clean run folder", async ($, on) => {
   expect(reply.result).toBe("OK");
 });
 
-test("the check tool resolves a relative path against the session folder", async ($, on) => {
+test("the check tool resolves a relative path against the project's brainstorm folder", async ($, on) => {
   mockFileTree(on, CLEAN_RUN_FILES);
 
-  const reply = await checkBrainstormPlan(
-    $,
-    ".claude/brainstorm/plans/plan-2026-11-09-1200"
-  );
+  const reply = await checkBrainstormPlan($, "plans/plan-2026-11-09-1200");
 
   expect(reply.result).toBe("OK");
 });
@@ -894,13 +988,13 @@ test("the status tool writes the new status to the plan file and the index", asy
   ]);
 });
 
-test("the status tool resolves a relative plan folder against the session folder", async ($, on) => {
+test("the status tool resolves a relative plan folder against the project's brainstorm folder", async ($, on) => {
   mockFileTree(on, CLEAN_RUN_FILES);
   const writes = recordFileWrites(on);
 
   const reply = await setBrainstormPlanStatus(
     $,
-    ".claude/brainstorm/plans/plan-2026-11-09-1200/01-replay",
+    "plans/plan-2026-11-09-1200/01-replay",
     "done"
   );
 

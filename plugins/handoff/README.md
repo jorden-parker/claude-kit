@@ -37,6 +37,16 @@ The old dashed forms (`--new`, `--save`, `--each`, `--list`, `--resume`) still w
 - Typing anything after the action skips the box: `/handoff new the auth change`, `/handoff save the parser`, `/handoff resume 3`, `/handoff resume start with the tests`
 - Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), the command runs at once: `new` and `save` without notes, `resume` on the latest handoff
 
+## Open questions
+
+A recap can end with decisions only you can make. Before a handoff is saved, filled or handed off, `/handoff` asks them one at a time in Claude Code's own question dialog. With `/handoff save` or `/handoff new` this comes after the notes box, once the recap is written.
+
+- Each question offers the likely answers the recap writer listed, or Yes and No, plus `Leave open`. Other takes any text
+- An answer is written into the handoff under `Decisions from the user:`, so the next session starts with the decision made
+- `Leave open` keeps that question under `Open questions for the user:`
+- Esc stops the asking. The questions not yet answered stay open, and the handoff is still saved
+- `/handoff each` asks nothing
+
 ## Where handoffs live
 
 Each handoff is one file:
@@ -47,7 +57,7 @@ Each handoff is one file:
 
 - The project is the repository the session is in, not the folder. A linked worktree, or a worktree of a bare repository (`thing.git`, `thing/.bare`), files its handoffs with the repository it belongs to, so every worktree of one repository shares one list. This needs git 2.31 or newer; outside git, or with an older git, the project is the working directory's own name
 - Ids count up per project, and `list` and `resume` look at the current project only
-- The file starts with front matter (`title`, `project`, `created`, `cwd`, `focus`), then the recap. Edit or delete the files freely
+- The file starts with front matter (`title`, `project`, `created`, `cwd`, `focus`), then the recap. The title is the recap's first line, which the recap writer keeps to a short name of the work, and the file name is made from it. Edit or delete the files freely
 - Set `HANDOFFS_DIR` to keep them somewhere else
 - Handoffs that earlier versions kept in the plugin store are written out as files the first time `/handoff` runs. The `.claude/handoffs/` files that `--save` used to write inside a project are no longer written; the ones already there are left alone
 
@@ -58,7 +68,9 @@ Each handoff is one file:
 - The sidebar lists every handoff, grouped by project, newest first
 - The handoff shows rendered Markdown, with the command that resumes it. Raw HTML in a handoff is not rendered
 - The page reloads the handoffs when you come back to its tab
-- The server only reads the handoffs. It listens on `127.0.0.1`, port `47616`; set `HANDOFFS_PORT` to pick another, or `HANDOFFS_NO_OPEN=1` to skip opening the browser
+- The same page serves all four kinds of saved notes: Handoffs, Project notes, Small plans and Brainstorm plans. Pick one at the top of the sidebar. `/handoff open` opens it on Handoffs
+- The server only reads the notes. It listens on `127.0.0.1`, port `47618`; set `CLAUDE_NOTES_PORT` to pick another, or `CLAUDE_NOTES_NO_OPEN=1` to skip opening the browser
+- The handoff, project-notes and small-plans plugins each ship the same viewer, so any one of them is enough to run it
 - It keeps running after the session ends. Running `/handoff open` again reopens the same page
 
 From a terminal: `bash ~/src/claude-kit/plugins/handoff/bin/handoffs` runs it in the foreground; `Ctrl+C` stops it.

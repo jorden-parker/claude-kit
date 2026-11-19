@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Project notes</title>
+    <title>Claude notes</title>
     <style>
       :root {
         --background: #ffffff;
@@ -15,6 +15,7 @@
         --border: #eaeaea;
         --border-strong: #d4d4d4;
         --focus: #0070f3;
+        --blocked: #c62828;
         color-scheme: light;
       }
       @media (prefers-color-scheme: dark) {
@@ -28,6 +29,7 @@
           --border: #262626;
           --border-strong: #3d3d3d;
           --focus: #3291ff;
+          --blocked: #ff6b6b;
           color-scheme: dark;
         }
       }
@@ -62,6 +64,10 @@
         font-size: 13px;
       }
       nav h3 {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        overflow-wrap: anywhere;
         margin: 8px 8px 2px;
         font-size: 11px;
         font-weight: 500;
@@ -79,10 +85,40 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      nav a small {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      nav a[data-status="done"] {
+        color: var(--muted);
+      }
+      nav a[data-status="blocked"] small {
+        color: var(--blocked);
+      }
+      nav h3 .progress {
+        flex: none;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .sections {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .sections a {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .sections .count {
+        color: var(--muted);
+        font-weight: 400;
+      }
       nav a:hover {
         background: var(--hover);
       }
-      nav a[aria-current="page"] {
+      nav a[aria-current] {
         background: var(--selected);
         font-weight: 500;
       }
@@ -102,7 +138,7 @@
         font-size: 24px;
         line-height: 1.3;
       }
-      .note-details {
+      .entry-details {
         margin: 4px 0 24px;
         font-size: 12px;
         color: var(--muted);
@@ -110,36 +146,36 @@
       .empty {
         color: var(--muted);
       }
-      .note-body :is(h1, h2, h3, h4, h5, h6) {
+      .entry-body :is(h1, h2, h3, h4, h5, h6) {
         margin: 28px 0 8px;
         line-height: 1.3;
       }
-      .note-body h1 {
+      .entry-body h1 {
         font-size: 20px;
       }
-      .note-body h2 {
+      .entry-body h2 {
         font-size: 17px;
         padding-bottom: 4px;
         border-bottom: 1px solid var(--border);
       }
-      .note-body :is(h3, h4, h5, h6) {
+      .entry-body :is(h3, h4, h5, h6) {
         font-size: 14px;
       }
-      .note-body :is(p, ul, ol, pre, blockquote, table) {
+      .entry-body :is(p, ul, ol, pre, blockquote, table) {
         margin: 0 0 12px;
       }
-      .note-body :is(ul, ol) {
+      .entry-body :is(ul, ol) {
         padding-left: 24px;
       }
-      .note-body li:has(> input[type="checkbox"]) {
+      .entry-body li:has(> input[type="checkbox"]) {
         list-style: none;
         margin-left: -24px;
       }
-      .note-body input[type="checkbox"] {
+      .entry-body input[type="checkbox"] {
         margin: 0 6px 0 0;
         accent-color: var(--focus);
       }
-      .note-body code {
+      .entry-body code {
         font:
           0.9em ui-monospace,
           "SF Mono",
@@ -149,36 +185,36 @@
         border-radius: 4px;
         background: var(--hover);
       }
-      .note-body pre {
+      .entry-body pre {
         padding: 10px 12px;
         border-radius: 6px;
         border: 1px solid var(--border);
         background: var(--sidebar);
         overflow-x: auto;
       }
-      .note-body pre code {
+      .entry-body pre code {
         padding: 0;
         background: none;
       }
-      .note-body a {
+      .entry-body a {
         color: var(--focus);
       }
-      .note-body blockquote {
+      .entry-body blockquote {
         padding-left: 12px;
         border-left: 3px solid var(--border-strong);
         color: var(--muted);
       }
-      .note-body table {
+      .entry-body table {
         display: block;
         overflow-x: auto;
         border-collapse: collapse;
       }
-      .note-body :is(th, td) {
+      .entry-body :is(th, td) {
         padding: 4px 10px;
         border: 1px solid var(--border);
         text-align: left;
       }
-      .note-body hr {
+      .entry-body hr {
         border: 0;
         border-top: 1px solid var(--border);
       }
@@ -202,8 +238,18 @@
     <main tabindex="-1"></main>
     <script>
       const sidebar = document.querySelector("nav");
-      const noteArea = document.querySelector("main");
-      let notes = [];
+      const entryArea = document.querySelector("main");
+      let sections = [];
+
+      const EMPTY_HINTS = {
+        handoffs: "No handoffs yet. Run /handoff to create one.",
+        "project-notes":
+          "No project notes yet. Ask Claude to write one, or run /project-note.",
+        "small-plans":
+          "No plans yet. Run /small-plans to plan work as small plans.",
+        brainstorm:
+          "No brainstorm plans yet. Run /brainstorm, then /brainstorm plan.",
+      };
 
       const createElement = (tagName, text, className) => {
         const element = document.createElement(tagName);
@@ -212,84 +258,190 @@
         return element;
       };
 
-      const readSelectedPath = () => decodeURIComponent(location.hash.slice(1));
+      const readSelection = () => {
+        const [sectionId, ...pathSegments] = decodeURIComponent(
+          location.hash.slice(1)
+        ).split("/");
+        const section =
+          sections.find((candidate) => candidate.id === sectionId) ??
+          sections.find((candidate) => candidate.entries.length) ??
+          sections[0];
+        const entryPath = pathSegments.join("/");
+        const entry =
+          section?.entries.find((candidate) => candidate.path === entryPath) ??
+          section?.entries[0];
+        return { section, entry };
+      };
 
-      const findSelectedNote = () =>
-        notes.find((note) => note.path === readSelectedPath()) ?? notes[0];
+      const readStatus = (entry) => entry.fields.status ?? "pending";
 
-      const renderSidebar = (selectedNote) => {
-        sidebar.replaceChildren(createElement("h1", "Project notes"));
-        notes.forEach((note, noteIndex) => {
-          const previousNote = notes[noteIndex - 1] ?? {};
-          const isNewProject = note.project !== previousNote.project;
-          if (isNewProject) sidebar.append(createElement("h2", note.project));
-          if (isNewProject || note.category !== previousNote.category)
-            sidebar.append(createElement("h3", note.category));
-          const link = createElement("a", note.title);
-          link.href = `#${encodeURIComponent(note.path)}`;
-          link.title = note.title;
-          if (note === selectedNote) link.setAttribute("aria-current", "page");
-          sidebar.append(link);
+      const readKind = (entry) => entry.fields.kind ?? "chore";
+
+      const readOrder = (entry) => entry.name.slice(0, 2);
+
+      const describeProgress = (section, memberEntry) => {
+        const entriesOfGroup = section.entries.filter(
+          (entry) =>
+            entry.project === memberEntry.project &&
+            entry.group === memberEntry.group
+        );
+        const doneCount = entriesOfGroup.filter(
+          (entry) => readStatus(entry) === "done"
+        ).length;
+        return `${doneCount} of ${entriesOfGroup.length} done`;
+      };
+
+      const readDependency = (entry) =>
+        entry.fields.depends_on &&
+        entry.fields.depends_on !== "none" &&
+        `needs plan ${entry.fields.depends_on}`;
+
+      const PLAN_VIEW = {
+        describeLink: (entry) => ({
+          label: `${readOrder(entry)} ${entry.title}`,
+          caption: `${readKind(entry)} · ${readStatus(entry)}`,
+          status: readStatus(entry),
+        }),
+        describeGroup: describeProgress,
+        listDetails: (entry) => [
+          entry.group,
+          `plan ${readOrder(entry)}`,
+          readKind(entry),
+          readStatus(entry),
+          readDependency(entry),
+        ],
+      };
+
+      const SECTION_VIEWS = {
+        handoffs: {
+          describeLink: (entry) => ({ label: entry.title }),
+          listDetails: (entry) => [
+            entry.fields.focus && `focus: ${entry.fields.focus}`,
+            /^\d/.test(entry.name) &&
+              `/handoff resume ${parseInt(entry.name, 10)}`,
+          ],
+        },
+        "project-notes": {
+          describeLink: (entry) => ({ label: entry.title }),
+          listDetails: (entry) => [entry.group],
+        },
+        "small-plans": PLAN_VIEW,
+        brainstorm: PLAN_VIEW,
+      };
+
+      const createSectionLinks = (selectedSection) => {
+        const sectionLinks = createElement("div", "", "sections");
+        sections.forEach((section) => {
+          const link = createElement("a", section.title);
+          link.href = `#${section.id}`;
+          link.append(
+            createElement("span", String(section.entries.length), "count")
+          );
+          if (section === selectedSection)
+            link.setAttribute("aria-current", "true");
+          sectionLinks.append(link);
+        });
+        return sectionLinks;
+      };
+
+      const createEntryLink = (section, entry, selectedEntry) => {
+        const { label, caption, status } =
+          SECTION_VIEWS[section.id].describeLink(entry);
+        const link = createElement("a", label);
+        link.href = `#${section.id}/${encodeURIComponent(entry.path)}`;
+        link.title = entry.title;
+        if (status) link.dataset.status = status;
+        if (caption) link.append(createElement("small", caption));
+        if (entry === selectedEntry) link.setAttribute("aria-current", "page");
+        return link;
+      };
+
+      const createGroupHeading = (section, entry) => {
+        const groupHeading = createElement("h3", entry.group);
+        const describeGroup = SECTION_VIEWS[section.id].describeGroup;
+        if (describeGroup)
+          groupHeading.append(
+            createElement("span", describeGroup(section, entry), "progress")
+          );
+        return groupHeading;
+      };
+
+      const renderSidebar = (selectedSection, selectedEntry) => {
+        sidebar.replaceChildren(
+          createElement("h1", "Claude notes"),
+          createSectionLinks(selectedSection)
+        );
+        const entries = selectedSection?.entries ?? [];
+        entries.forEach((entry, entryIndex) => {
+          const previousEntry = entries[entryIndex - 1] ?? {};
+          const isNewProject = entry.project !== previousEntry.project;
+          if (isNewProject) sidebar.append(createElement("h2", entry.project));
+          if (
+            entry.group &&
+            (isNewProject || entry.group !== previousEntry.group)
+          )
+            sidebar.append(createGroupHeading(selectedSection, entry));
+          sidebar.append(
+            createEntryLink(selectedSection, entry, selectedEntry)
+          );
         });
       };
 
-      const renderNote = (selectedNote) => {
-        if (!selectedNote) {
-          noteArea.replaceChildren(
-            createElement(
-              "p",
-              "No project notes yet. Ask Claude to write one, or run /project-note.",
-              "empty"
-            )
+      const renderEntry = (selectedSection, selectedEntry) => {
+        if (!selectedEntry) {
+          entryArea.replaceChildren(
+            createElement("p", EMPTY_HINTS[selectedSection?.id], "empty")
           );
           return;
         }
         const article = createElement("article");
-        const body = createElement("div", "", "note-body");
-        body.innerHTML = selectedNote.html;
+        const body = createElement("div", "", "entry-body");
+        body.innerHTML = selectedEntry.html;
         body
           .querySelectorAll("input[type=checkbox]")
           .forEach((checkbox) => (checkbox.disabled = true));
         article.append(
-          createElement("h1", selectedNote.title),
+          createElement("h1", selectedEntry.title),
           createElement(
             "p",
             [
-              selectedNote.project,
-              selectedNote.category,
-              selectedNote.created.slice(0, 16).replace("T", " "),
-              selectedNote.path,
-            ].join(" · "),
-            "note-details"
+              selectedEntry.project,
+              ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
+              selectedEntry.created.slice(0, 16).replace("T", " "),
+              selectedEntry.path,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            "entry-details"
           ),
           body
         );
-        noteArea.replaceChildren(article);
+        entryArea.replaceChildren(article);
       };
 
       const render = () => {
-        const selectedNote = findSelectedNote();
-        document.title = selectedNote
-          ? `${selectedNote.title} · Project notes`
-          : "Project notes";
-        renderSidebar(selectedNote);
-        renderNote(selectedNote);
+        const { section, entry } = readSelection();
+        document.title = entry
+          ? `${entry.title} · ${section.title}`
+          : "Claude notes";
+        renderSidebar(section, entry);
+        renderEntry(section, entry);
       };
 
-      const loadNotes = async () => {
-        notes = await (await fetch("/api/notes")).json();
+      const loadSections = async () => {
+        sections = await (await fetch("/api/sections")).json();
         render();
       };
 
       addEventListener("hashchange", () => {
         render();
-        noteArea.scrollTop = 0;
-        noteArea.focus();
+        entryArea.scrollTop = 0;
+        entryArea.focus();
       });
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) loadNotes();
+        if (!document.hidden) loadSections();
       });
-      loadNotes();
+      loadSections();
     </script>
   </body>
 </html>

@@ -6,9 +6,13 @@ import type {
   RenderElement,
 } from "claude-code";
 
+const OPEN_QUESTIONS_HEADING = "Open questions for the user:";
+
 const RECAP_RULES = `You write a prompt that a fresh coding-agent session could receive to continue the work in the conversation below.
 The working directory, the conversation and a <guidance> block, when present, are the only sources: invent nothing they do not contain.
-Include the goal, what has been done, what is left, the files and commands mentioned, and any open questions.
+Start with a one-line title that names the work, in 60 characters at most and with no period at the end, then a blank line.
+Include the goal, what has been done, what is left, and the files and commands mentioned.
+If decisions are left that only the user can make, end with a line reading exactly "${OPEN_QUESTIONS_HEADING}", then one line per decision in the form "- <question ending in a question mark> (<likely answer> | <likely answer>)", with two or three likely answers. Leave that section out when no such decision is left, and never list there what the next session can check for itself.
 If a <focus> block is present, center the recap on it and keep the rest brief.
 If a <guidance> block is present, it holds the user's rough notes for the next session: a direction to take, or extra requests. Work out what they mean and write that into the prompt in your own clear words, where it belongs: as the next step, a priority, a constraint or an added task. Do not quote the notes, label them, or add them as a separate block.
 Output only the prompt, with no preamble, quotes or explanation.`;
@@ -713,15 +717,133 @@ const startNewSessionWithRecap = async (
   return { text: HANDING_OFF_MESSAGE };
 };
 
+const LEAVE_OPEN_ANSWER = "Leave open";
+const YES_OR_NO_ANSWERS = ["Yes", "No"];
+const MAX_SUGGESTED_ANSWERS = 3;
+const QUESTION_DIALOG_HEADER = "Handoff";
+const OPEN_QUESTIONS_PHRASE = /open questions for the user/i;
+const OPEN_QUESTIONS_HEADING_LINE =
+  /^[#*\s]*open questions for the user:?[*\s]*$/i;
+const QUESTION_BULLET = /^\s*[-*]\s+(.*)$/;
+const QUESTION_WITH_ANSWERS = /^(.*?\?)\s*\(([^()]*\|[^()]*)\)\s*$/;
+
+type OpenQuestion = {
+  bulletLine: string;
+  question: string;
+  suggestedAnswers: string[];
+};
+
+const readOpenQuestion = (bulletLine: string): OpenQuestion[] => {
+  const bulletText = QUESTION_BULLET.exec(bulletLine)?.[1]?.trim();
+  if (!bulletText) return [];
+  const [, question = bulletText, answerList = ""] =
+    QUESTION_WITH_ANSWERS.exec(bulletText) ?? [];
+  const listedAnswers = answerList
+    .split("|")
+    .map((answer) => answer.trim())
+    .filter((answer) => answer)
+    .slice(0, MAX_SUGGESTED_ANSWERS);
+  return [
+    {
+      bulletLine,
+      question,
+      suggestedAnswers:
+        listedAnswers.length > 1 ? listedAnswers : YES_OR_NO_ANSWERS,
+    },
+  ];
+};
+
+const findOpenQuestions = (recap: string) => {
+  const recapLines = recap.split("\n");
+  const headingIndex = recapLines.findIndex((line) =>
+    OPEN_QUESTIONS_HEADING_LINE.test(line)
+  );
+  if (headingIndex < 0) return undefined;
+  const linesAfterHeading = recapLines.slice(headingIndex + 1);
+  const laterTextIndex = linesAfterHeading.findIndex(
+    (line) => line.trim() && !QUESTION_BULLET.test(line)
+  );
+  const questionLineCount =
+    laterTextIndex < 0 ? linesAfterHeading.length : laterTextIndex;
+  return {
+    linesBefore: recapLines.slice(0, headingIndex),
+    headingLine: recapLines[headingIndex] ?? "",
+    openQuestions: linesAfterHeading
+      .slice(0, questionLineCount)
+      .flatMap(readOpenQuestion),
+    linesAfter: linesAfterHeading.slice(questionLineCount),
+  };
+};
+
+const askOpenQuestion = async (
+  engine: EngineInterface,
+  openQuestion: OpenQuestion
+) => {
+  try {
+    return await engine.ui.ask(openQuestion.question, {
+      header: QUESTION_DIALOG_HEADER,
+      options: [...openQuestion.suggestedAnswers, LEAVE_OPEN_ANSWER],
+    });
+  } catch {
+    return undefined;
+  }
+};
+
+const collectAnswers = async (
+  engine: EngineInterface,
+  openQuestions: OpenQuestion[]
+) => {
+  const answers: string[] = [];
+  for (const openQuestion of openQuestions) {
+    const answer = await askOpenQuestion(engine, openQuestion);
+    if (answer === undefined) break;
+    answers.push(answer.replace(/\s+/g, " ").trim());
+  }
+  return answers;
+};
+
+const settleOpenQuestions = async (engine: EngineInterface, recap: string) => {
+  const section = findOpenQuestions(recap);
+  if (!section || section.openQuestions.length === 0) return recap;
+  const answers = await collectAnswers(engine, section.openQuestions);
+  const isDecided = (questionIndex: number) =>
+    Boolean(answers[questionIndex]) &&
+    answers[questionIndex] !== LEAVE_OPEN_ANSWER;
+  const decisionLines = section.openQuestions.flatMap(
+    (openQuestion, questionIndex) =>
+      isDecided(questionIndex)
+        ? [`- ${openQuestion.question} Answer: ${answers[questionIndex]}`]
+        : []
+  );
+  if (decisionLines.length === 0) return recap;
+  const stillOpenLines = section.openQuestions
+    .filter((_, questionIndex) => !isDecided(questionIndex))
+    .map((openQuestion) => openQuestion.bulletLine);
+  return [
+    ...section.linesBefore,
+    section.headingLine.replace(
+      OPEN_QUESTIONS_PHRASE,
+      "Decisions from the user"
+    ),
+    ...decisionLines,
+    ...(stillOpenLines.length
+      ? ["", section.headingLine, ...stillOpenLines]
+      : []),
+    ...(section.linesAfter.length ? ["", ...section.linesAfter] : []),
+  ].join("\n");
+};
+
 const deliverRecap = async (
   engine: EngineInterface,
   request: RecapRequest,
-  recapText: string,
-  isRecapOnScreen: boolean
+  writtenRecap: string,
+  isWrittenRecapOnScreen: boolean
 ) => {
   if (request.action === "each") {
-    return savePlanHandoffs(engine, recapText, request.focus);
+    return savePlanHandoffs(engine, writtenRecap, request.focus);
   }
+  const recapText = await settleOpenQuestions(engine, writtenRecap);
+  const isRecapOnScreen = isWrittenRecapOnScreen && recapText === writtenRecap;
   const saveOutcome = await saveSessionHandoff(
     engine,
     recapText,

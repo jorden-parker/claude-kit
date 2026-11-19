@@ -52,7 +52,9 @@ The files are plain Markdown: edit, move or delete them with any tool. The folde
 - The sidebar lists every note, grouped by project, then category, newest first
 - The note shows rendered Markdown: headings, lists, checkboxes, tables, code blocks, quotes and links. Raw HTML in a note is not rendered
 - The page reloads the notes when you come back to its tab
-- The server only reads the notes. It listens on `127.0.0.1`, port `47615`; set `PROJECT_NOTES_PORT` to pick another, or `PROJECT_NOTES_NO_OPEN=1` to skip opening the browser
+- The same page serves all four kinds of saved notes: Handoffs, Project notes, Small plans and Brainstorm plans. Pick one at the top of the sidebar. `/project-notes` opens it on Project notes
+- The server only reads the notes. It listens on `127.0.0.1`, port `47618`; set `CLAUDE_NOTES_PORT` to pick another, or `CLAUDE_NOTES_NO_OPEN=1` to skip opening the browser
+- The handoff, project-notes and small-plans plugins each ship the same viewer, so any one of them is enough to run it
 - It keeps running after the session ends. Running `/project-notes` again reopens the same page
 
 From a terminal: `bash ~/src/claude-kit/plugins/project-notes/bin/project-notes` runs it in the foreground; `Ctrl+C` stops it.

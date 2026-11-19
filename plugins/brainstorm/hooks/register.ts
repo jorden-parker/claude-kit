@@ -37,8 +37,12 @@ const QUALIFIED_CHECK_TOOL_NAME = `mcp__brainstorm__${CHECK_TOOL_NAME}`;
 const STATUS_TOOL_NAME = "set_brainstorm_plan_status";
 const QUALIFIED_STATUS_TOOL_NAME = `mcp__brainstorm__${STATUS_TOOL_NAME}`;
 
-const BRAINSTORM_FOLDER = ".claude/brainstorm";
-const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
+const LEGACY_BRAINSTORM_FOLDER = ".claude/brainstorm";
+const PLANS_FOLDER_NAME = "plans";
+const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
+const RUN_FILE_TOOLS = ["Read", "Write", "Edit"];
+const OWN_FOLDER_REASON =
+  "The file is in the brainstorm plugin's own folder under ~/.claude/brainstorm.";
 const FILE_STAMP_PATTERN = String.raw`\d{4}-\d{2}-\d{2}-\d{4}`;
 const SAVED_BRAINSTORM_PATTERN = new RegExp(
   `^brainstorm-${FILE_STAMP_PATTERN}\\.json$`
@@ -175,7 +179,7 @@ const CHECK_TOOL_SCHEMA = {
     path: {
       type: "string",
       description:
-        "The run folder to check. A relative path is under the project.",
+        "The run folder to check. A relative path is under this project's brainstorm folder, ~/.claude/brainstorm/<project>/.",
     },
   },
   required: ["path"],
@@ -187,7 +191,7 @@ const STATUS_TOOL_SCHEMA = {
     path: {
       type: "string",
       description:
-        "The plan folder (NN-slug) inside a run folder. A relative path is under the project.",
+        "The plan folder (NN-slug) inside a run folder. A relative path is under this project's brainstorm folder, ~/.claude/brainstorm/<project>/.",
     },
     status: { type: "string", enum: PLAN_STATUSES },
   },
@@ -667,18 +671,60 @@ const openInBrowser = async (engine: EngineInterface, pagePath: string) => {
   return false;
 };
 
+const toProjectName = (folder: string) => {
+  const lastSegment = folder.split("/").filter(Boolean).pop() ?? "";
+  const projectName = lastSegment.replace(/[^A-Za-z0-9._-]+/g, "-");
+  return /[A-Za-z0-9]/.test(projectName) ? projectName : "unknown";
+};
+
+const resolveProjectName = async (engine: EngineInterface) => {
+  const folder = await engine.session.cwd();
+  const commonGitFolder = await engine.process
+    .run([
+      "git",
+      "-C",
+      folder,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    ])
+    .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
+    .catch(() => "");
+  return toProjectName(
+    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") || folder
+  );
+};
+
+const readBrainstormRoot = async (engine: EngineInterface) =>
+  (await engine.env.get("BRAINSTORM_DIR")) ??
+  `${(await engine.env.get("HOME")) ?? ""}/.claude/brainstorm`;
+
+const resolveBrainstormFolder = async (engine: EngineInterface) =>
+  `${await readBrainstormRoot(engine)}/${await resolveProjectName(engine)}`;
+
+const moveLegacyBrainstormFolder = async (engine: EngineInterface) => {
+  const legacyFolder = `${await engine.session.cwd()}/${LEGACY_BRAINSTORM_FOLDER}`;
+  const brainstormFolder = await resolveBrainstormFolder(engine);
+  const hasLegacyFolder = await engine.fs.exists(legacyFolder);
+  if (!hasLegacyFolder || (await engine.fs.exists(brainstormFolder))) return;
+  await engine.process.run(["mkdir", "-p", await readBrainstormRoot(engine)]);
+  await engine.process.run(["mv", legacyFolder, brainstormFolder]);
+};
+
+const isInsideFolder = (filePath: string, folder: string) =>
+  filePath.startsWith(`${folder}/`) && !filePath.split("/").includes("..");
+
 const writeBrainstormPage = async (
   engine: EngineInterface,
   brainstorm: Brainstorm
 ) => {
-  const brainstormFolder = `${await engine.session.cwd()}/${BRAINSTORM_FOLDER}`;
+  const brainstormFolder = await resolveBrainstormFolder(engine);
   const pathWithoutExtension = `${brainstormFolder}/brainstorm-${formatFileStamp(await engine.clock.now())}`;
   const pagePath = `${pathWithoutExtension}.html`;
   const savedBrainstorm: SavedBrainstorm = {
     ...brainstorm,
     ideas: numberIdeasByUrgency(brainstorm.ideas),
   };
-  await engine.fs.write(`${brainstormFolder}/.gitignore`, "*\n");
   await engine.fs.write(
     `${pathWithoutExtension}.json`,
     `${JSON.stringify(savedBrainstorm, null, 2)}\n`
@@ -707,11 +753,11 @@ const isSavedBrainstorm = (entry: FolderEntry) =>
 
 const loadNewestBrainstorm = async (
   engine: EngineInterface,
-  workingDirectory: string
+  brainstormFolder: string
 ): Promise<SavedBrainstorm | undefined> => {
   const savedPaths = await listEntryPathsOldestFirst(
     engine,
-    `${workingDirectory}/${BRAINSTORM_FOLDER}`,
+    brainstormFolder,
     isSavedBrainstorm
   );
   const newestSavedPath = savedPaths.at(-1);
@@ -914,8 +960,13 @@ ${requestedRuns}
 </runs>`
     : `The user named no run, so build ${NEWEST_RUN}.`;
 
-const buildImplementationPrompt = (requestedRuns: string) =>
+const buildImplementationPrompt = (
+  requestedRuns: string,
+  plansFolder: string
+) =>
   `Build brainstorm plans. Load the brainstorm:build-plans skill with the Skill tool and follow it exactly. Do not commit anything.
+
+The plans folder of this project is ${plansFolder}.
 
 ${describeRunsToBuild(requestedRuns)}`;
 
@@ -995,11 +1046,10 @@ const checkBrainstormPlanPath = async (
   engine: EngineInterface,
   requestedPath: string
 ) => {
-  const projectRoot = await engine.session.cwd();
   const problems = await checkPlan(
     readPlanFiles(engine),
-    resolveProjectPath(projectRoot, requestedPath),
-    projectRoot
+    resolveProjectPath(await resolveBrainstormFolder(engine), requestedPath),
+    await engine.session.cwd()
   );
   return problems.length ? problems.join("\n") : "OK";
 };
@@ -1036,8 +1086,8 @@ const startPlanning = async (
   engine: EngineInterface,
   requestedPicksText: string
 ) => {
-  const workingDirectory = await engine.session.cwd();
-  const brainstorm = await loadNewestBrainstorm(engine, workingDirectory);
+  const brainstormFolder = await resolveBrainstormFolder(engine);
+  const brainstorm = await loadNewestBrainstorm(engine, brainstormFolder);
   if (!brainstorm) {
     return {
       text: `No saved brainstorm in this project yet. Run /${BRAINSTORM_COMMAND} first.`,
@@ -1054,7 +1104,7 @@ const startPlanning = async (
       text: describeUnknownPicks(brainstorm, unknownPicks, requestedPicksText),
     };
   }
-  const runFolderPath = `${workingDirectory}/${PLANS_FOLDER}/plan-${formatFileStamp(await engine.clock.now())}`;
+  const runFolderPath = `${brainstormFolder}/${PLANS_FOLDER_NAME}/plan-${formatFileStamp(await engine.clock.now())}`;
   submitPromptAfterReply(engine, buildPlanPrompt(pickedIdeas, runFolderPath));
   const pickedTitles = pickedIdeas
     .map((idea) => `#${idea.number} ${idea.title}`)
@@ -1064,8 +1114,12 @@ const startPlanning = async (
   };
 };
 
-const startBuild = (engine: EngineInterface, requestedRuns: string) => {
-  submitPromptAfterReply(engine, buildImplementationPrompt(requestedRuns));
+const startBuild = async (engine: EngineInterface, requestedRuns: string) => {
+  const plansFolder = `${await resolveBrainstormFolder(engine)}/${PLANS_FOLDER_NAME}`;
+  submitPromptAfterReply(
+    engine,
+    buildImplementationPrompt(requestedRuns, plansFolder)
+  );
   return {
     text: `Building ${requestedRuns || NEWEST_RUN} with small-model implementers and a strong reviewer…`,
   };
@@ -1081,7 +1135,7 @@ export const register: Register = (on) => {
     await $.tool.register({
       name: TOOL_NAME,
       description:
-        "Renders brainstormed project ideas as a self-contained, ADHD-friendly HTML page, saves it under .claude/brainstorm/ and opens it in the browser. Call it once, with every idea, at the end of a /brainstorm.",
+        "Renders brainstormed project ideas as a self-contained, ADHD-friendly HTML page, saves it under ~/.claude/brainstorm/<project>/ and opens it in the browser. Call it once, with every idea, at the end of a /brainstorm.",
       inputSchema: RENDER_TOOL_SCHEMA,
       isDeferred: false,
     });
@@ -1115,6 +1169,7 @@ export const register: Register = (on) => {
   });
 
   on("command.run", { command: BRAINSTORM_COMMAND }, async ($, e) => {
+    await moveLegacyBrainstormFolder($).catch(() => undefined);
     const commandArguments = e.args.trim();
     const [firstWord = ""] = commandArguments.split(/\s+/, 1);
     const wordsAfterFirst = commandArguments.slice(firstWord.length).trim();
@@ -1145,13 +1200,25 @@ export const register: Register = (on) => {
     }
   });
 
+  on("tool.check", async ($, e, next) => {
+    const verdict = await next(e);
+    const filePath = readText((e.input as { file_path?: unknown })?.file_path);
+    const isOwnRunFile =
+      verdict.decision === "ask" &&
+      RUN_FILE_TOOLS.includes(e.tool) &&
+      isInsideFolder(filePath, await readBrainstormRoot($));
+    return isOwnRunFile
+      ? { decision: "allow", reason: OWN_FOLDER_REASON }
+      : verdict;
+  });
+
   on("tool.call", { tool: QUALIFIED_CHECK_TOOL_NAME }, async ($, e) => ({
     result: await checkBrainstormPlanPath($, readText(e.path)),
   }));
 
   on("tool.call", { tool: QUALIFIED_STATUS_TOOL_NAME }, async ($, e) => {
     const planFolderPath = resolveProjectPath(
-      await $.session.cwd(),
+      await resolveBrainstormFolder($),
       readText(e.path)
     );
     const status = readText(e.status);

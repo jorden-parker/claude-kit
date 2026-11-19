@@ -1,6 +1,6 @@
 ---
 name: build-plans
-description: Implement brainstorm plans from .claude/brainstorm/plans/. Each run folder (plan-YYYY-MM-DD-HHMM/) holds index.md, which lists every plan with its status and build order, and one folder per plan with its plan.md and step files. Use whenever the user asks to implement, build, run, resume or carry out a plan, "the plan", "the latest plan", several plans or a plan path, even when they give no path. Checks each run, delegates each plan's steps to one small-model subagent, has a strong-model subagent review the finished work, and records each plan's status in its plan.md and in the index.
+description: Implement brainstorm plans from ~/.claude/brainstorm/<project>/plans/. Each run folder (plan-YYYY-MM-DD-HHMM/) holds index.md, which lists every plan with its status and build order, and one folder per plan with its plan.md and step files. Use whenever the user asks to implement, build, run, resume or carry out a plan, "the plan", "the latest plan", several plans or a plan path, even when they give no path. Checks each run, delegates each plan's steps to one small-model subagent, has a strong-model subagent review the finished work, and records each plan's status in its plan.md and in the index.
 user-invocable: false
 ---
 
@@ -26,9 +26,9 @@ Two tools work on these files. If a tool's schema is not loaded, load it with To
 
 The request names the runs: in the user's own words, or in the `<runs>` block that `/brainstorm build` passes on unchanged.
 
-If it gives paths, use them as they are, resolved against the working directory, and skip the rest of this section. A path to a plan folder means: build only that plan of its run.
+If it gives paths, use them as they are, and skip the rest of this section. A relative path is under the plans folder. A path to a plan folder means: build only that plan of its run.
 
-Otherwise list `.claude/brainstorm/plans/` under the project's working directory. Never ask the user where the plans are. The run folders are the entries named `plan-YYYY-MM-DD-HHMM`. The names are UTC timestamps, so they sort oldest to newest.
+Otherwise list the plans folder. `/brainstorm build` names it in its prompt. With no such prompt it is `~/.claude/brainstorm/<project>/plans/`, where `<project>` is the name of the folder that holds the repository (for a git worktree, the main repository's folder), or the working directory's name outside git. Never ask the user where the plans are. The run folders are the entries named `plan-YYYY-MM-DD-HHMM`. The names are UTC timestamps, so they sort oldest to newest.
 
 - "the plan", "the latest plan" or no detail: the newest run.
 - A name, a date, or words from a title: the matching runs. A run's title is the `# Plans:` line of its index.md, and the table below it has each plan's title.

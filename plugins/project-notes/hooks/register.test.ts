@@ -48,7 +48,8 @@ const parentFolder = (path: string) => path.slice(0, path.lastIndexOf("/"));
 const mockEngine = (
   on: On,
   seededFiles: Record<string, string> = {},
-  environment: Record<string, string> = {}
+  environment: Record<string, string> = {},
+  sessionRoot = "/work/claude-kit"
 ): Recorded => {
   const recorded: Recorded = {
     files: new Map(Object.entries(seededFiles)),
@@ -58,7 +59,7 @@ const mockEngine = (
   on("env.get", (_, e) => ({
     value: { HOME: "/home/tester", ...environment }[e.name],
   }));
-  on("session.root", () => ({ value: "/work/claude-kit" }));
+  on("session.root", () => ({ value: sessionRoot }));
   on("fs.exists", (_, e) => ({ value: recorded.files.has(e.path) }));
   on("fs.write", (_, e) => {
     recorded.files.set(e.path, e.text);
@@ -126,13 +127,28 @@ test("a note is saved under its project and category", async ($, on) => {
   expect(reply.result).toContain(notePath);
   expect(files.get(notePath)).toBe(`---
 title: Store lives in ~/.claude: one file per plugin!
-category: fact
 project: claude-kit
 created: 2026-11-19T10:00:00.000Z
+category: fact
 ---
 
 Each plugin has its own store file.
 `);
+});
+
+test("a note written in a worktree is filed under the main repository's name", async ($, on) => {
+  const { files } = mockEngine(on, {}, {}, "/work/kit-worktree");
+
+  await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Worktrees share notes",
+    body: "One project folder per repository.",
+    created: "2026-11-19",
+  });
+
+  expect([...files.keys()]).toEqual([
+    `${NOTES_ROOT}/claude-kit/fact/2026-11-19-worktrees-share-notes.md`,
+  ]);
 });
 
 test("a note without a date is dated today", async ($, on) => {

@@ -253,6 +253,7 @@ const writeSmallPlan = async (
   const frontMatter = [
     `title: ${title}`,
     `project: ${projectName}`,
+    `created: ${new Date().toISOString()}`,
     `set: ${setName}`,
     `order: ${order}`,
     `kind: ${kind}`,
@@ -260,7 +261,6 @@ const writeSmallPlan = async (
     ...(dependencies.length > 0
       ? [`depends_on: ${dependencies.join(", ")}`]
       : []),
-    `created: ${new Date().toISOString()}`,
   ].join("\n");
   await engine.fs.write(planPath, `---\n${frontMatter}\n---\n\n${body}\n`);
   return { result: `Plan saved to ${planPath}` };

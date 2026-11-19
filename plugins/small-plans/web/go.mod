@@ -1,4 +1,4 @@
-module small-plans/web
+module claude-notes/web
 
 go 1.24.2
 

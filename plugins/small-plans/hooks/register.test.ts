@@ -135,7 +135,7 @@ test("a plan is saved under its project and set", async ($, on) => {
   const [frontMatter, body] = files.get(planPath)!.split("\n---\n\n");
   expect(frontMatter).toMatch(
     new RegExp(
-      `^---\ntitle: Clear the cached token\nproject: claude-kit\nset: ${HANDOFF_SET}\norder: 2\nkind: fix\nstatus: pending\ndepends_on: 1\ncreated: \\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z$`
+      `^---\ntitle: Clear the cached token\nproject: claude-kit\ncreated: \\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z\nset: ${HANDOFF_SET}\norder: 2\nkind: fix\nstatus: pending\ndepends_on: 1$`
     )
   );
   expect(body).toBe(`${PLAN_BODY}\n`);

@@ -73,7 +73,9 @@ Nothing is committed: the changes stay in your working tree.
 - Each set shows how many of its plans are done; each plan shows its kind and status
 - The plan shows rendered Markdown. Raw HTML in a plan is not rendered
 - The page reloads the plans when you come back to its tab
-- The server only reads the plans. It listens on `127.0.0.1`, port `47617`; set `SMALL_PLANS_PORT` to pick another, or `SMALL_PLANS_NO_OPEN=1` to skip opening the browser
+- The same page serves all four kinds of saved notes: Handoffs, Project notes, Small plans and Brainstorm plans. Pick one at the top of the sidebar. `/small-plans open` opens it on Small plans
+- The server only reads the notes. It listens on `127.0.0.1`, port `47618`; set `CLAUDE_NOTES_PORT` to pick another, or `CLAUDE_NOTES_NO_OPEN=1` to skip opening the browser
+- The handoff, project-notes and small-plans plugins each ship the same viewer, so any one of them is enough to run it
 - It keeps running after the session ends. Running `/small-plans open` again reopens the same page
 
 From a terminal: `bash ~/src/claude-kit/plugins/small-plans/bin/small-plans` runs it in the foreground; `Ctrl+C` stops it.

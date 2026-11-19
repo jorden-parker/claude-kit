@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Small plans</title>
+    <title>Claude notes</title>
     <style>
       :root {
         --background: #ffffff;
@@ -64,6 +64,10 @@
         font-size: 13px;
       }
       nav h3 {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        overflow-wrap: anywhere;
         margin: 8px 8px 2px;
         font-size: 11px;
         font-weight: 500;
@@ -81,13 +85,6 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      nav a:hover {
-        background: var(--hover);
-      }
-      nav a[aria-current="page"] {
-        background: var(--selected);
-        font-weight: 500;
-      }
       nav a small {
         display: block;
         font-size: 11px;
@@ -99,16 +96,31 @@
       nav a[data-status="blocked"] small {
         color: var(--blocked);
       }
-      nav h3 {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        overflow-wrap: anywhere;
-      }
       nav h3 .progress {
         flex: none;
         text-transform: none;
         letter-spacing: 0;
+      }
+      .sections {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .sections a {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .sections .count {
+        color: var(--muted);
+        font-weight: 400;
+      }
+      nav a:hover {
+        background: var(--hover);
+      }
+      nav a[aria-current] {
+        background: var(--selected);
+        font-weight: 500;
       }
       :is(a, main):focus-visible {
         outline: 2px solid var(--focus);
@@ -126,7 +138,7 @@
         font-size: 24px;
         line-height: 1.3;
       }
-      .plan-details {
+      .entry-details {
         margin: 4px 0 24px;
         font-size: 12px;
         color: var(--muted);
@@ -134,36 +146,36 @@
       .empty {
         color: var(--muted);
       }
-      .plan-body :is(h1, h2, h3, h4, h5, h6) {
+      .entry-body :is(h1, h2, h3, h4, h5, h6) {
         margin: 28px 0 8px;
         line-height: 1.3;
       }
-      .plan-body h1 {
+      .entry-body h1 {
         font-size: 20px;
       }
-      .plan-body h2 {
+      .entry-body h2 {
         font-size: 17px;
         padding-bottom: 4px;
         border-bottom: 1px solid var(--border);
       }
-      .plan-body :is(h3, h4, h5, h6) {
+      .entry-body :is(h3, h4, h5, h6) {
         font-size: 14px;
       }
-      .plan-body :is(p, ul, ol, pre, blockquote, table) {
+      .entry-body :is(p, ul, ol, pre, blockquote, table) {
         margin: 0 0 12px;
       }
-      .plan-body :is(ul, ol) {
+      .entry-body :is(ul, ol) {
         padding-left: 24px;
       }
-      .plan-body li:has(> input[type="checkbox"]) {
+      .entry-body li:has(> input[type="checkbox"]) {
         list-style: none;
         margin-left: -24px;
       }
-      .plan-body input[type="checkbox"] {
+      .entry-body input[type="checkbox"] {
         margin: 0 6px 0 0;
         accent-color: var(--focus);
       }
-      .plan-body code {
+      .entry-body code {
         font:
           0.9em ui-monospace,
           "SF Mono",
@@ -173,36 +185,36 @@
         border-radius: 4px;
         background: var(--hover);
       }
-      .plan-body pre {
+      .entry-body pre {
         padding: 10px 12px;
         border-radius: 6px;
         border: 1px solid var(--border);
         background: var(--sidebar);
         overflow-x: auto;
       }
-      .plan-body pre code {
+      .entry-body pre code {
         padding: 0;
         background: none;
       }
-      .plan-body a {
+      .entry-body a {
         color: var(--focus);
       }
-      .plan-body blockquote {
+      .entry-body blockquote {
         padding-left: 12px;
         border-left: 3px solid var(--border-strong);
         color: var(--muted);
       }
-      .plan-body table {
+      .entry-body table {
         display: block;
         overflow-x: auto;
         border-collapse: collapse;
       }
-      .plan-body :is(th, td) {
+      .entry-body :is(th, td) {
         padding: 4px 10px;
         border: 1px solid var(--border);
         text-align: left;
       }
-      .plan-body hr {
+      .entry-body hr {
         border: 0;
         border-top: 1px solid var(--border);
       }
@@ -222,12 +234,22 @@
     </style>
   </head>
   <body>
-    <nav aria-label="All plans"></nav>
+    <nav aria-label="All notes"></nav>
     <main tabindex="-1"></main>
     <script>
       const sidebar = document.querySelector("nav");
-      const planArea = document.querySelector("main");
-      let plans = [];
+      const entryArea = document.querySelector("main");
+      let sections = [];
+
+      const EMPTY_HINTS = {
+        handoffs: "No handoffs yet. Run /handoff to create one.",
+        "project-notes":
+          "No project notes yet. Ask Claude to write one, or run /project-note.",
+        "small-plans":
+          "No plans yet. Run /small-plans to plan work as small plans.",
+        brainstorm:
+          "No brainstorm plans yet. Run /brainstorm, then /brainstorm plan.",
+      };
 
       const createElement = (tagName, text, className) => {
         const element = document.createElement(tagName);
@@ -236,109 +258,190 @@
         return element;
       };
 
-      const readSelectedPath = () => decodeURIComponent(location.hash.slice(1));
-
-      const findSelectedPlan = () =>
-        plans.find((plan) => plan.path === readSelectedPath()) ?? plans[0];
-
-      const readOrder = (plan) => plan.path.split("/")[2].slice(0, 2);
-
-      const describeProgress = (memberPlan) => {
-        const plansOfSet = plans.filter(
-          (plan) =>
-            plan.project === memberPlan.project && plan.set === memberPlan.set
-        );
-        const doneCount = plansOfSet.filter(
-          (plan) => plan.status === "done"
-        ).length;
-        return `${doneCount} of ${plansOfSet.length} done`;
+      const readSelection = () => {
+        const [sectionId, ...pathSegments] = decodeURIComponent(
+          location.hash.slice(1)
+        ).split("/");
+        const section =
+          sections.find((candidate) => candidate.id === sectionId) ??
+          sections.find((candidate) => candidate.entries.length) ??
+          sections[0];
+        const entryPath = pathSegments.join("/");
+        const entry =
+          section?.entries.find((candidate) => candidate.path === entryPath) ??
+          section?.entries[0];
+        return { section, entry };
       };
 
-      const renderSidebar = (selectedPlan) => {
-        sidebar.replaceChildren(createElement("h1", "Small plans"));
-        plans.forEach((plan, planIndex) => {
-          const previousPlan = plans[planIndex - 1] ?? {};
-          const isNewProject = plan.project !== previousPlan.project;
-          if (isNewProject) sidebar.append(createElement("h2", plan.project));
-          if (isNewProject || plan.set !== previousPlan.set) {
-            const setNameHeading = createElement("h3", plan.set);
-            setNameHeading.append(
-              createElement("span", describeProgress(plan), "progress")
-            );
-            sidebar.append(setNameHeading);
-          }
-          const link = createElement("a", `${readOrder(plan)} ${plan.title}`);
-          link.href = `#${encodeURIComponent(plan.path)}`;
-          link.title = plan.title;
-          link.dataset.status = plan.status;
-          link.append(createElement("small", `${plan.kind} · ${plan.status}`));
-          if (plan === selectedPlan) link.setAttribute("aria-current", "page");
-          sidebar.append(link);
+      const readStatus = (entry) => entry.fields.status ?? "pending";
+
+      const readKind = (entry) => entry.fields.kind ?? "chore";
+
+      const readOrder = (entry) => entry.name.slice(0, 2);
+
+      const describeProgress = (section, memberEntry) => {
+        const entriesOfGroup = section.entries.filter(
+          (entry) =>
+            entry.project === memberEntry.project &&
+            entry.group === memberEntry.group
+        );
+        const doneCount = entriesOfGroup.filter(
+          (entry) => readStatus(entry) === "done"
+        ).length;
+        return `${doneCount} of ${entriesOfGroup.length} done`;
+      };
+
+      const readDependency = (entry) =>
+        entry.fields.depends_on &&
+        entry.fields.depends_on !== "none" &&
+        `needs plan ${entry.fields.depends_on}`;
+
+      const PLAN_VIEW = {
+        describeLink: (entry) => ({
+          label: `${readOrder(entry)} ${entry.title}`,
+          caption: `${readKind(entry)} · ${readStatus(entry)}`,
+          status: readStatus(entry),
+        }),
+        describeGroup: describeProgress,
+        listDetails: (entry) => [
+          entry.group,
+          `plan ${readOrder(entry)}`,
+          readKind(entry),
+          readStatus(entry),
+          readDependency(entry),
+        ],
+      };
+
+      const SECTION_VIEWS = {
+        handoffs: {
+          describeLink: (entry) => ({ label: entry.title }),
+          listDetails: (entry) => [
+            entry.fields.focus && `focus: ${entry.fields.focus}`,
+            /^\d/.test(entry.name) &&
+              `/handoff resume ${parseInt(entry.name, 10)}`,
+          ],
+        },
+        "project-notes": {
+          describeLink: (entry) => ({ label: entry.title }),
+          listDetails: (entry) => [entry.group],
+        },
+        "small-plans": PLAN_VIEW,
+        brainstorm: PLAN_VIEW,
+      };
+
+      const createSectionLinks = (selectedSection) => {
+        const sectionLinks = createElement("div", "", "sections");
+        sections.forEach((section) => {
+          const link = createElement("a", section.title);
+          link.href = `#${section.id}`;
+          link.append(
+            createElement("span", String(section.entries.length), "count")
+          );
+          if (section === selectedSection)
+            link.setAttribute("aria-current", "true");
+          sectionLinks.append(link);
+        });
+        return sectionLinks;
+      };
+
+      const createEntryLink = (section, entry, selectedEntry) => {
+        const { label, caption, status } =
+          SECTION_VIEWS[section.id].describeLink(entry);
+        const link = createElement("a", label);
+        link.href = `#${section.id}/${encodeURIComponent(entry.path)}`;
+        link.title = entry.title;
+        if (status) link.dataset.status = status;
+        if (caption) link.append(createElement("small", caption));
+        if (entry === selectedEntry) link.setAttribute("aria-current", "page");
+        return link;
+      };
+
+      const createGroupHeading = (section, entry) => {
+        const groupHeading = createElement("h3", entry.group);
+        const describeGroup = SECTION_VIEWS[section.id].describeGroup;
+        if (describeGroup)
+          groupHeading.append(
+            createElement("span", describeGroup(section, entry), "progress")
+          );
+        return groupHeading;
+      };
+
+      const renderSidebar = (selectedSection, selectedEntry) => {
+        sidebar.replaceChildren(
+          createElement("h1", "Claude notes"),
+          createSectionLinks(selectedSection)
+        );
+        const entries = selectedSection?.entries ?? [];
+        entries.forEach((entry, entryIndex) => {
+          const previousEntry = entries[entryIndex - 1] ?? {};
+          const isNewProject = entry.project !== previousEntry.project;
+          if (isNewProject) sidebar.append(createElement("h2", entry.project));
+          if (
+            entry.group &&
+            (isNewProject || entry.group !== previousEntry.group)
+          )
+            sidebar.append(createGroupHeading(selectedSection, entry));
+          sidebar.append(
+            createEntryLink(selectedSection, entry, selectedEntry)
+          );
         });
       };
 
-      const renderPlan = (selectedPlan) => {
-        if (!selectedPlan) {
-          planArea.replaceChildren(
-            createElement(
-              "p",
-              "No plans yet. Run /small-plans to plan work as small plans.",
-              "empty"
-            )
+      const renderEntry = (selectedSection, selectedEntry) => {
+        if (!selectedEntry) {
+          entryArea.replaceChildren(
+            createElement("p", EMPTY_HINTS[selectedSection?.id], "empty")
           );
           return;
         }
         const article = createElement("article");
-        const body = createElement("div", "", "plan-body");
-        body.innerHTML = selectedPlan.html;
+        const body = createElement("div", "", "entry-body");
+        body.innerHTML = selectedEntry.html;
         body
           .querySelectorAll("input[type=checkbox]")
           .forEach((checkbox) => (checkbox.disabled = true));
         article.append(
-          createElement("h1", selectedPlan.title),
+          createElement("h1", selectedEntry.title),
           createElement(
             "p",
             [
-              selectedPlan.project,
-              selectedPlan.set,
-              `plan ${readOrder(selectedPlan)}`,
-              selectedPlan.kind,
-              selectedPlan.status,
-              selectedPlan.dependsOn && `needs plan ${selectedPlan.dependsOn}`,
-              selectedPlan.path,
+              selectedEntry.project,
+              ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
+              selectedEntry.created.slice(0, 16).replace("T", " "),
+              selectedEntry.path,
             ]
               .filter(Boolean)
               .join(" · "),
-            "plan-details"
+            "entry-details"
           ),
           body
         );
-        planArea.replaceChildren(article);
+        entryArea.replaceChildren(article);
       };
 
       const render = () => {
-        const selectedPlan = findSelectedPlan();
-        document.title = selectedPlan
-          ? `${selectedPlan.title} · Small plans`
-          : "Small plans";
-        renderSidebar(selectedPlan);
-        renderPlan(selectedPlan);
+        const { section, entry } = readSelection();
+        document.title = entry
+          ? `${entry.title} · ${section.title}`
+          : "Claude notes";
+        renderSidebar(section, entry);
+        renderEntry(section, entry);
       };
 
-      const loadPlans = async () => {
-        plans = await (await fetch("/api/plans")).json();
+      const loadSections = async () => {
+        sections = await (await fetch("/api/sections")).json();
         render();
       };
 
       addEventListener("hashchange", () => {
         render();
-        planArea.scrollTop = 0;
-        planArea.focus();
+        entryArea.scrollTop = 0;
+        entryArea.focus();
       });
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) loadPlans();
+        if (!document.hidden) loadSections();
       });
-      loadPlans();
+      loadSections();
     </script>
   </body>
 </html>

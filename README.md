@@ -17,8 +17,25 @@ install any of them on its own.
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
 | [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
-| [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes` opens them in a local web page with a sidebar; `/project-notes organise` files existing session notes the same way |
-| [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.claude/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement and review each one; `open` shows them in a local web page, sorted by project, set and build order. |
+| [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes` opens them in the notes viewer shared with handoff, small-plans and brainstorm; `/project-notes organise` files existing session notes the same way |
+| [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.claude/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement and review each one; `open` shows them in the notes viewer shared with handoff, project-notes and brainstorm, sorted by project, set and build order. |
+
+## Saved notes
+
+Four plugins save Markdown, and they follow one layout:
+
+| Kind | Saved at | Name |
+| --- | --- | --- |
+| Handoffs | `~/.claude/handoffs/<project>/` | `NNN-<slug>.md` |
+| Project notes | `~/.claude/project-notes/<project>/<category>/` | `YYYY-MM-DD-<slug>.md` |
+| Small plans | `~/.claude/small-plans/<project>/<YYYY-MM-DD-HHMM-slug>/` | `NN-<slug>.md` |
+| Brainstorm plans | `~/.claude/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/` | `NN-<slug>/plan.md` |
+
+- `<project>` is the name of the folder that holds the repository, shared by its git worktrees, or the working folder's name outside git
+- A slug is the title in lowercase letters, digits and hyphens, 60 characters at most
+- Handoffs, project notes and small plans start with front matter: `title`, `project`, `created` (UTC), then the fields of their kind. The title is a short name of the work
+- Brainstorm plans keep their own format, a `# Plan:` heading with `- Status:` lines, an `index.md` per run and step files, because `check_brainstorm_plan` checks it
+- One local web page shows all four, picked from its sidebar: `/handoff open`, `/project-notes` or `/small-plans open`
 
 ## Install
 

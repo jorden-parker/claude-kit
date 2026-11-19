@@ -7,12 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"syscall"
 )
 
-const defaultPort = "47616"
+const defaultPort = "47618"
 
 func openInBrowser(pageUrl string) {
 	opener := "xdg-open"
@@ -22,25 +21,25 @@ func openInBrowser(pageUrl string) {
 	exec.Command(opener, pageUrl).Start()
 }
 
-func resolveHandoffsRoot() string {
-	if handoffsRoot := os.Getenv("HANDOFFS_DIR"); handoffsRoot != "" {
-		return handoffsRoot
+func buildPageUrl(port string, sectionArguments []string) string {
+	pageUrl := fmt.Sprintf("http://127.0.0.1:%s/", port)
+	if len(sectionArguments) > 0 {
+		return pageUrl + "#" + sectionArguments[0]
 	}
-	homeFolder, _ := os.UserHomeDir()
-	return filepath.Join(homeFolder, ".claude", "handoffs")
+	return pageUrl
 }
 
 func main() {
-	port := os.Getenv("HANDOFFS_PORT")
+	port := os.Getenv("CLAUDE_NOTES_PORT")
 	if port == "" {
 		port = defaultPort
 	}
-	pageUrl := fmt.Sprintf("http://127.0.0.1:%s/", port)
-	shouldOpenBrowser := os.Getenv("HANDOFFS_NO_OPEN") == ""
+	pageUrl := buildPageUrl(port, os.Args[1:])
+	shouldOpenBrowser := os.Getenv("CLAUDE_NOTES_NO_OPEN") == ""
 
 	listener, err := net.Listen("tcp", "127.0.0.1:"+port)
 	if errors.Is(err, syscall.EADDRINUSE) {
-		fmt.Printf("Handoffs are already served at %s\n", pageUrl)
+		fmt.Printf("Claude notes are already served at %s\n", pageUrl)
 		if shouldOpenBrowser {
 			openInBrowser(pageUrl)
 		}
@@ -50,11 +49,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("Handoffs: %s (Ctrl+C to stop)\n", pageUrl)
+	fmt.Printf("Claude notes: %s (Ctrl+C to stop)\n", pageUrl)
 	if shouldOpenBrowser {
 		openInBrowser(pageUrl)
 	}
-	if err := http.Serve(listener, newHandoffsServer(resolveHandoffsRoot())); err != nil {
+	if err := http.Serve(listener, newViewerServer()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

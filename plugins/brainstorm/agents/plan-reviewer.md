@@ -74,7 +74,7 @@ Rules for every step file you write:
 - Repeat in each step's Context every rule that step must follow. A build can resume at any step, so no step relies on another step's Context.
 - Use paths relative to the project's working directory.
 
-When you return files, label each one with its path on a line of its own, then put the whole file in a fence of four backticks, because step files contain three. Label example: `### .claude/brainstorm/plans/plan-2026-11-01-0930/01-token-expiry/step-02.md`.
+When you return files, label each one with its full path on a line of its own, then put the whole file in a fence of four backticks, because step files contain three. Label example: `### /Users/sam/.claude/brainstorm/acme/plans/plan-2026-11-01-0930/01-token-expiry/step-02.md`.
 
 ## Job: final review
 

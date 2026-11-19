@@ -2190,3 +2190,141 @@ testWithSession(
     expect(toasts).toEqual(["First recap\n\n(Copied to clipboard)"]);
   }
 );
+
+const RECAP_WITH_QUESTIONS = [
+  "Fix the login",
+  "",
+  "Goal: the login works.",
+  "",
+  "**Open questions for the user:**",
+  "- Should the token live in a cookie? (Cookie | Local storage)",
+  "- Is the old endpoint still needed?",
+].join("\n");
+
+const COOKIE_QUESTION = "Should the token live in a cookie?";
+const ENDPOINT_QUESTION = "Is the old endpoint still needed?";
+
+const answerQuestions = (on: On, answers: Record<string, string>) => {
+  const askedOptions: Record<string, string[]> = {};
+  on("tool.call", { tool: "AskUserQuestion" }, (_, e) => {
+    if (e.tool !== "AskUserQuestion") return { deny: "Not a question." };
+    const [asked] = e.questions;
+    if (!asked) return { deny: "No question was asked." };
+    askedOptions[asked.question] = asked.options.map((option) => option.label);
+    const answer = answers[asked.question];
+    if (answer === undefined) return { deny: "The user dismissed the dialog." };
+    return {
+      result: {
+        questions: e.questions,
+        answers: { [asked.question]: answer },
+      },
+    };
+  });
+  return askedOptions;
+};
+
+const readSavedRecap = (handoffFiles: Map<string, string>) =>
+  [...handoffFiles.values()][0]?.split("\n---\n\n")[1];
+
+testWithSession(
+  "save asks each open question of the recap and files the answers as decisions",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    answerRecap(on, RECAP_WITH_QUESTIONS);
+    const askedOptions = answerQuestions(on, {
+      [COOKIE_QUESTION]: "Cookie",
+      [ENDPOINT_QUESTION]: "No",
+    });
+
+    await $.command.run(handoff("save the auth change"));
+
+    expect(askedOptions).toEqual({
+      [COOKIE_QUESTION]: ["Cookie", "Local storage", "Leave open"],
+      [ENDPOINT_QUESTION]: ["Yes", "No", "Leave open"],
+    });
+    expect(readSavedRecap(handoffFiles)).toBe(
+      [
+        "Fix the login",
+        "",
+        "Goal: the login works.",
+        "",
+        "**Decisions from the user:**",
+        `- ${COOKIE_QUESTION} Answer: Cookie`,
+        `- ${ENDPOINT_QUESTION} Answer: No`,
+        "",
+      ].join("\n")
+    );
+  }
+);
+
+testWithSession(
+  "a question the user leaves open stays an open question in the handoff",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    answerRecap(on, RECAP_WITH_QUESTIONS);
+    answerQuestions(on, {
+      [COOKIE_QUESTION]: "Leave open",
+      [ENDPOINT_QUESTION]: "Only for the mobile app",
+    });
+
+    await $.command.run(handoff("save the auth change"));
+
+    expect(readSavedRecap(handoffFiles)).toBe(
+      [
+        "Fix the login",
+        "",
+        "Goal: the login works.",
+        "",
+        "**Decisions from the user:**",
+        `- ${ENDPOINT_QUESTION} Answer: Only for the mobile app`,
+        "",
+        "**Open questions for the user:**",
+        "- Should the token live in a cookie? (Cookie | Local storage)",
+        "",
+      ].join("\n")
+    );
+  }
+);
+
+testWithSession(
+  "dismissing the first question stops the asking and saves the recap as written",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    answerRecap(on, RECAP_WITH_QUESTIONS);
+    const askedOptions = answerQuestions(on, {});
+
+    await $.command.run(handoff("save the auth change"));
+
+    expect(Object.keys(askedOptions)).toEqual([COOKIE_QUESTION]);
+    expect(readSavedRecap(handoffFiles)).toBe(`${RECAP_WITH_QUESTIONS}\n`);
+  }
+);
+
+testWithSession(
+  "the recap writer is told to start with a short title and to list open questions with their likely answers",
+  CONVERSATION,
+  async ($, on) => {
+    ignoreToasts(on);
+    const recapSystemPrompts: string[] = [];
+    on("model.complete", (_, e) => {
+      recapSystemPrompts.push(JSON.stringify(e));
+      return {
+        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
+      };
+    });
+    on("prompt.fill", () => ({ isFilled: true }));
+
+    await $.command.run(handoff("the auth change"));
+
+    expect(recapSystemPrompts[0]).toContain(
+      "Start with a one-line title that names the work"
+    );
+    expect(recapSystemPrompts[0]).toContain("Open questions for the user:");
+  }
+);

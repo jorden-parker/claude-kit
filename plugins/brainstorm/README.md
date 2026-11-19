@@ -10,7 +10,7 @@ One command, `/brainstorm`, takes a project from ideas to code. Its first word p
 
 Only `plan` and `build` as the first word pick a mode. Anything else is the focus of a new brainstorm. To brainstorm on a focus that starts with one of those words, put another word first: `/brainstorm the build pipeline`.
 
-`/brainstorm` brainstorms improvements: security issues, must-have fixes, quick wins, performance, developer experience, and creative or moonshot ideas. The result is a self-contained HTML page, saved under `.claude/brainstorm/` in the project and opened in the browser.
+`/brainstorm` brainstorms improvements: security issues, must-have fixes, quick wins, performance, developer experience, and creative or moonshot ideas. The result is a self-contained HTML page, saved under `~/.claude/brainstorm/<project>/` and opened in the browser. `<project>` is the name of the repository folder, shared by its worktrees, the same name the handoff, project-notes and small-plans plugins file under.
 
 ## Usage
 
@@ -34,7 +34,7 @@ Built to be scanned, not read:
 - Ticking ideas raises a bar at the bottom with the `/brainstorm plan` command to paste, plus **Copy**, **Mark done** and **Clear** (or Esc). The command is as short as it can be: `all`, a category name, or numbers with ranges such as `1-3 6`.
 - A minimal, high-contrast design in the Vercel style, in light and dark mode. No external scripts, fonts or images.
 
-Pages are named `brainstorm-YYYY-MM-DD-HHMM.html` (UTC). The ideas are also saved beside each page as `brainstorm-YYYY-MM-DD-HHMM.json`, numbered as on the page. The folder gets a `.gitignore` of `*`, so pages stay out of git.
+Pages are named `brainstorm-YYYY-MM-DD-HHMM.html` (UTC). The ideas are also saved beside each page as `brainstorm-YYYY-MM-DD-HHMM.json`, numbered as on the page. Nothing is written inside the project. A `.claude/brainstorm/` folder that an earlier version left in the project is moved to the new folder the next time you run `/brainstorm`.
 
 All text from the model is HTML-escaped before it is written to the page.
 
@@ -44,7 +44,7 @@ All text from the model is HTML-escaped before it is written to the page.
 
 ### The plan files
 
-Each `/brainstorm plan` writes a run folder, `.claude/brainstorm/plans/plan-YYYY-MM-DD-HHMM/`. Every plan gets a folder and a file of its own:
+Each `/brainstorm plan` writes a run folder, `~/.claude/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/`. `BRAINSTORM_DIR` replaces `~/.claude/brainstorm`. The plugin lets Claude read and write files in that folder without a permission prompt, and nowhere else. `/handoff open`, `/project-notes` and `/small-plans open` show the plans in the browser, under Brainstorm plans. Every plan gets a folder and a file of its own:
 
 ```
 plan-2026-11-11-1200/

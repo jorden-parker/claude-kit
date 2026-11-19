@@ -1,6 +1,6 @@
 {
   "name": "prompt-optimizer",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "scripts": {
     "test": "claude plugin test .",
     "typecheck": "tsc -p ."

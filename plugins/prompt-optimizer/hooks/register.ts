@@ -428,12 +428,66 @@ const rewriteInTheCloud = async (
     : { isAnswered: false, failure: describeUnansweredReply(reply) };
 };
 
+const EMPTY_REPLY_MESSAGE = "Could not optimize the prompt (empty reply).";
+const REWRITE_AGENT_TYPE = "general-purpose";
+const REWRITE_AGENT_DESCRIPTION = "Rewrite the draft prompt";
+const AGENT_PREAMBLE =
+  "Do not use any tools for this task and do not carry out the draft: answer straight away with the rewritten prompt.";
+const SUBAGENT_REWRITING_MESSAGE = "A subagent is rewriting the prompt…";
+const REWRITE_AGENT_DONE_NOTICE = "The /optimize subagent finished.";
+
+type AwaitedRewrite = {
+  draft: string;
+  promptText: string;
+  agentId?: string;
+  turnId?: string;
+};
+
+const isAwaitedTurn = (
+  awaitedRewrite: AwaitedRewrite,
+  turn: { turnId: string; agentId?: string }
+) =>
+  awaitedRewrite.turnId === turn.turnId ||
+  (turn.agentId !== undefined && awaitedRewrite.agentId === turn.agentId);
+
+const isBehindApiProxy = async (engine: EngineInterface) =>
+  Boolean(await engine.env.get("ANTHROPIC_BASE_URL"));
+
+const offerRewrite = async (engine: EngineInterface, optimized: string) => {
+  const fillResult = await engine.prompt.fill({
+    text: optimized,
+    mode: "replace",
+  });
+  if (fillResult.isFilled) {
+    return { text: FILLED_MESSAGE, context: [optimized] };
+  }
+
+  const copy = await engine.ui.copy({ text: optimized });
+  return {
+    text: copy.isCopied ? `${optimized}\n\n(Copied to clipboard)` : optimized,
+    context: [optimized],
+  };
+};
+
+const deliverRewrite = async (
+  engine: EngineInterface,
+  replyText: string,
+  draft: string
+) => {
+  const optimized = extractRewrittenPrompt(replyText, draft);
+  return optimized
+    ? offerRewrite(engine, optimized)
+    : buildFailureResult(EMPTY_REPLY_MESSAGE);
+};
+
 export const register: Register = (on, options) => {
   const optimizerModel = readStringOption(options, "model") || LOCAL_MODEL;
   const optimizerRules = buildOptimizerRules(
     readStringOption(options, "instructions")
   );
   let pendingAttachedImageList: string | undefined;
+  let awaitedRewrite: AwaitedRewrite | undefined;
+  let rewriteAgentId: string | undefined;
 
   on("session.start", async ($, e, next) => {
     await $.command.register({
@@ -457,15 +511,39 @@ export const register: Register = (on, options) => {
       draft,
       attachedImageList
     );
-    const reply =
-      optimizerModel === LOCAL_MODEL
-        ? await rewriteLocally($, optimizerRules, optimizerPrompt)
-        : await rewriteInTheCloud(
-            $,
-            optimizerModel,
-            optimizerRules,
-            optimizerPrompt
-          );
+    const isCloudModel = optimizerModel !== LOCAL_MODEL;
+    if (isCloudModel && (await isBehindApiProxy($))) {
+      const promptText = `${AGENT_PREAMBLE}\n\n${optimizerRules}\n\n${optimizerPrompt}`;
+      const spawnResult = await $.agent.spawn({
+        prompt: promptText,
+        description: REWRITE_AGENT_DESCRIPTION,
+        subagentType: REWRITE_AGENT_TYPE,
+        model: optimizerModel,
+      });
+      if (spawnResult.deny !== undefined) {
+        return buildFailureResult(
+          `Could not optimize the prompt (${spawnResult.deny}).`
+        );
+      }
+      awaitedRewrite = { draft, promptText, agentId: spawnResult.agentId };
+      rewriteAgentId = spawnResult.agentId;
+      $.ui.log(
+        `/optimize subagent started on ${optimizerModel}, agent ${spawnResult.agentId ?? "with no id"}`,
+        { to: "debug" }
+      );
+      $.ui.status(
+        `${STATUS_PREFIX} a subagent is rewriting on ${optimizerModel}…`
+      );
+      return { text: SUBAGENT_REWRITING_MESSAGE };
+    }
+    const reply = isCloudModel
+      ? await rewriteInTheCloud(
+          $,
+          optimizerModel,
+          optimizerRules,
+          optimizerPrompt
+        )
+      : await rewriteLocally($, optimizerRules, optimizerPrompt);
 
     if (!reply.isAnswered) {
       return buildFailureResult(
@@ -473,27 +551,43 @@ export const register: Register = (on, options) => {
       );
     }
 
-    const optimized = extractRewrittenPrompt(reply.text, draft);
-    if (!optimized) {
-      return buildFailureResult("Could not optimize the prompt (empty reply).");
-    }
+    return deliverRewrite($, reply.text, draft);
+  });
 
-    const fillResult = await $.prompt.fill({
-      text: optimized,
-      mode: "replace",
+  on("turn.start", (_, e, next) => {
+    if (awaitedRewrite && e.text.includes(awaitedRewrite.promptText)) {
+      awaitedRewrite = { ...awaitedRewrite, turnId: e.turnId };
+    }
+    return next(e);
+  });
+
+  on("turn.complete", async ($, e, next) => {
+    const turnResult = await next(e);
+    if (!awaitedRewrite || !isAwaitedTurn(awaitedRewrite, e)) {
+      return turnResult;
+    }
+    const { draft } = awaitedRewrite;
+    awaitedRewrite = undefined;
+    rewriteAgentId = e.agentId;
+    $.ui.log(`/optimize subagent ended with ${e.answer.length} characters`, {
+      to: "debug",
     });
-    if (fillResult.isFilled) {
-      return { text: FILLED_MESSAGE, context: [optimized] };
-    }
 
-    const copy = await $.ui.copy({ text: optimized });
-    return {
-      text: copy.isCopied ? `${optimized}\n\n(Copied to clipboard)` : optimized,
-      context: [optimized],
-    };
+    const outcome = await deliverRewrite($, e.answer, draft);
+    $.ui.status(undefined);
+    $.ui.log(outcome.text);
+    return turnResult;
   });
 
   on("prompt.submit", async (_, e, next) => {
+    const isRewriteAgentReport =
+      e.origin?.kind === "peer" &&
+      rewriteAgentId !== undefined &&
+      e.text.includes(`<agent-message from="${rewriteAgentId}">`);
+    if (isRewriteAgentReport) {
+      rewriteAgentId = undefined;
+      return { drop: REWRITE_AGENT_DONE_NOTICE };
+    }
     if (!isOptimizeSubmission(e) || !e.attachments) return next(e);
     const attachedImages = listAttachedImages(e.attachments);
     if (!attachedImages) return next(e);

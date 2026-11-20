@@ -618,14 +618,14 @@ export const register: Register = (on) => {
       description:
         "Opens a drafted pull request as an editable page in the browser, after checking that the body keeps the project's PR template. Posts nothing: the page posts to GitHub only when the user clicks its button. Call it once, at the end of the draft-pr skill.",
       inputSchema: PR_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: REVIEW_TOOL_NAME,
       description:
         "Opens a drafted pull request review as an editable page in the browser, after checking that every comment is a Conventional Comment on a line of the PR's diff. Posts nothing: the page posts to GitHub only when the user clicks its button. Call it once, at the end of the draft-pr-review skill.",
       inputSchema: REVIEW_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     return next(e);
   });

@@ -837,28 +837,28 @@ export const register: Register = (on) => {
       description:
         "Saves the project's theme to .claude/ui-design/theme.json, after checking that every token cites a real file that holds its name or its value. Call it once the theme is extracted, before render_design or render_design_audit. A refusal lists every problem: fix them all, then call again.",
       inputSchema: THEME_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: DESIGN_TOOL_NAME,
       description:
         "Renders design variants as one self-contained page of themed mockups, saves it under .claude/ui-design/ and opens it in the browser. It reads the saved theme itself and defines every token as a CSS variable, and refuses a variant that writes a color or a font as a literal instead of var(--token). Call it once, with every variant.",
       inputSchema: DESIGN_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: AUDIT_TOOL_NAME,
       description:
         "Audits the project's UI against its saved theme and opens the result as a page in the browser. It scans the listed files for hardcoded colors, fonts, font sizes and spacing, checks the theme for duplicate tokens, missing dark values and low-contrast pairs, and adds the findings and the same-purpose component groups passed in. Call it once, at the end of a design audit.",
       inputSchema: AUDIT_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: GALLERY_TOOL_NAME,
       description:
         "Opens a gallery page of every design and audit saved in .claude/ui-design/ in the browser: search, filters by kind, a newest-first or oldest-first sort, and the apply command for each variant. Call it when the user asks in plain words to see, browse or open their saved designs or audits. It takes no input.",
       inputSchema: { type: "object", properties: {} },
-      isDeferred: false,
+      isDeferred: true,
     });
     return next(e);
   });

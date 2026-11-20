@@ -90,6 +90,34 @@ expect_allowed "python string passed as an argument" Write created.py "$call_wit
 expect_allowed "python file that starts with code" Write created.py $'import os\nvalue = "text"'
 expect_allowed "file with no extension and no shebang" Write LICENSE $'# not code\ntext'
 
+violation_message() {
+  local session_id="$1"
+  jq -n --arg session_id "$session_id" --arg file_path "$fixture_directory/repeat.ts" \
+    '{session_id: $session_id, tool_name: "Edit", tool_input: {file_path: $file_path, new_string: "// note\nconst total = 1;"}}' \
+    | TMPDIR="$fixture_directory" bash "$hook_path" 2>&1
+}
+
+expect_message() {
+  local description="$1" expectation="$2" pattern="$3" message="$4" found="absent"
+  printf '%s' "$message" | grep -q "$pattern" && found="present"
+  if [ "$found" = "$expectation" ]; then
+    echo "PASS: $description"
+  else
+    echo "FAIL: $description"
+    failures=$((failures + 1))
+  fi
+}
+
+first_message="$(violation_message repeat-session)"
+second_message="$(violation_message repeat-session)"
+other_session_message="$(violation_message other-session)"
+
+expect_message "first violation in a session gets the full instructions" present "Spawn a subagent" "$first_message"
+expect_message "a repeat violation still names the rule" present "Comments are not allowed" "$second_message"
+expect_message "a repeat violation still lists the line" present "note" "$second_message"
+expect_message "a repeat violation leaves out the long instructions" absent "Spawn a subagent" "$second_message"
+expect_message "another session starts with the full instructions" present "Spawn a subagent" "$other_session_message"
+
 rm -rf "$fixture_directory"
 [ "$failures" -eq 0 ] || { echo "$failures failure(s)"; exit 1; }
 echo "all passed"

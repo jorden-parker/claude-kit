@@ -459,7 +459,7 @@ const offerRewrite = async (engine: EngineInterface, optimized: string) => {
     mode: "replace",
   });
   if (fillResult.isFilled) {
-    return { text: FILLED_MESSAGE, context: [optimized] };
+    return { text: FILLED_MESSAGE };
   }
 
   const copy = await engine.ui.copy({ text: optimized });

@@ -771,3 +771,22 @@ test("/project-notes edit asks Claude to find the note and change it with Edit",
   expect(submittedPrompts[0]).toContain("Edit");
   expect(submittedPrompts[0]).toContain("/home/tester/.claude/handoffs");
 });
+
+test("every tool is registered behind ToolSearch", async ($, on) => {
+  const deferredFlags: unknown[] = [];
+  on("command.register", (_, e) => ({ value: { command: e.name } }));
+  on("tool.register", (_, e) => {
+    deferredFlags.push(e.isDeferred);
+    return { value: { tool: e.name } };
+  });
+  on("session.start", (_, e) => ({ cwd: e.cwd }));
+
+  await $.session.start({
+    cwd: "/repo",
+    surface: "terminal",
+    isInteractive: true,
+  });
+
+  expect(deferredFlags.length).toBeGreaterThan(0);
+  expect(deferredFlags.every((flag) => flag === true)).toBe(true);
+});

@@ -164,8 +164,8 @@ test("session start registers both render tools and no command, since the engine
 
   expect(commandNames).toEqual([]);
   expect(tools).toEqual([
-    { name: "render_pr_draft", isDeferred: false },
-    { name: "render_pr_review_draft", isDeferred: false },
+    { name: "render_pr_draft", isDeferred: true },
+    { name: "render_pr_review_draft", isDeferred: true },
   ]);
 });
 

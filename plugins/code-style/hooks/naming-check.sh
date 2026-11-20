@@ -60,9 +60,26 @@ violations=$(printf '%s\n' "$new_text" | EXTENSION="$extension" ALLOWLIST_FILE="
 
 [ -z "$violations" ] && exit 0
 
+readonly FULL_INSTRUCTIONS="Rename to a descriptive name; the Naming rules from session start list what passes. Spawn a subagent with the Agent tool to fix these names and every other failing name in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
+readonly REPEAT_INSTRUCTIONS="Rename each to a descriptive name, along with every other failing name in the file, then carry on; a failing check is never a reason to stop."
+
+instructions_for_session() {
+  local session_id marker_directory marker_path
+  session_id=$(printf '%s' "$payload" | /usr/bin/jq -r '.session_id // empty' 2>/dev/null) || session_id=""
+  [ -n "$session_id" ] || { echo "$FULL_INSTRUCTIONS"; return 0; }
+  marker_directory="${TMPDIR:-/tmp}/claude-code-style/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9_-' '_')"
+  marker_path="$marker_directory/naming-violation-shown"
+  if [ -f "$marker_path" ]; then
+    echo "$REPEAT_INSTRUCTIONS"
+    return 0
+  fi
+  mkdir -p "$marker_directory" 2>/dev/null && : > "$marker_path"
+  echo "$FULL_INSTRUCTIONS"
+}
+
 {
   echo "Naming violations in ${file_path}:"
   printf '%s\n' "$violations" | head -n 8 | sed 's/^/  /'
-  echo "Rename to a descriptive name; the Naming rules from session start list what passes. Spawn a subagent with the Agent tool to fix these names and every other failing name in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
+  instructions_for_session
 } >&2
 exit 2

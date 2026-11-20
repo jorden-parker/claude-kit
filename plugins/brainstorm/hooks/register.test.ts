@@ -111,9 +111,9 @@ test("session start registers the command and the render tool", async ($, on) =>
 
   expect(ranCommands).toEqual(["brainstorm"]);
   expect(tools).toEqual([
-    { name: "render_brainstorm", isDeferred: false },
-    { name: "check_brainstorm_plan", isDeferred: false },
-    { name: "set_brainstorm_plan_status", isDeferred: false },
+    { name: "render_brainstorm", isDeferred: true },
+    { name: "check_brainstorm_plan", isDeferred: true },
+    { name: "set_brainstorm_plan_status", isDeferred: true },
   ]);
 });
 

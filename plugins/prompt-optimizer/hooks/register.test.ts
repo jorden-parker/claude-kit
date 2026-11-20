@@ -328,7 +328,7 @@ test("the command registers with an argument hint and does not run mid-turn", as
 });
 
 testWithEmptySession(
-  "a toast shows before the model call and the filled prompt reaches the model as context",
+  "a toast shows before the model call and a filled prompt is not repeated as context",
   async ($, on) => {
     const callOrder: string[] = [];
     on("ui.toast", (_, e) => {
@@ -346,7 +346,7 @@ testWithEmptySession(
     const reply = await $.command.run(optimize("fix bug"));
 
     expect(callOrder).toEqual(["toast:✨ Optimizing prompt…", "model"]);
-    expect(reply.context).toEqual(["Better prompt"]);
+    expect(reply.context).toBeUndefined();
   }
 );
 

@@ -221,10 +221,10 @@ test("session start registers the bare /ui-design command and the four tools", a
 
   expect(commandNames).toEqual(["ui-design"]);
   expect(tools).toEqual([
-    { name: "save_design_theme", isDeferred: false },
-    { name: "render_design", isDeferred: false },
-    { name: "render_design_audit", isDeferred: false },
-    { name: "open_design_gallery", isDeferred: false },
+    { name: "save_design_theme", isDeferred: true },
+    { name: "render_design", isDeferred: true },
+    { name: "render_design_audit", isDeferred: true },
+    { name: "open_design_gallery", isDeferred: true },
   ]);
 });
 

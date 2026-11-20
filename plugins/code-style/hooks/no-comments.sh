@@ -4,6 +4,21 @@ set -uo pipefail
 readonly MAX_REPORTED_LINES=5
 readonly VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove them and make the code self-explanatory (extract a named function or variable instead). Spawn a subagent with the Agent tool to fix these comments and every other comment in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
 
+readonly REPEAT_VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove these and every other comment in the file, then carry on; a failing check is never a reason to stop."
+
+violation_message_for_session() {
+  local session_id="$1" marker_directory marker_path
+  [[ -n "$session_id" ]] || { echo "$VIOLATION_MESSAGE"; return 0; }
+  marker_directory="${TMPDIR:-/tmp}/claude-code-style/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9_-' '_')"
+  marker_path="$marker_directory/comment-violation-shown"
+  if [[ -f "$marker_path" ]]; then
+    echo "$REPEAT_VIOLATION_MESSAGE"
+    return 0
+  fi
+  mkdir -p "$marker_directory" 2>/dev/null && : > "$marker_path"
+  echo "$VIOLATION_MESSAGE"
+}
+
 comment_style_for_shebang() {
   case "$1" in
     '#!'*python*) echo "python" ;;
@@ -106,7 +121,7 @@ find_comment_lines() {
 }
 
 main() {
-  local payload file_path new_text whole_file style offending_lines
+  local payload file_path new_text whole_file style offending_lines session_id
 
   command -v jq >/dev/null || { echo "no-comments.sh: jq is not installed, so comments are not checked." >&2; exit 1; }
   payload="$(cat)" || exit 0
@@ -120,10 +135,11 @@ main() {
 
   offending_lines="$(printf '%s\n' "$new_text" | find_comment_lines "$style" "$whole_file")" || exit 0
   [[ -n "$offending_lines" ]] || exit 0
+  session_id="$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null)" || session_id=""
 
   {
     printf '%s\n' "$offending_lines" | head -n "$MAX_REPORTED_LINES"
-    echo "$VIOLATION_MESSAGE"
+    violation_message_for_session "$session_id"
   } >&2
   exit 2
 }

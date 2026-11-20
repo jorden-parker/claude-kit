@@ -328,19 +328,19 @@ export const register: Register = (on) => {
       name: WRITE_TOOL_NAME,
       description: `Saves one note about a project as a Markdown file under ~/.claude/project-notes/<project>/<category>/, where <project> is the repository the note is about, chosen from its subject rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it when the user asks for a project note, or when the work turned up something a later session on this project should know. One note per separate thing. ${DEBUGGING_RULES}`,
       inputSchema: WRITE_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: LIST_LEGACY_TOOL_NAME,
       description: `Lists the session notes (from the session-notes plugin) not yet filed as project notes, ${LEGACY_BATCH_SIZE} at a time, each with a source id, project and date. Call it when the user asks to organise or migrate existing notes, then file each with ${WRITE_TOOL_NAME}.`,
       inputSchema: { type: "object", properties: {} },
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: AUDIT_TOOL_NAME,
       description: `Audits the saved ${STORE_NAMES.join(", ")} folders under ~/.claude and reports each project folder named after a worktree or other folder instead of its git repository, with the repository it belongs to, plus folders it cannot tie to a repository. Changes nothing. Call it when the user asks to audit, check or tidy where notes, handoffs, plans or brainstorms are saved.`,
       inputSchema: { type: "object", properties: {} },
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: MOVE_TOOL_NAME,
@@ -360,7 +360,7 @@ export const register: Register = (on) => {
         },
         required: ["store", "from", "to"],
       },
-      isDeferred: false,
+      isDeferred: true,
     });
     return next(e);
   });

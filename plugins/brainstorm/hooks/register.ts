@@ -1189,21 +1189,21 @@ export const register: Register = (on) => {
       description:
         "Renders brainstormed project ideas as a self-contained, ADHD-friendly HTML page, saves it under ~/.claude/brainstorm/<project>/ and opens it in the browser. Call it once, with every idea, at the end of a /brainstorm.",
       inputSchema: RENDER_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: CHECK_TOOL_NAME,
       description:
         "Checks a brainstorm plan run folder against the plan format: index.md, each plan.md, the step files, and that every plan's status matches its index row. Replies OK, or one problem per line. Call it on the run folder after writing the plans, and fix every problem it lists.",
       inputSchema: CHECK_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: STATUS_TOOL_NAME,
       description:
         "Sets one brainstorm plan's status in its plan.md and in its row of the run's index.md, so the two always match. Call it with the plan folder path each time a plan's status changes.",
       inputSchema: STATUS_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     return next(e);
   });

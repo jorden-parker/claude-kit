@@ -709,3 +709,59 @@ test("a plan written in a deleted worktree is saved under the main repository's 
     [...files.keys()].some((path) => path.startsWith(`${PROJECT_FOLDER}/`))
   ).toBe(true);
 });
+
+const SET_QUESTION = "🧺 Which plan set shall we build?";
+
+const mountQuestion = ($: Engine, question: string) =>
+  $.ui.mount({
+    plugin: "small-plans",
+    component: "AskUserQuestion",
+    surface: "terminal",
+    props: {
+      tool: "AskUserQuestion",
+      questions: [
+        {
+          question,
+          header: "Plan set",
+          multiSelect: false,
+          options: [
+            { label: "Add a dark mode toggle" },
+            { label: "Fix login" },
+          ],
+        },
+      ],
+    },
+  } as never);
+
+test("the small-plans pickers ask in a friendly voice", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, "3 · Test the toggle");
+  await runCommand($, on, "build", {
+    ...THREE_PLAN_SET,
+    [HANDOFF_SET_PLAN]: "status: pending",
+  });
+
+  expect(
+    askedQuestions.map(
+      (asked) =>
+        (asked as unknown as { questions: { question: string }[] }).questions[0]
+          ?.question
+    )
+  ).toEqual([SET_QUESTION]);
+});
+
+test("a small-plans picker is drawn inside a padded, rounded frame", async ($) => {
+  const drawing = await mountQuestion($, SET_QUESTION);
+  const frame = await drawing.find({ key: "small-plans-frame" });
+
+  expect(frame?.props).toMatchObject({
+    borderStyle: "round",
+    paddingX: 2,
+    marginX: 1,
+  });
+});
+
+test("another plugin's question gets no small-plans frame", async ($) => {
+  const drawing = await mountQuestion($, "Which database should we use?");
+
+  expect(await drawing.find({ key: "small-plans-frame" })).toBeUndefined();
+});

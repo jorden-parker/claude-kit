@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from "claude-code";
+import type { EngineInterface, Register, RenderElement } from "claude-code";
 
 const KINDS = ["feature", "fix", "refactor", "test", "docs", "chore"];
 const STATUSES = ["pending", "in-progress", "done", "blocked"];
@@ -443,6 +443,16 @@ const listHandoffNamesNewestFirst = async (
     .sort((first, second) => parseInt(second, 10) - parseInt(first, 10))
     .map((name) => name.replace(/\.md$/, ""));
 
+const SET_QUESTION = "🧺 Which plan set shall we build?";
+const PLAN_QUESTION = "🧩 The whole set, or just one plan?";
+const HANDOFF_QUESTION = "📜 Which handoff should become small plans?";
+const PICKER_QUESTIONS = [SET_QUESTION, PLAN_QUESTION, HANDOFF_QUESTION];
+
+const isPickerQuestion = (questions: unknown[]) =>
+  PICKER_QUESTIONS.includes(
+    (questions[0] as { question?: string } | undefined)?.question ?? ""
+  );
+
 const MONTH_NAMES = [
   "Jan",
   "Feb",
@@ -514,7 +524,7 @@ const splitHandoff = async (
   const pickedName = shouldAsk
     ? await pickFromList(
         engine,
-        "Which handoff should be split into small plans?",
+        HANDOFF_QUESTION,
         "Handoff",
         handoffNames,
         labelNumbered("#")
@@ -583,7 +593,7 @@ const pickPlanName = async (
   if (planNames.length === 1) return "";
   const pickedOption = await pickFromList(
     engine,
-    "Build the whole set, or one plan of it?",
+    PLAN_QUESTION,
     "Plans",
     [WHOLE_SET_OPTION, ...planNames],
     (name) => (name === WHOLE_SET_OPTION ? name : labelNumbered("")(name))
@@ -620,13 +630,7 @@ const buildPlans = async (
   const setNames = requestedName ? savedSetNames : setNamesNotDone;
   const shouldAsk = !requestedName && setNames.length > 1;
   const pickedName = shouldAsk
-    ? await pickFromList(
-        engine,
-        "Which set of small plans should be built?",
-        "Plan set",
-        setNames,
-        labelSet
-      )
+    ? await pickFromList(engine, SET_QUESTION, "Plan set", setNames, labelSet)
     : requestedName;
   if (pickedName === undefined)
     return {
@@ -640,6 +644,7 @@ const buildPlans = async (
       text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
     };
   const setFolder = `${projectFolder}/${setName}`;
+  await writeSetIndex(engine, setFolder);
   const planNames = await listPlanNamesNotDone(engine, setFolder);
   if (planNames.length === 0)
     return { text: `Every plan in set ${setName} is done.` };
@@ -657,6 +662,23 @@ const buildPlans = async (
 };
 
 export const register: Register = (on) => {
+  on("ui.render", { component: "AskUserQuestion" }, async ($, e, next) => {
+    const dialog = await next(e);
+    if (!isPickerQuestion(e.props.questions)) return dialog;
+    const { Box } = $.ui.resolve(e);
+    return h(
+      Box,
+      {
+        key: "small-plans-frame",
+        borderStyle: "round",
+        borderColor: "magenta",
+        paddingX: 2,
+        marginX: 1,
+      },
+      dialog
+    ) as RenderElement;
+  });
+
   on("session.start", async ($, e, next) => {
     await $.command.register({
       name: COMMAND_NAME,

@@ -111,7 +111,7 @@ Read `references/client-regions.md` before writing one. It covers the full surfa
 
 ## Making it look good
 
-**Read `references/visual-style.md` before drawing anything a person will look at.** It is the house style: coloured status pills, a header bar with an accent mark, fixed columns, segmented progress bars, band and empty/loading/error recipes, and what to drop at narrow widths. In testing, UI built only from the rules below came out correct but plain, and the user rejected it. The official docs have no visual design guide, so the points below (from the types, the gallery and community practice) are the building blocks that style uses.
+**Read `references/visual-style.md` before drawing anything a person will look at.** It is the house style: status panels drawn in the band above the prompt (a Pane always gets an engine ✕ that can't be moved or hidden), coloured status pills, an inline status in the header, divider lines, fixed columns, segmented progress bars, band and empty/loading/error recipes, and what to drop at narrow widths. In testing, UI built only from the rules below came out correct but plain, and the user rejected it. The official docs have no visual design guide, so the points below (from the types, the gallery and community practice) are the building blocks that style uses.
 
 **Colour**
 - **Use theme keys for colour** so it follows the user's theme, including the colour-blind (`daltonized`) themes. [Types: `ThemeKey`]
@@ -236,7 +236,7 @@ bash <this skill>/scripts/render-mod.sh ./my-mod ./out/pane-narrow /my-command 9
 ## Before you finish a component
 
 1. Does every site that isn't yours return `next(e)` (or does the hook filter on its own `requestId`), and does every control have a unique `key`?
-2. Does it follow `references/visual-style.md`: pills for status, theme-key colours, fixed columns and breathing room?
+2. Does it follow `references/visual-style.md`: panels in the band rather than a Pane, pills for status, theme-key colours, divider lines and fixed columns?
 3. Does `claude plugin validate` pass, with `$` only ever passed to top-level functions?
 4. Have you rendered it with `scripts/render-mod.sh` at 160 and 90 columns, and does the capture match the target?
 5. Does the layout fit `bodyColumns`, with truncation on long text?

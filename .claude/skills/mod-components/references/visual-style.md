@@ -2,31 +2,62 @@
 
 This is the default look for mod UI. Every recipe here was rendered in a real Claude Code terminal and checked at 160 and 90 columns. Earlier versions that read well as code still looked awkward on screen: they had missing structure lines, a crowded close ✕, ragged columns, pills that wrapped, and uneven padding. So follow the grid exactly, then render and look (see SKILL.md, "Render it and look").
 
-**Target** (the CI pane in a 90-column terminal; the frame and the ✕ belong to the engine):
+**Target** (the CI panel in the band above the prompt, 90-column terminal; only the `[-]` belongs to the engine):
 
 ```
-╭──────────────────────────────────────────────────────────────────────╳╮
-│ CI · main · ✗ Failing                                               │
-│ ──────────────────────────────────────────────────────────────────── │
-│  FAIL   unit-tests (node 22)                                 3m 08s │
-│  RUN    e2e-browser                              ▰▰▰▰▱▱▱▱    5m 05s │
-│  PASS   lint                                                    42s │
-│  PASS   build-docs-and-publish-preview-site-for-the-pu…      1m 35s │
-│ ──────────────────────────────────────────────────────────────────── │
-│ ✗ 1  ● 1  ✓ 3                        updated 2m ago     Esc  Close │
-╰──────────────────────────────────────────────────────────────────────╯
+ CI · main · ✗ Failing                                                    [-]
+ ─────────────────────────────────────────────────────────────────────────
+  FAIL   unit-tests (node 22)                                      3m 08s
+  RUN    e2e-browser                                    ▰▰▰▰▱▱▱▱   5m 05s
+  PASS   lint                                                         42s
+  PASS   build-docs-and-publish-preview-site-for-the-pu…           1m 35s
+ ─────────────────────────────────────────────────────────────────────────
+ ✗ 1  ● 1  ✓ 3                                   updated 2m ago   h: Hide
+❯
 ```
 
-Here FAIL, RUN and PASS are pills: dark text on a red, amber or green background, and `Esc` is an inverse keycap.
+Here FAIL, RUN and PASS are pills: dark text on a red, amber or green background.
+
+## Where the panel goes: the band, not a Pane
+
+Every `Pane` gets a close ✕ from Claude Code: on the frame corner for an inline pane, or on a row of its own above a docked pane. `$.ui.open` has no option to hide, move, relabel or style it, and no layout inside the pane made it look right. Users kept calling it out as misplaced. [Types: `PaneOpenArgs`; Pane `bodyColumns`]
+
+So draw status panels in the band above the prompt (`ui.render` with `component: 'AbovePrompt'`). The engine adds only a small `[-]` at the band's right edge, and `e.props.bodyColumns` already leaves room for it. [Types: `AbovePrompt`]
+
+```js
+let isPanelShown = false
+
+function setPanelShown($, isShown) {
+  isPanelShown = isShown
+  return $.ui.invalidate('ui.render')
+}
+
+on('command.run', { command: 'ci' }, async $ => { await setPanelShown($, !isPanelShown); return {} })
+
+on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+  if (!isPanelShown || e.props.hasSurvey) return next(e)
+  const elements = $.ui.resolve(e)
+  const hideButton = elements.Button({ key: 'hide', label: 'Hide', hotkey: 'h', plain: true, onPress: () => setPanelShown($, false) })
+  return ciPanel(elements, e.props.bodyColumns, hideButton)
+})
+```
+
+- **The slash command toggles** the panel, and an `h: Hide` button in the footer hides it.
+- **Yield to surveys:** pass with `next(e)` while `hasSurvey` is true.
+- **Height:** the band is capped (half the terminal in fullscreen); a taller tree scrolls. Keep a panel to about 15 rows.
+- **One band per session:** only one hook draws the band, so if two of your panels can show at once, merge them into one tree.
+- **VS Code draws no band.** There, open the same tree in a Pane instead (check `e.surface` or fall back when the band never renders).
+- **Use a Pane only** when the content needs its own focus and scroll beside the chat (a log, a long table). Accept the engine ✕ there: keep the header's top-right empty and open it with `closeOnEscape: true`.
 
 ## Contents
 
 - The grid
+- Where the panel goes: the band, not a Pane
 - Pill
 - Header and divider
 - Rows
 - Footer and actions
-- The band (AbovePrompt)
+- A one-line band
 - Graphics (Raster)
 - Empty, loading and error states
 - Narrow widths
@@ -79,9 +110,8 @@ function divider({ Text }, width) {
 }
 ```
 
-- **The ✕ is the engine's close control, and you can't change it.** Claude Code draws it on every Pane: on the frame corner for an inline pane, or on a reserved row above your tree for a docked pane. `$.ui.open` has no option to hide, move, relabel or style it, and the `title` you pass is drawn only as a tab label when two or more panes are open. [Types: `PaneOpenArgs`, Pane `title`]
-- **Keep the top-right of your header empty,** so the ✕ stands alone in its corner and reads as frame chrome. Put the status inline after the title (`CI · main · ✗ Failing`), never right-aligned under the ✕.
-- **No inner border.** A Pane already has its own frame or edge, so a `borderStyle` box inside it doubles the lines.
+- **Status inline after the title** (`CI · main · ✗ Failing`). The engine's `[-]` (band) or ✕ (Pane) sits at the right end of this row, so nothing of yours goes there.
+- **No border box.** Dividers give the structure; a `borderStyle` box adds a second frame.
 - **Divider width:** draw the divider at exactly `innerWidth`, with `wrap: 'clip'` (v2.1.326+) so it can never wrap.
 
 ## Rows
@@ -124,26 +154,10 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 
 - **Counts:** coloured glyph-and-number pairs (`✗ 1  ● 1  ✓ 3`) on the left, and metadata (`dimColor`) on the right.
 - **Actions** go in the footer row as `Button({ label, hotkey, plain: true })`, which draws as `r: Refresh`. Use one action style throughout. Don't mix bracketed and plain buttons.
-- **A labelled close action, bottom-right.** The engine's ✕ is small and easy to miss, so every pane ends its footer with `Esc  Close`: an inverse `Esc` keycap plus a plain `Close` button that calls `$.ui.close`. Open the pane with `closeOnEscape: true` so the key does what the label says. Build the button inside the `ui.render` hook, because it needs `$` (see the `$` rule in SKILL.md), and pass the element down:
+- **Hide action, bottom-right:** every panel ends its footer with `h: Hide`, a plain Button. It is never dropped at narrow widths.
+- **Footer order:** other actions on the left (`r: Refresh`), counts or metadata next, and `h: Hide` last on the right.
 
-  ```js
-  on('ui.render', { component: 'Pane', requestId: 'ci' }, async ($, e) => {
-    const elements = $.ui.resolve(e)
-    const closeButton = elements.Button({ key: 'close', label: 'Close', plain: true, role: 'dismiss',
-      onPress: () => $.ui.close({ id: 'ci' }) })
-    return ciPane(elements, e.props.bodyColumns, closeButton)
-  })
-
-  function closeAction({ Box, Text }, closeButton) {
-    return Box({ flexDirection: 'row', columnGap: 1, flexShrink: 0, children: [
-      Text({ inverse: true, children: [' Esc '] }),
-      closeButton,
-    ]})
-  }
-  ```
-- **Footer order:** other actions on the left (`r: Refresh`), counts or metadata next, and `Esc  Close` always last on the right. The close action is never dropped at narrow widths.
-
-## The band (AbovePrompt)
+## A one-line band
 
 ```
   RUN    Indexing repo  ▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱   20%                click for details  [-]
@@ -183,7 +197,7 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 | `innerWidth` | What to drop |
 | :- | :- |
 | 60 and up | Nothing |
-| 40–59 | The progress column and footer metadata. `Esc  Close` stays |
+| 40–59 | The progress column and footer metadata. `h: Hide` stays |
 | Under 40 | The duration column. Show the pill and the truncated name only |
 
 ## Mistakes seen in renders
@@ -192,7 +206,7 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 | :- | :- | :- |
 | Pill split across two lines | Pill shrank beside a long name | `Box({ width: 6, flexShrink: 0 })` around it |
 | Columns not lining up | One row had an extra cell | Reserve the cell on every row |
-| Close ✕ not obvious or oddly placed | The engine ✕ can't be moved; a pill or status sat under it | Status inline after the title; `Esc  Close` at the footer's right |
+| Close ✕ looked misplaced | Every Pane gets an engine ✕ that can't be moved or hidden | Draw the panel in the AbovePrompt band; `h: Hide` in the footer |
 | Duration wrapped to `1m` / `35s` | A fixed-width cell without `flexShrink: 0` shrank beside a long name | `flexShrink: 0` on every fixed cell |
 | Panel looked patchy, lines missing | Blank spacer rows, no dividers | `─` dividers at `innerWidth` |
 | Band felt stretched | Bar with `flexGrow` across the whole row | Cap the bar at ~24 segments, spacer before the hint |

@@ -90,7 +90,7 @@ const WRITE_TOOL_SCHEMA = {
     project: {
       type: "string",
       description:
-        "Only when the plan belongs to another project than this session's: that project's folder name.",
+        "The repository the plan changes, as an absolute folder path inside it. Choose it from the work being planned (the files, services and repositories it names), not from the working directory. Leave it out only when the work is in the working directory's repository. When the work could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
     },
   },
   required: ["set", "order", "title", "kind", "body", "depends_on"],
@@ -121,8 +121,11 @@ const toProjectName = (folder: string) => {
   return /[A-Za-z0-9]/.test(projectName) ? projectName : "unknown";
 };
 
-const resolveProjectName = async (engine: EngineInterface) => {
-  const folder = await engine.session.root();
+const resolveProjectName = async (
+  engine: EngineInterface,
+  requestedFolder?: string
+) => {
+  const folder = requestedFolder || (await engine.session.root());
   const commonGitFolder = await engine.process
     .run([
       "git",
@@ -280,9 +283,11 @@ const writeSmallPlan = async (
       deny: `The plan was not saved. Fix every problem and call this tool again:\n- ${problems.join("\n- ")}`,
     };
 
-  const projectName = trimText(toolInput.project)
-    ? toProjectName(trimText(toolInput.project))
-    : await resolveProjectName(engine);
+  const requestedProject = trimText(toolInput.project);
+  const projectName =
+    requestedProject && !requestedProject.startsWith("/")
+      ? toProjectName(requestedProject)
+      : await resolveProjectName(engine, requestedProject);
   const setFolder = `${await resolvePlansRoot(engine)}/${projectName}/${setName}`;
   const orderPrefix = `${String(order).padStart(ORDER_WIDTH, "0")}-`;
   const savedName = (await listNames(engine, setFolder)).find((name) =>
@@ -717,7 +722,7 @@ export const register: Register = (on) => {
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
-      description: `Saves one small plan as a Markdown file under ~/.claude/small-plans/<project>/<set>/. Call it once per plan when the user asks to break work into small plans that a weaker model can implement and review. ${PLAN_SHAPE}`,
+      description: `Saves one small plan as a Markdown file under ~/.claude/small-plans/<project>/<set>/, where <project> is the repository the plan changes, chosen from the work rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it once per plan when the user asks to break work into small plans that a weaker model can implement and review. ${PLAN_SHAPE}`,
       inputSchema: WRITE_TOOL_SCHEMA,
       isDeferred: false,
     });

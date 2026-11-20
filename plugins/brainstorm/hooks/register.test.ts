@@ -263,6 +263,19 @@ test("a deleted worktree saves its brainstorm under the main repository's name",
   );
 });
 
+test("a brainstorm about another repository is saved under that repository's name", async ($, on) => {
+  const { writes } = mockEngine(on, { git: 128 });
+
+  await renderBrainstorm($, {
+    ...VALID_INPUT,
+    folder: "/work/notes-app/.claude/worktrees/fix-login",
+  });
+
+  expect(findPage(writes)?.path).toBe(
+    "/home/tester/.claude/brainstorm/notes-app/brainstorm-2026-11-09-1200.html"
+  );
+});
+
 test("BRAINSTORM_DIR moves the brainstorm folder", async ($, on) => {
   const { writes } = mockEngine(on, {}, "", { BRAINSTORM_DIR: "/elsewhere" });
 

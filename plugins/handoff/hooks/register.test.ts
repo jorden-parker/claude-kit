@@ -2336,3 +2336,41 @@ test(
     ]);
   }
 );
+
+const REPOSITORY_QUESTION = "Which repository is this handoff about?";
+
+for (const [repositoryLine, answers, projectName] of [
+  ["Repository: /src/notes-app", {}, "notes-app"],
+  [
+    "Repository: /src/notes-app | /src/billing",
+    { [REPOSITORY_QUESTION]: "/src/billing" },
+    "billing",
+  ],
+] as const) {
+  test(
+    `a recap whose ${repositoryLine} is filed under ${projectName}`,
+    { options: { writer: "haiku" } },
+    async ($, on) => {
+      on("session.cwd", () => ({ value: "/repo" }));
+      on("session.messages", () => ({ value: CONVERSATION }));
+      mock.clock(on, { now: NOVEMBER_NINTH });
+      mockStore(on);
+      ignoreToasts(on);
+      answerRecap(
+        on,
+        `Fix the login\n${repositoryLine}\n\nGoal: the login works.`
+      );
+      answerQuestions(on, answers);
+      const handoffFiles = mockHandoffFiles(on, "");
+
+      await $.command.run(handoff("save"));
+
+      expect([...handoffFiles.keys()]).toEqual([
+        handoffPath(1, "fix-the-login", projectName),
+      ]);
+      expect(readSavedRecap(handoffFiles)).toBe(
+        "Fix the login\n\nGoal: the login works.\n"
+      );
+    }
+  );
+}

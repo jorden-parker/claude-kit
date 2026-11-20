@@ -536,6 +536,28 @@ const mockStores = (
 const handoffFile = (cwd: string, project: string) =>
   `---\ntitle: Resume\nproject: ${project}\ncreated: 2026-11-19T10:00:00.000Z\ncwd: ${cwd}\n---\n\nResume.\n`;
 
+test("a note about another repository's folder is filed under that repository's name", async ($, on) => {
+  const { files } = mockStores(
+    on,
+    {},
+    {
+      "/work/notes-app/packages/api": "/work/notes-app/.git",
+    }
+  );
+
+  await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Api owns auth",
+    body: "B.",
+    created: "2026-11-19",
+    project: "/work/notes-app/packages/api",
+  });
+
+  expect([...files.keys()]).toEqual([
+    `${NOTES_ROOT}/notes-app/fact/2026-11-19-api-owns-auth.md`,
+  ]);
+});
+
 test("a note written in a deleted worktree is filed under the main repository's name", async ($, on) => {
   const { files } = mockStores(on, {}, {}, "", WORKTREE_FOLDER);
 

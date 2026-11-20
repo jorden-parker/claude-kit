@@ -72,7 +72,7 @@ const WRITE_TOOL_SCHEMA = {
     project: {
       type: "string",
       description:
-        "Only when the note belongs to another project than this session's: that project's folder name.",
+        "The repository the note is about, as an absolute folder path inside it. Choose it from the note's subject (the files, services and repositories it names), not from the working directory. Leave it out only when the note is about the working directory's repository. When the note could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
     },
     created: {
       type: "string",
@@ -172,8 +172,11 @@ const writeProjectNote = async (
   const title = trimText(toolInput.title).replace(/\s+/g, " ");
   const body = trimText(toolInput.body);
   const source = trimText(toolInput.source);
+  const requestedProject = trimText(toolInput.project);
   const projectName = toProjectName(
-    trimText(toolInput.project) || (await findRepositoryFolder(engine))
+    requestedProject.startsWith("/")
+      ? await resolveRepositoryFolder(engine, requestedProject)
+      : requestedProject || (await findRepositoryFolder(engine))
   );
   if (!CATEGORIES.includes(category))
     return { deny: `The category must be one of: ${CATEGORIES.join(", ")}.` };
@@ -294,7 +297,7 @@ export const register: Register = (on) => {
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
-      description: `Saves one note about a project as a Markdown file under ~/.claude/project-notes/<project>/<category>/. Call it when the user asks for a project note, or when the work turned up something a later session on this project should know. One note per separate thing. ${DEBUGGING_RULES}`,
+      description: `Saves one note about a project as a Markdown file under ~/.claude/project-notes/<project>/<category>/, where <project> is the repository the note is about, chosen from its subject rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it when the user asks for a project note, or when the work turned up something a later session on this project should know. One note per separate thing. ${DEBUGGING_RULES}`,
       inputSchema: WRITE_TOOL_SCHEMA,
       isDeferred: false,
     });
@@ -340,7 +343,7 @@ export const register: Register = (on) => {
       `Call the ${QUALIFIED_WRITE_TOOL_NAME} tool with a project note about: ${
         requestedTopic ||
         "what this session learned that a later session on this project should know, one call per separate thing"
-      }. Write it from what happened in this conversation and pick the category that fits. Reply with one line naming each saved file.`
+      }. Write it from what happened in this conversation, pick the category that fits, and pass as project a folder in the repository the note is about; when more than one repository fits, ask the user with AskUserQuestion which one first. Reply with one line naming each saved file.`
     );
     return { text: "Writing a project note…" };
   });

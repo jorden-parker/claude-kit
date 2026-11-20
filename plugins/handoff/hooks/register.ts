@@ -11,6 +11,7 @@ const OPEN_QUESTIONS_HEADING = "Open questions for the user:";
 const RECAP_RULES = `You write a prompt that a fresh coding-agent session could receive to continue the work in the conversation below.
 The working directory, the conversation and a <guidance> block, when present, are the only sources: invent nothing they do not contain.
 Start with a one-line title that names the work, in 60 characters at most and with no period at the end, then a blank line.
+Right after the title line, when the work is about a git repository other than the working directory's, write a line "Repository: <absolute folder path>" naming it, judged from the files and commands in the conversation. When the work could belong to more than one repository, list each folder: "Repository: <path> | <path>". Leave the line out when the work is in the working directory's repository.
 Include the goal, what has been done, what is left, and the files and commands mentioned.
 If decisions are left that only the user can make, end with a line reading exactly "${OPEN_QUESTIONS_HEADING}", then one line per decision in the form "- <question ending in a question mark> (<likely answer> | <likely answer>)", with two or three likely answers. Leave that section out when no such decision is left, and never list there what the next session can check for itself.
 If a <focus> block is present, center the recap on it and keep the rest brief.
@@ -23,6 +24,7 @@ const PER_PLAN_RULES = `You write prompts that fresh coding-agent sessions could
 Find every separate plan, idea or task the conversation suggests, usually listed in the latest assistant message, and write one prompt per plan.
 The working directory and the conversation are the only sources: invent nothing they do not contain.
 Each prompt must stand alone: start with a one-line title naming the plan, then give its goal, the rationale and files the conversation gives for it, and what "done" means.
+Right after the title line, when the plan is about a git repository other than the planing directory's, write a line "Repository: <absolute folder path>" naming it, judged from the files and commands in the conversation. When the plan could belong to more than one repository, list each folder: "Repository: <path> | <path>". Leave the line out when the plan is in the planing directory's repository.
 If a <focus> block is present, only cover the plans it names.
 Separate the prompts with a line containing only ${PLAN_SEPARATOR}.
 Output only the prompts and separators, with no preamble, numbering, quotes or explanation.`;
@@ -320,17 +322,46 @@ const saveHandoff = async (
   return { handoffId, path };
 };
 
+const REPOSITORY_LINE = /^Repository: (.+)\n/m;
+const REPOSITORY_QUESTION = "Which repository is this handoff about?";
+
+const readRepositoryCandidates = (recap: string) =>
+  (REPOSITORY_LINE.exec(recap)?.[1] ?? "")
+    .split("|")
+    .map((candidate) => candidate.trim())
+    .filter((candidate) => candidate.startsWith("/"));
+
+const chooseRepositoryFolder = async (
+  engine: EngineInterface,
+  candidates: string[]
+) => {
+  if (candidates.length < 2) return candidates[0];
+  try {
+    return await engine.ui.ask(REPOSITORY_QUESTION, {
+      header: QUESTION_DIALOG_HEADER,
+      options: candidates,
+    });
+  } catch {
+    return undefined;
+  }
+};
+
 const saveSessionHandoff = async (
   engine: EngineInterface,
   recap: string,
   focus: string
-) =>
-  saveHandoff(engine, {
-    recap,
+) => {
+  const repositoryFolder = await chooseRepositoryFolder(
+    engine,
+    readRepositoryCandidates(recap)
+  );
+  return saveHandoff(engine, {
+    recap: recap.replace(REPOSITORY_LINE, ""),
     focus,
-    cwd: await engine.session.cwd(),
+    cwd: repositoryFolder || (await engine.session.cwd()),
     createdAt: await engine.clock.now(),
   });
+};
 
 const readHandoff = async (engine: EngineInterface, file: HandoffFile) => {
   const fileText = String(await engine.fs.read(file.path));

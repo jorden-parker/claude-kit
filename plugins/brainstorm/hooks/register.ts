@@ -108,7 +108,7 @@ type Brainstorm<SomeIdea extends Idea = Idea> = {
 
 type SavedBrainstorm = Brainstorm<NumberedIdea>;
 
-const BRAINSTORM_INSTRUCTIONS = `Brainstorm improvements for the project in the current working directory.
+const BRAINSTORM_INSTRUCTIONS = `Brainstorm improvements for the project the focus below names, or else the project in the current working directory. When the focus could mean more than one repository, ask the user with AskUserQuestion which one before studying it.
 
 1. Study the project first: README, manifests, entry points, tests, CI, config, git log. Read real code, not just file names.
 2. Generate 12 to 25 ideas across these categories:
@@ -124,7 +124,7 @@ const BRAINSTORM_INSTRUCTIONS = `Brainstorm improvements for the project in the 
 4. Keep each idea scannable: a title under 10 words, one or two sentences of why, and one concrete next step that can be started today.
 5. Set priority (now, next, later) by risk and payoff, and effort (small, medium, large) honestly.
 
-When done, call the ${QUALIFIED_TOOL_NAME} tool once with every idea. It writes the page and opens it in the browser. Then reply with the page's path and the top three ideas in one line each.`;
+When done, call the ${QUALIFIED_TOOL_NAME} tool once with every idea, and pass as folder a folder of the repository you brainstormed when it is not the working directory's. It writes the page and opens it in the browser. Then reply with the page's path and the top three ideas in one line each.`;
 
 const buildBrainstormPrompt = (focus: string) =>
   focus
@@ -135,6 +135,11 @@ const RENDER_TOOL_SCHEMA = {
   type: "object",
   properties: {
     project: { type: "string", description: "The project's name." },
+    folder: {
+      type: "string",
+      description:
+        "The repository the ideas are about, as an absolute folder path inside it. Choose it from what was brainstormed, not from the working directory. Leave it out only when the ideas are about the working directory's repository. When they could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
+    },
     summary: {
       type: "string",
       description: "One sentence on what the project is.",
@@ -706,8 +711,11 @@ const toProjectName = (folder: string) => {
   return /[A-Za-z0-9]/.test(projectName) ? projectName : "unknown";
 };
 
-const resolveProjectName = async (engine: EngineInterface) => {
-  const folder = await engine.session.cwd();
+const resolveProjectName = async (
+  engine: EngineInterface,
+  requestedFolder?: string
+) => {
+  const folder = requestedFolder || (await engine.session.cwd());
   const commonGitFolder = await engine.process
     .run([
       "git",
@@ -730,8 +738,11 @@ const readBrainstormRoot = async (engine: EngineInterface) =>
   (await engine.env.get("BRAINSTORM_DIR")) ??
   `${(await engine.env.get("HOME")) ?? ""}/.claude/brainstorm`;
 
-const resolveBrainstormFolder = async (engine: EngineInterface) =>
-  `${await readBrainstormRoot(engine)}/${await resolveProjectName(engine)}`;
+const resolveBrainstormFolder = async (
+  engine: EngineInterface,
+  requestedFolder?: string
+) =>
+  `${await readBrainstormRoot(engine)}/${await resolveProjectName(engine, requestedFolder)}`;
 
 const moveLegacyBrainstormFolder = async (engine: EngineInterface) => {
   const legacyFolder = `${await engine.session.cwd()}/${LEGACY_BRAINSTORM_FOLDER}`;
@@ -747,9 +758,13 @@ const isInsideFolder = (filePath: string, folder: string) =>
 
 const writeBrainstormPage = async (
   engine: EngineInterface,
-  brainstorm: Brainstorm
+  brainstorm: Brainstorm,
+  requestedFolder: string
 ) => {
-  const brainstormFolder = await resolveBrainstormFolder(engine);
+  const brainstormFolder = await resolveBrainstormFolder(
+    engine,
+    requestedFolder
+  );
   const pathWithoutExtension = `${brainstormFolder}/brainstorm-${formatFileStamp(await engine.clock.now())}`;
   const pagePath = `${pathWithoutExtension}.html`;
   const savedBrainstorm: SavedBrainstorm = {
@@ -1219,7 +1234,12 @@ export const register: Register = (on) => {
       };
     }
     try {
-      const pagePath = await writeBrainstormPage($, brainstorm);
+      const requestedFolder = readText(e.folder);
+      const pagePath = await writeBrainstormPage(
+        $,
+        brainstorm,
+        requestedFolder.startsWith("/") ? requestedFolder : ""
+      );
       const isOpened = await openInBrowser($, pagePath);
       return {
         result: isOpened

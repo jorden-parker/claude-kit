@@ -10,7 +10,7 @@ One command, `/brainstorm`, takes a project from ideas to code. Its first word p
 
 Only `plan` and `build` as the first word pick a mode. Anything else is the focus of a new brainstorm. To brainstorm on a focus that starts with one of those words, put another word first: `/brainstorm the build pipeline`.
 
-`/brainstorm` brainstorms improvements: security issues, must-have fixes, quick wins, performance, developer experience, and creative or moonshot ideas. The result is a self-contained HTML page, saved under `~/.claude/brainstorm/<project>/` and opened in the browser. `<project>` is the name of the repository folder, shared by its worktrees, the same name the handoff, project-notes and small-plans plugins file under.
+`/brainstorm` brainstorms improvements: security issues, must-have fixes, quick wins, performance, developer experience, and creative or moonshot ideas. The result is a self-contained HTML page, saved under `~/.claude/brainstorm/<project>/` and opened in the browser. `<project>` is the repository the ideas are about: the one `/brainstorm <focus>` names, or else the session's, and Claude asks you when the focus could mean more than one. The folder is named after the repository, shared by its worktrees, the same name the handoff, project-notes and small-plans plugins file under.
 
 ## Usage
 

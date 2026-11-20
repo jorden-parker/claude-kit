@@ -810,6 +810,22 @@ test("a plan written in a deleted worktree is saved under the main repository's 
   ).toBe(true);
 });
 
+test("a plan for a folder in another repository's worktree is saved under that repository's name", async ($, on) => {
+  const { files } = mockEngine(on, {}, "");
+
+  await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    order: 1,
+    project: "/work/notes-app/.claude/worktrees/fix-login",
+  });
+
+  expect(
+    [...files.keys()].some((path) =>
+      path.startsWith(`${PROJECT_FOLDER.replace("claude-kit", "notes-app")}/`)
+    )
+  ).toBe(true);
+});
+
 const SET_QUESTION = "🧺 Which plan set shall we build?";
 
 const mountQuestion = ($: Engine, question: string) =>

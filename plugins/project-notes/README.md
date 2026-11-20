@@ -37,7 +37,7 @@ Claude is told to load the `humanizer` skill before writing a debugging note and
 ~/.claude/project-notes/<project>/<category>/<date>-<slug>.md
 ```
 
-- `<project>` is the name of the repository the session is in, shared by its worktrees (also a deleted `<repo>/.claude/worktrees/<name>` one), or the project root's folder name outside git. Claude can name another project when a note belongs elsewhere
+- `<project>` is the repository the note is about. Claude picks it from the note's subject (the files, services and repositories it names), not from the folder the session started in, and passes a folder inside that repository; the plugin files it under the repository's name, shared by its worktrees (also a deleted `<repo>/.claude/worktrees/<name>` one). When more than one repository fits, Claude asks you which one before saving. With no project given, the note goes under the session's repository, or the project root's folder name outside git
 - `<date>` is the day the note was written (UTC), or for a filed session note the day that session started; `<slug>` comes from the title
 - A second note with the same title on the same day gets `-2`, `-3` and so on, so nothing is overwritten
 - Each file starts with front matter: `title`, `category`, `project`, `created`, and `source` for a filed session note

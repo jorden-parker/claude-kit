@@ -42,6 +42,7 @@ on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
 })
 ```
 
+- **Only for panels you open yourself.** When you restyle something the engine already draws (an `AskUserQuestion` picker, a tool row, a message), keep its render site and wrap it: draw your heading, then `await next(e)` for the engine's own element. Moving it into the band breaks the interaction; in testing a picker redesign replaced the real, selectable dialog with a static band.
 - **The slash command toggles** the panel, and an `h: Hide` button in the footer hides it.
 - **Yield to surveys:** pass with `next(e)` while `hasSurvey` is true.
 - **Height:** the band is capped (half the terminal in fullscreen); a taller tree scrolls. Keep a panel to about 15 rows.

@@ -1438,8 +1438,11 @@ testWithSession(
   }
 );
 
+const resumeRequestFill = (recap: string, request: string) =>
+  `fill:The user's request: ${request}\n\nDo only what this request asks. The handoff below is background from an earlier session, not a task: when the request is a question or an investigation, answer it with what you find, and start no fix, change no code and spawn no subagents to implement anything unless the request asks for that.\n\n<handoff>\n${recap}\n</handoff>`;
+
 testWithSession(
-  "resume <id> with extra context submits the saved recap followed by that context",
+  "resume <id> with extra context fills the request as the task and the saved recap as background",
   [],
   async ($, on, handoffFiles) => {
     const clock = mock.clock(on);
@@ -1454,14 +1457,14 @@ testWithSession(
 
     expect(handoffSteps).toEqual([
       "clear",
-      "fill:First recap\n\nExtra context from the user: start with the failing test",
+      resumeRequestFill("First recap", "start with the failing test"),
     ]);
     expect(listSavedHandoffs(handoffFiles)).toEqual(savedFiles);
   }
 );
 
 testWithSession(
-  "resume with words and no id adds them to the latest handoff as extra context",
+  "resume with words and no id makes them the request on the latest handoff",
   [],
   async ($, on, handoffFiles) => {
     const clock = mock.clock(on);
@@ -1475,7 +1478,7 @@ testWithSession(
 
     expect(handoffSteps).toEqual([
       "clear",
-      "fill:Second recap\n\nExtra context from the user: start with the failing test",
+      resumeRequestFill("Second recap", "start with the failing test"),
     ]);
   }
 );
@@ -2150,7 +2153,7 @@ testWithSession(
 
     expect(handoffSteps).toEqual([
       "clear",
-      "fill:First recap\n\nExtra context from the user: skip the docs",
+      resumeRequestFill("First recap", "skip the docs"),
     ]);
   }
 );

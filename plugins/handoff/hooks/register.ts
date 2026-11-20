@@ -925,7 +925,7 @@ const isBandDrawn = async (engine: EngineInterface) => {
 
 const appendExtraContext = (recap: string, extraContext: string) =>
   extraContext
-    ? `${recap}\n\nExtra context from the user: ${extraContext}`
+    ? `The user's request: ${extraContext}\n\nDo only what this request asks. The handoff below is background from an earlier session, not a task: when the request is a question or an investigation, answer it with what you find, and start no fix, change no code and spawn no subagents to implement anything unless the request asks for that.\n\n<handoff>\n${recap}\n</handoff>`
     : recap;
 
 const resumeSavedHandoff = async (

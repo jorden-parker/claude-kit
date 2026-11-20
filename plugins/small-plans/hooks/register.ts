@@ -19,6 +19,7 @@ const MAX_STEPS = 6;
 const MAX_ORDER = 99;
 const ORDER_WIDTH = 2;
 const MAX_SLUG_LENGTH = 60;
+const MAX_ASKED_SETS = 4;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
 const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
 const HANDOFF_FILE_NAME = /^\d+-.*\.md$/;
@@ -407,10 +408,31 @@ const splitHandoff = async (
   return { text: `Splitting the handoff into small plans in set ${setName}…` };
 };
 
+const pickSetToBuild = async (engine: EngineInterface, setNames: string[]) => {
+  const listedSets = setNames.slice(0, MAX_ASKED_SETS);
+  try {
+    return await engine.ui.ask("Which set of small plans should be built?", {
+      header: "Plan set",
+      options: listedSets,
+    });
+  } catch {
+    return undefined;
+  }
+};
+
 const buildPlans = async (engine: EngineInterface, requestedName: string) => {
-  const setName = (await listSetsNewestFirst(engine)).find((name) =>
-    name.includes(requestedName)
-  );
+  const setNames = await listSetsNewestFirst(engine);
+  const shouldAsk = !requestedName && setNames.length > 1;
+  const pickedName = shouldAsk
+    ? await pickSetToBuild(engine, setNames)
+    : requestedName;
+  if (pickedName === undefined)
+    return {
+      text: `No set was picked. Run /${COMMAND_NAME} build <set> with one of: ${setNames.join(", ")}.`,
+    };
+  const setName =
+    setNames.find((name) => name === pickedName) ??
+    setNames.find((name) => name.includes(pickedName.trim()));
   if (!setName)
     return {
       text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,

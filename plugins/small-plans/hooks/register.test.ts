@@ -336,12 +336,59 @@ test("/small-plans handoff says so when the project has no handoff", async ($, o
   expect(submittedPrompts).toHaveLength(0);
 });
 
-test("/small-plans build runs the newest set, which needs no handoff", async ($, on) => {
+type AskedQuestion = { questions: { options: { label: string }[] }[] };
+
+const answerAskUserQuestion = (on: On, chosenLabel?: string) => {
+  const askedQuestions: AskedQuestion[] = [];
+  on("tool.call", { tool: "AskUserQuestion" }, (_, e) => {
+    const askedQuestion = e as unknown as AskedQuestion & {
+      questions: { question: string }[];
+    };
+    askedQuestions.push(askedQuestion);
+    if (chosenLabel === undefined) return { deny: "dismissed" };
+    const question = askedQuestion.questions[0]?.question ?? "";
+    return {
+      result: { ...askedQuestion, answers: { [question]: chosenLabel } },
+    } as never;
+  });
+  return askedQuestions;
+};
+
+const askedLabels = (askedQuestions: AskedQuestion[]) =>
+  askedQuestions.flatMap(({ questions }) =>
+    questions.flatMap(({ options }) => options.map(({ label }) => label))
+  );
+
+test("/small-plans build lists the sets newest first and builds the one picked", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, HANDOFF_SET);
   const { submittedPrompts } = await runCommand($, on, "build", {
     [HANDOFF_SET_PLAN]: "older, from a handoff",
     [STANDALONE_SET_PLAN]: "newer, planned on its own",
   });
 
+  expect(askedLabels(askedQuestions)).toEqual([STANDALONE_SET, HANDOFF_SET]);
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${HANDOFF_SET}`);
+});
+
+test("/small-plans build builds nothing when the list is dismissed", async ($, on) => {
+  answerAskUserQuestion(on);
+  const { reply, submittedPrompts } = await runCommand($, on, "build", {
+    [HANDOFF_SET_PLAN]: "older, from a handoff",
+    [STANDALONE_SET_PLAN]: "newer, planned on its own",
+  });
+
+  expect(submittedPrompts).toHaveLength(0);
+  expect(reply.text).toContain(STANDALONE_SET);
+});
+
+test("/small-plans build runs the only set without asking", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, HANDOFF_SET);
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "planned on its own",
+  });
+
+  expect(askedQuestions).toHaveLength(0);
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${STANDALONE_SET}`);
   expect(submittedPrompts[0]).toContain("small-plans:small-plan-implementer");

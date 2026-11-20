@@ -57,7 +57,7 @@ The files are plain Markdown: edit, move or delete them with any tool. A set you
 
 ## Build
 
-`/small-plans build` builds this project's newest set; `/small-plans build <text>` builds the newest set whose name holds that text (`build fix-login`, `build 007`). The session coordinates and edits nothing itself. For each plan that is not done, in order:
+`/small-plans build` lists this project's four newest sets and builds the one you pick (type a name under "Other" for an older set; with one set it builds that one without asking); `/small-plans build <text>` builds the newest set whose name holds that text (`build fix-login`, `build 007`). The session coordinates and edits nothing itself. For each plan that is not done, in order:
 
 1. The `small-plan-implementer` agent (Haiku) gets the plan's path, makes the edits and runs the check. It answers `DONE` or `BLOCKED`
 2. The `small-plan-reviewer` agent (Haiku) gets the same path, reads the diff, runs the check and confirms each `## Review` line. It answers `PASS` or `FAIL` with findings

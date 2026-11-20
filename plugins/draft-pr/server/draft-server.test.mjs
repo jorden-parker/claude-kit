@@ -413,6 +413,18 @@ test("a post from another origin or without the token runs nothing", async (test
   assert.deepEqual(ranSteps, []);
 });
 
+test("a post over the byte limit runs nothing, even when its characters fit", async (testContext) => {
+  const { postJson, ranSteps } = await startTestServer(testContext, PR_DRAFT);
+
+  await postJson(`/${TOKEN}/post`, {
+    title: "Reject expired tokens",
+    body: "é".repeat(1_500_000),
+    isDraft: false,
+  }).catch(() => undefined);
+
+  assert.deepEqual(ranSteps, []);
+});
+
 test("the page's ping is answered with no content", async (testContext) => {
   const { postJson } = await startTestServer(testContext, PR_DRAFT);
 

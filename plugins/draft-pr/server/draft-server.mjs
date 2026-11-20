@@ -214,10 +214,12 @@ const postDraft = async (draft, payload, runCommand) => {
 const readRequestJson = (request) =>
   new Promise((resolve, reject) => {
     let requestText = "";
+    let requestBytes = 0;
     request.setEncoding("utf8");
     request.on("data", (chunk) => {
       requestText += chunk;
-      if (requestText.length > MAX_REQUEST_BYTES) {
+      requestBytes += Buffer.byteLength(chunk);
+      if (requestBytes > MAX_REQUEST_BYTES) {
         reject(new Error("The request is too large."));
         request.destroy();
       }

@@ -204,6 +204,9 @@ func loadSection(layout sectionLayout) sectionView {
 	entries := []entryView{}
 	entryPaths, _ := filepath.Glob(filepath.Join(sectionRoot, filepath.FromSlash(layout.EntryPattern)))
 	for _, entryPath := range entryPaths {
+		if isPlanIndex(layout, entryPath) {
+			continue
+		}
 		if entry, isReadable := readEntry(layout, sectionRoot, entryPath); isReadable {
 			entries = append(entries, entry)
 		}
@@ -244,7 +247,7 @@ func resolveEntryLocation(sectionId string, entryPath string) (sectionLayout, st
 	if !isKnown || filepath.ToSlash(filepath.Clean(entryPath)) != entryPath {
 		return layout, "", false
 	}
-	if isEntry, _ := filepath.Match(layout.EntryPattern, entryPath); !isEntry {
+	if isEntry, _ := filepath.Match(layout.EntryPattern, entryPath); !isEntry || isPlanIndex(layout, entryPath) {
 		return layout, "", false
 	}
 	return layout, filepath.Join(resolveSectionRoot(layout), filepath.FromSlash(entryPath)), true
@@ -349,11 +352,7 @@ func moveNoteFile(sectionRoot string, notePath string, targetPath string, text [
 	if err := os.Remove(notePath); err != nil {
 		return err
 	}
-	for folder := filepath.Dir(notePath); folder != sectionRoot && strings.HasPrefix(folder, sectionRoot); folder = filepath.Dir(folder) {
-		if os.Remove(folder) != nil {
-			break
-		}
-	}
+	pruneEmptyFolders(sectionRoot, filepath.Dir(notePath))
 	return nil
 }
 
@@ -424,6 +423,7 @@ func newViewerServer() http.Handler {
 				http.Error(writer, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			rewritePlanIndex(layout, filepath.Dir(notePath))
 			writer.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -431,6 +431,8 @@ func newViewerServer() http.Handler {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		rewritePlanIndex(layout, filepath.Dir(notePath))
+		rewritePlanIndex(layout, filepath.Dir(filepath.Join(resolveSectionRoot(layout), filepath.FromSlash(targetPath))))
 		writer.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(writer).Encode(map[string]string{"path": targetPath})
 	})
@@ -463,6 +465,7 @@ func newViewerServer() http.Handler {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		rewritePlanIndex(layout, filepath.Dir(notePath))
 		writer.WriteHeader(http.StatusCreated)
 	})
 
@@ -481,6 +484,7 @@ func newViewerServer() http.Handler {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		rewritePlanIndex(layout, filepath.Dir(notePath))
 		writer.WriteHeader(http.StatusNoContent)
 	})
 

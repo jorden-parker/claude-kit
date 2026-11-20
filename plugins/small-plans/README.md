@@ -55,7 +55,7 @@ The tool refuses a plan, and names every problem at once, when:
 - `index.md` lists every plan of the set in build order: order, linked title, kind, status and depends on. The plugin rewrites it each time a plan is saved, changes status, or is changed with Edit or Write. Do not edit it by hand: the next rewrite replaces it
 - Set `SMALL_PLANS_DIR` to keep the plans in another folder. Handoffs are read from `~/.claude/handoffs`, or `HANDOFFS_DIR` when set
 
-The files are plain Markdown: edit, move or delete them with any tool. A change made outside Claude's Edit and Write tools reaches `index.md` at the next save or status change in that set. A set you write by hand builds like any other.
+The files are plain Markdown: edit, move or delete them with any tool. The claude-notes viewer also rewrites `index.md` when it saves, adds, moves or deletes a plan, and hides it from its list. A change made with any other tool reaches `index.md` at the next save or status change in that set. A set you write by hand builds like any other.
 
 ## Build
 

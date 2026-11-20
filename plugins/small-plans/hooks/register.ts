@@ -323,7 +323,7 @@ const writeSetIndex = async (engine: EngineInterface, setFolder: string) => {
     [
       `# Plans: ${setName}`,
       "",
-      "The small-plans plugin rewrites this index each time a plan of this set is saved, edited or changes status. Build the plans in this order: a plan waits until every plan in its Depends on column is done.",
+      "This index is rewritten each time a plan of this set is saved, edited, moved, deleted or changes status. Build the plans in this order: a plan waits until every plan in its Depends on column is done.",
       "",
       "| Order | Plan | Kind | Status | Depends on |",
       "| --- | --- | --- | --- | --- |",

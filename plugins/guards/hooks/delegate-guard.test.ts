@@ -61,8 +61,14 @@ const readPair = (id: string, size: number, extra = {}) =>
   resultPair(id, "Read", { file_path: "/a.ts" }, size, extra);
 const overBudget = transcript(...readPair("r1", LIMIT));
 
+const specificOf = (result: HookResult) =>
+  (
+    result?.output as
+      { hookSpecificOutput: Record<string, string | undefined> } | undefined
+  )?.hookSpecificOutput;
 const isDenied = (result: HookResult) =>
-  result !== null && result.output !== undefined;
+  specificOf(result)?.permissionDecision === "deny";
+const WARNING_LINE = 30_000;
 const reasonOf = (result: HookResult) =>
   (
     result?.output as {
@@ -84,7 +90,22 @@ test("denies a Read after lookups reached the budget", () => {
 
 test("allows a Read one character under the budget", () => {
   const underBudget = transcript(...readPair("r1", LIMIT - 1));
-  expect(decideDelegation(readEvent, underBudget)).toBeNull();
+  expect(isDenied(decideDelegation(readEvent, underBudget))).toBe(false);
+});
+
+test("warns, without denying, once lookups reach three quarters of the budget", () => {
+  const nearBudget = transcript(...readPair("r1", WARNING_LINE));
+  const result = decideDelegation(readEvent, nearBudget);
+  expect(isDenied(result)).toBe(false);
+  expect(specificOf(result)?.additionalContext).toContain("30000 of 40000");
+  expect(specificOf(result)?.additionalContext).toContain(
+    "guards:context-scout"
+  );
+});
+
+test("stays silent one character under the warning line", () => {
+  const farFromBudget = transcript(...readPair("r1", WARNING_LINE - 1));
+  expect(decideDelegation(readEvent, farFromBudget)).toBeNull();
 });
 
 test("sums several lookup results toward the budget", () => {

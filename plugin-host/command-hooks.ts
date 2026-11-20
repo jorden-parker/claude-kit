@@ -113,6 +113,7 @@ const runCommandHook = (
         ...process.env,
         CLAUDE_PLUGIN_ROOT: pluginRoot,
         CLAUDE_PROJECT_DIR: workingDirectory,
+        CLAUDE_KIT_HOOK_BRIDGE: "1",
       },
     });
     let stdout = "";

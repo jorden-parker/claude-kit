@@ -1,56 +1,121 @@
-import { SHELL_TOOL_NAMES, type HookEvent, type HookResult } from "./types.ts";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  SHELL_TOOL_NAMES,
+  type HookEvent,
+  type HookResult,
+  type SavedOutput,
+} from "./types.ts";
 
-const MAX_LINES = 150;
-const HEAD_LINES = 30;
-const TAIL_LINES = 60;
+export const MAX_LINES = 150;
 const MAX_SIGNAL_LINES = 40;
-const MAX_LINE_CHARS = 400;
 const SIGNAL = /error|fail|panic|traceback|exception|fatal|assert/i;
 const SUMMARY =
   /^(?:ok|PASS|FAIL)\b|\b\d+ (?:passed|failed|skipped|total)\b|^Tests:|^Test Suites:|^=+ .* =+$/;
+const MCP_TOOL = /^mcp__/;
 
-const clip = (line: string) =>
-  line.length <= MAX_LINE_CHARS
+type TrimLimits = {
+  maxLines: number;
+  headLines: number;
+  tailLines: number;
+  maxLineChars: number;
+};
+
+const SHELL_LIMITS: TrimLimits = {
+  maxLines: MAX_LINES,
+  headLines: 30,
+  tailLines: 60,
+  maxLineChars: 400,
+};
+
+const MCP_LIMITS: TrimLimits = {
+  maxLines: 300,
+  headLines: 200,
+  tailLines: 60,
+  maxLineChars: Infinity,
+};
+
+const clip = (line: string, maxLineChars: number) =>
+  line.length <= maxLineChars
     ? line
-    : `${line.slice(0, MAX_LINE_CHARS)} … [${line.length - MAX_LINE_CHARS} chars hidden]`;
+    : `${line.slice(0, maxLineChars)} … [${line.length - maxLineChars} chars hidden]`;
 
-function trimLines(lines: string[]): string[] {
-  if (lines.length <= MAX_LINES) return lines;
-  const middle = lines.slice(HEAD_LINES, -TAIL_LINES);
+function trimLines(
+  lines: string[],
+  limits: TrimLimits,
+  savedPath: string
+): string[] {
+  if (lines.length <= limits.maxLines) return lines;
+  const firstHidden = limits.headLines + 1;
+  const lastHidden = lines.length - limits.tailLines;
+  const middle = lines.slice(limits.headLines, -limits.tailLines);
   const signals = middle
     .filter((line) => SIGNAL.test(line) || SUMMARY.test(line))
     .slice(0, MAX_SIGNAL_LINES);
-  const marker = `[bash-trim: ${middle.length - signals.length} lines hidden from lines ${HEAD_LINES + 1}-${lines.length - TAIL_LINES}; rerun piped through grep or sed -n to see them]`;
+  const marker = `[bash-trim: ${middle.length - signals.length} lines hidden from lines ${firstHidden}-${lastHidden}; full output in ${savedPath}: grep it, or sed -n '${firstHidden},${lastHidden}p' it]`;
   return [
-    ...lines.slice(0, HEAD_LINES),
+    ...lines.slice(0, limits.headLines),
     ...signals,
     marker,
-    ...lines.slice(-TAIL_LINES),
+    ...lines.slice(-limits.tailLines),
   ];
 }
 
 const TRIMMABLE_STREAMS = ["stdout", "stderr", "llmContent", "returnDisplay"];
 
-const trimText = (text: string) =>
-  trimLines(text.split("\n")).map(clip).join("\n");
-
 const HIDDEN_COUNT = /\[bash-trim: (\d+) lines hidden/;
-const hiddenIn = (text: unknown) =>
-  Number(HIDDEN_COUNT.exec(String(text))?.[1] ?? 0);
+const hiddenIn = (text: string) => Number(HIDDEN_COUNT.exec(text)?.[1] ?? 0);
 
-export function decide(event: HookEvent): HookResult {
-  const response = event.tool_response;
-  if (
-    !SHELL_TOOL_NAMES.includes(event.tool_name ?? "") ||
-    !response ||
-    typeof response !== "object"
-  )
-    return null;
-  const trimmed: Record<string, any> = { ...response };
+type TextTrimmer = (text: string, partName: string) => string;
+
+function trimEachText(response: unknown, trimText: TextTrimmer): unknown {
+  if (typeof response === "string") return trimText(response, "text");
+  if (Array.isArray(response))
+    return response.map((block, index) =>
+      typeof block?.text === "string"
+        ? { ...block, text: trimText(block.text, `text${index}`) }
+        : block
+    );
+  if (!response || typeof response !== "object") return response;
+  const streams = response as Record<string, unknown>;
+  const trimmed: Record<string, unknown> = { ...streams };
   for (const stream of TRIMMABLE_STREAMS) {
-    if (typeof response[stream] === "string")
-      trimmed[stream] = trimText(response[stream]);
+    const text = streams[stream];
+    if (typeof text === "string") trimmed[stream] = trimText(text, stream);
   }
+  return trimmed;
+}
+
+function limitsFor(toolName: string): TrimLimits | null {
+  if (SHELL_TOOL_NAMES.includes(toolName)) return SHELL_LIMITS;
+  const isTrimmedMcpTool =
+    MCP_TOOL.test(toolName) && process.env.GUARDS_MCP_TRIM !== "0";
+  return isTrimmedMcpTool ? MCP_LIMITS : null;
+}
+
+export function decide(
+  event: HookEvent,
+  savedOutputFolder = join(tmpdir(), "guards-output")
+): HookResult {
+  const response: unknown = event.tool_response;
+  const limits = limitsFor(event.tool_name ?? "");
+  if (!limits || !response) return null;
+  const savedOutputs: SavedOutput[] = [];
+  let hiddenLines = 0;
+  const trimText: TextTrimmer = (text, partName) => {
+    const path = join(
+      savedOutputFolder,
+      `${event.session_id ?? "session"}-${event.tool_use_id ?? "output"}-${partName}.txt`
+    );
+    const trimmedText = trimLines(text.split("\n"), limits, path)
+      .map((line) => clip(line, limits.maxLineChars))
+      .join("\n");
+    const hiddenHere = hiddenIn(trimmedText);
+    if (hiddenHere > 0) savedOutputs.push({ path, text });
+    hiddenLines += hiddenHere;
+    return trimmedText;
+  };
+  const trimmed = trimEachText(response, trimText);
   if (JSON.stringify(trimmed) === JSON.stringify(response)) return null;
   return {
     output: {
@@ -59,9 +124,7 @@ export function decide(event: HookEvent): HookResult {
         updatedToolOutput: trimmed,
       },
     },
-    hiddenLines: TRIMMABLE_STREAMS.reduce(
-      (total, stream) => total + hiddenIn(trimmed[stream]),
-      0
-    ),
+    hiddenLines,
+    savedOutputs,
   };
 }

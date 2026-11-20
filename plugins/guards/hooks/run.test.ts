@@ -81,3 +81,29 @@ test("logLine records the session and the lines bash-trim hid", () => {
   );
   expect(parsed).toMatchObject({ session: "session-1", hiddenLines: 42 });
 });
+
+test("bash-trim saves the full output where its marker says", () => {
+  const temporaryFolder = mkdtempSync(join(tmpdir(), "spill-"));
+  const fullOutput = Array.from(
+    { length: 400 },
+    (_unused, i) => `line ${i}`
+  ).join("\n");
+  const event = {
+    hook_event_name: "PostToolUse",
+    tool_name: "Bash",
+    session_id: "session-1",
+    tool_use_id: "toolu_1",
+    tool_response: { stdout: fullOutput, stderr: "" },
+  };
+  const result = Bun.spawnSync(
+    ["bun", join(import.meta.dir, "run.ts"), "bash-trim"],
+    {
+      stdin: Buffer.from(JSON.stringify(event)),
+      env: { ...process.env, HOME: temporaryFolder, TMPDIR: temporaryFolder },
+    }
+  );
+  const trimmedOutput: string = JSON.parse(result.stdout.toString())
+    .hookSpecificOutput.updatedToolOutput.stdout;
+  const savedPath = /full output in (\S+):/.exec(trimmedOutput)?.[1] ?? "";
+  expect(readFileSync(savedPath, "utf8")).toBe(fullOutput);
+});

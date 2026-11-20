@@ -4,22 +4,28 @@ Small command guards that keep Bash, Read, commit and delegation behavior in
 check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 `hooks/run.ts`.
 
-- **bash-guard** (PreToolUse, Bash): denies unbounded `git log`, `git diff`,
-  `find`, and `cat` of a lockfile, unless the command bounds the output.
+- **bash-guard** (PreToolUse, Bash): bounds unbounded `git log`, `git diff`
+  and `find`. When the unbounded part is the last, plain segment of the
+  command, it appends `| head -n 150` and tells Claude so, which saves the
+  round trip a denial costs. It still denies when capping could change what
+  the command does (a redirect, a `find` with `-delete` or `-exec`, a later
+  `&&` segment) and denies `cat` of a lockfile.
 - **commit-guard** (PreToolUse, Bash, 600 s timeout): before `git commit`,
   denies `--no-verify`, `HUSKY=0` and `core.hooksPath`, runs the project's
   `lint`, `typecheck` and `test` scripts when no pre-commit hook exists, and for
   Next.js denies the commit while a running dev server reports compilation
   errors. Opt out with
   `GUARDS_COMMIT_GUARD=0`.
-- **read-guard** (PreToolUse, Read): denies Reads of text files over 300 lines
-  or 5 MB unless `limit` is 300 or less.
+- **read-guard** (PreToolUse, Read): caps a Read of a text file over 300 lines
+  at `limit: 300`, keeping the `offset`, and tells Claude the file's length so
+  it can read on. Denies a text file over 5 MB unless `limit` is 300 or less.
 - **delegate-guard** (PreToolUse, Read, Grep, Glob, Bash, Agent): forces
   context-heavy work onto Haiku subagents. In the main session it adds up the
   characters that lookups (`Read`, `Grep`, `Glob`, and Bash commands that start
   with `cat`, `grep`, `rg`, `find`, `ls`, `git log`, `git diff` and the like)
-  put into the context. At 40,000 characters it denies the next lookup and
-  points Claude at the `guards:context-scout` agent. Only a delegation to Haiku
+  put into the context. From 30,000 characters it warns with each lookup; at
+  40,000 it denies the next lookup and points Claude at the
+  `guards:context-scout` agent. Only a delegation to Haiku
   (that agent, or any agent spawned with `model: "haiku"`) resets the budget;
   a new user prompt does not, since the context keeps the earlier reads. It
   also denies three kinds of Agent call: an `Explore` subagent (the scout is
@@ -30,8 +36,12 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   Subagents are never limited. Claude Code only. Opt out with
   `GUARDS_DELEGATE_GUARD=0`. Hooks load when a session starts, so a session
   opened before the plugin was updated runs without this guard.
-- **bash-trim** (PostToolUse, Bash): keeps the head, the tail and the error
-  lines of long output.
+- **bash-trim** (PostToolUse, Bash and MCP tools): keeps the head, the tail
+  and the error lines of Bash output over 150 lines, and the head and tail of
+  an MCP text result over 300 lines. The full text is saved under
+  `$TMPDIR/guards-output/` and the marker line names the file, so Claude greps
+  that file and does not run the command again. Leave MCP results alone with
+  `GUARDS_MCP_TRIM=0`.
 - **browser-check** (Stop, off by default): blocks once when a UI file was
   edited after the last browser console read (`agent-browser console`,
   Playwright or Claude in Chrome). Opt in with `GUARDS_BROWSER_CHECK=1`.
@@ -43,6 +53,10 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 - **context-scout** (`agents/context-scout.md`, Haiku, read-only): reads and
   searches the codebase and replies in 25 lines at most with the conclusion and
   `path:line` references. delegate-guard sends Claude here.
+
+bash-guard and read-guard rewrite the call only in Claude Code. Qwen Code, pi,
+OpenCode and Crush cannot take a rewritten call, so there both guards deny
+with the reason, as they did before.
 
 Hook events are logged to `~/.cache/guards/hooks.log`.
 

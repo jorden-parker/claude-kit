@@ -1,4 +1,10 @@
-import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { decide as bashGuard } from "./bash-guard.ts";
@@ -7,7 +13,7 @@ import { decide as commitGuard } from "./commit-guard.ts";
 import { decideDelegationFromTranscript as delegateGuard } from "./delegate-guard.ts";
 import { decide as bashTrim } from "./bash-trim.ts";
 import { decide as readGuard } from "./read-guard.ts";
-import type { HookEvent, HookResult } from "./types.ts";
+import type { HookEvent, HookResult, SavedOutput } from "./types.ts";
 
 const MAX_LOG_BYTES = 5_000_000;
 
@@ -75,6 +81,15 @@ function appendHookLog(line: string | null): void {
   } catch {}
 }
 
+function saveOutputs(savedOutputs: SavedOutput[] = []): void {
+  try {
+    for (const { path, text } of savedOutputs) {
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+      writeFileSync(path, text, { mode: 0o600 });
+    }
+  } catch {}
+}
+
 async function readEvent(): Promise<HookEvent | undefined> {
   try {
     return JSON.parse(await Bun.stdin.text());
@@ -105,6 +120,7 @@ export async function runHook(name: string): Promise<number> {
     return 0;
   }
   appendHookLog(logLine(name, event, result, new Date()));
+  saveOutputs(result?.savedOutputs);
   return emitResult(result);
 }
 

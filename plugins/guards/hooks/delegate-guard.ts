@@ -3,6 +3,7 @@ import { GIT_OPTIONS, withoutQuotedText } from "./bash-guard.ts";
 import { deny, type HookEvent, type HookResult } from "./types.ts";
 
 const LOOKUP_BUDGET = 40_000;
+const WARNING_LINE = 30_000;
 const SCOUT_PROMPT_LIMIT = 1_500;
 const SCOUT_AGENT = "guards:context-scout";
 const DEFAULT_AGENT = "general-purpose";
@@ -70,6 +71,17 @@ function delegationProblem(event: HookEvent): HookResult {
 
 function budgetReason(spent: number): string {
   return `${spent} characters read or searched since the last Haiku delegation; the budget is ${LOOKUP_BUDGET}. Send the remaining lookups to ${SCOUT_AGENT} through the Agent tool.`;
+}
+
+function budgetWarning(spent: number): HookResult {
+  return {
+    output: {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        additionalContext: `Lookups have used ${spent} of ${LOOKUP_BUDGET} characters; at the budget the next one is denied. Send further multi-file lookups to ${SCOUT_AGENT}.`,
+      },
+    },
+  };
 }
 
 function parseLine(line: string): TranscriptLine | undefined {
@@ -154,7 +166,8 @@ export function decideDelegation(
   if (isAgentCall(event)) return delegationProblem(event);
   if (!isLookup(event.tool_name, event.tool_input)) return null;
   const spent = lookupCharacters(transcript);
-  return spent < LOOKUP_BUDGET ? null : deny(budgetReason(spent));
+  if (spent >= LOOKUP_BUDGET) return deny(budgetReason(spent));
+  return spent >= WARNING_LINE ? budgetWarning(spent) : null;
 }
 
 export function decideDelegationFromTranscript(

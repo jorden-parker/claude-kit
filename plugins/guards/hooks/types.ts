@@ -8,15 +8,19 @@ export type HookEvent = {
   stop_hook_active?: boolean;
   tool_name?: string;
   tool_input?: Record<string, any>;
-  tool_response?: Record<string, any>;
+  tool_response?: unknown;
+  tool_use_id?: string;
   agent_id?: string;
 };
+
+export type SavedOutput = { path: string; text: string };
 
 export type HookResult = {
   output?: unknown;
   exitCode?: number;
   stderr?: string;
   hiddenLines?: number;
+  savedOutputs?: SavedOutput[];
 } | null;
 
 export const deny = (
@@ -28,6 +32,25 @@ export const deny = (
       hookEventName,
       permissionDecision: "deny",
       permissionDecisionReason: reason,
+    },
+  },
+});
+
+const TOOLS_THAT_TAKE_A_REWRITE = ["Bash", "Read"];
+
+export const canRewriteInput = (event: HookEvent) =>
+  process.env.CLAUDE_KIT_HOOK_BRIDGE !== "1" &&
+  TOOLS_THAT_TAKE_A_REWRITE.includes(event.tool_name ?? "");
+
+export const rewriteInput = (
+  updatedInput: Record<string, any>,
+  additionalContext: string
+): HookResult => ({
+  output: {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      updatedInput,
+      additionalContext,
     },
   },
 });

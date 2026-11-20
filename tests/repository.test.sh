@@ -43,4 +43,23 @@ expect "turn-edits-lib.sh is the same in code-style and tdd" \
   cmp -s "$repository_root/plugins/code-style/hooks/turn-edits-lib.sh" \
   "$repository_root/plugins/tdd/hooks/turn-edits-lib.sh"
 
+kit_theme="$repository_root/theme/kit-theme.css"
+
+has_kit_theme() {
+  [ -s "$kit_theme" ] || return 1
+  while IFS= read -r theme_line; do
+    [ -n "$theme_line" ] || continue
+    grep -qF -- "$theme_line" "$repository_root/$1" || return 1
+  done <"$kit_theme"
+}
+
+for themed_page in \
+  plugins/brainstorm/hooks/register.ts \
+  plugins/draft-pr/hooks/page-style.ts \
+  plugins/ui-design/hooks/page-style.ts \
+  design-studio/monitor.html \
+  notes-viewer/index.html; do
+  expect "$themed_page carries every line of theme/kit-theme.css" has_kit_theme "$themed_page"
+done
+
 [ "$failures" -eq 0 ] || exit 1

@@ -6,6 +6,8 @@
   // plugin-host/build.ts is run by sync-qwen, sync-pi, sync-opencode and sync-crush, and it writes the entry file that imports targets.ts.
   // plugin-host/opencode-install.ts is run by sync-opencode, and plugin-host/crush-install.ts by sync-crush.
   // design-studio/cli.ts and plugins/ui-design/gallery.ts are run directly with bun.
+  // theme/kit-theme.css is not imported: tests/repository.test.sh checks that every plugin page carries a copy of it.
+  "ignorePatterns": ["theme/**"],
   "entry": ["design-studio/cli.ts", "plugins/ui-design/gallery.ts","design-studio/*.test.ts", "plugins/*/hooks/register.ts", "plugins/*/hooks/register.tsx", "plugins/*/hooks/run.ts", "plugins/*/hooks/*.test.ts", "plugins/*/server/*.mjs", "plugin-host/build.ts", "plugin-host/opencode-install.ts", "plugin-host/crush-install.ts", "plugin-host/targets.ts", "plugin-host/**/*.test.ts"],
   "duplicates": {
     // describeRecentMessages is copied between prompt-optimizer and handoff on purpose: plugins must be self-contained.
@@ -23,7 +25,10 @@
       "dup:62f2276b:2",
       "dup:45460fbd:3",
       "dup:0f3df041:2",
-      "dup:efbf4a15:2"
+      "dup:efbf4a15:2",
+      "dup:fdb5bdd8:2",
+      "dup:577fa913:2",
+      "dup:16cd138d:2"
     ]
   }
 }

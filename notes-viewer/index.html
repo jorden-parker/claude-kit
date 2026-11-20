@@ -957,6 +957,34 @@
           transition-duration: 0ms !important;
         }
       }
+      :root{--kit-bg:#fffcf8;--kit-surface:#faf5ee;--kit-panel:#fff;--kit-hover:#f3ece2;--kit-text:#211c30;--kit-text-soft:#3b3550;--kit-muted:#6a6480;--kit-subtle:#958fa8;--kit-line:#eee6db;--kit-line-strong:#dcd1c3;--kit-accent:#7357ff;--kit-on-accent:#fff;--kit-pink:#e8478f;--kit-peach:#ff9a52;--kit-amber:#b87100;--kit-green:#16935f;--kit-teal:#0c9893;--kit-blue:#3b78f6;--kit-red:#e0444b;--kit-radius-sm:8px;--kit-radius:12px;--kit-radius-lg:16px;--kit-shadow:0 1px 2px rgba(33,28,48,.04),0 6px 20px -10px rgba(33,28,48,.14);--kit-lift:0 16px 34px -14px rgba(115,87,255,.38);--kit-sans:"Geist","Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--kit-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;--kit-display:ui-rounded,"SF Pro Rounded","Nunito","Geist",system-ui,sans-serif;--kit-ease:cubic-bezier(.2,.8,.2,1);--kit-spring:cubic-bezier(.34,1.56,.64,1);color-scheme:light}
+      @media (prefers-color-scheme:dark){:root{--kit-bg:#13111c;--kit-surface:#1a1726;--kit-panel:#171421;--kit-hover:#231f33;--kit-text:#f1edf9;--kit-text-soft:#d8d2e6;--kit-muted:#a9a2bd;--kit-subtle:#7d7692;--kit-line:#2a2539;--kit-line-strong:#3c3551;--kit-accent:#9d88ff;--kit-on-accent:#13111c;--kit-pink:#ff70b4;--kit-peach:#ffb07a;--kit-amber:#ffc04d;--kit-green:#4fd69c;--kit-teal:#3dd6cf;--kit-blue:#76a2ff;--kit-red:#ff6b70;--kit-shadow:0 0 0 1px rgba(255,255,255,.02),0 8px 24px -10px rgba(0,0,0,.6);--kit-lift:0 16px 36px -14px rgba(157,136,255,.45);color-scheme:dark}}
+      :root{--bg:var(--kit-bg);--surface:var(--kit-surface);--panel:var(--kit-panel);--text:var(--kit-text);--muted:var(--kit-muted);--subtle:var(--kit-subtle);--line:var(--kit-line);--line-strong:var(--kit-line-strong);--ring:color-mix(in srgb,var(--kit-accent) 18%,transparent);--shadow:var(--kit-shadow);--lift:var(--kit-lift);--ease:var(--kit-ease);--grid:color-mix(in srgb,var(--kit-accent) 7%,transparent);--dot:var(--kit-line-strong);--invert-bg:var(--kit-text);--invert-text:var(--kit-bg);--invert-muted:var(--kit-subtle);--invert-line:color-mix(in srgb,var(--kit-bg) 25%,var(--kit-text))}
+      :root{--red:var(--kit-red);--amber:var(--kit-amber);--amber-bright:var(--kit-peach);--green:var(--kit-green);--blue:var(--kit-blue);--teal:var(--kit-teal);--purple:var(--kit-accent);--pink:var(--kit-pink);--gray:var(--kit-subtle)}
+      :root{--background:var(--kit-bg);--sidebar:var(--kit-surface);--hover:var(--kit-hover);--selected:color-mix(in srgb,var(--kit-accent) 13%,var(--kit-panel));--text-soft:var(--kit-text-soft);--border:var(--kit-line);--border-strong:var(--kit-line-strong);--accent:var(--kit-accent);--focus:var(--kit-accent);--danger:var(--kit-red);--danger-hover:color-mix(in srgb,var(--kit-red) 82%,var(--kit-text));--on-danger:var(--kit-on-accent);--primary:var(--kit-accent);--on-primary:var(--kit-on-accent);--done:var(--kit-green);--in-progress:var(--kit-amber);--pending:var(--kit-muted);--blocked:var(--kit-red);--radius:var(--kit-radius-sm);--spring:var(--kit-spring);--sans:var(--kit-sans);--mono:var(--kit-mono)}
+      :root{--color-background:var(--kit-bg);--color-card:var(--kit-panel);--color-muted:var(--kit-hover);--color-hairline:var(--kit-line);--color-border:var(--kit-line-strong);--color-foreground:var(--kit-text);--color-muted-foreground:var(--kit-muted);--color-accent:var(--kit-accent);--color-on-accent:var(--kit-on-accent);--color-destructive:var(--kit-red);--color-ring:var(--kit-accent);--font-sans:var(--kit-sans);--font-mono:var(--kit-mono)}
+      html{accent-color:var(--kit-accent);scrollbar-color:var(--kit-line-strong) transparent}
+      body{background-image:radial-gradient(1100px 420px at 8% -12%,color-mix(in srgb,var(--kit-accent) 9%,transparent),transparent 70%),radial-gradient(900px 380px at 100% -14%,color-mix(in srgb,var(--kit-pink) 7%,transparent),transparent 70%);background-attachment:fixed}
+      h1,h2,.brand{font-family:var(--kit-display)}
+      ::selection{background:color-mix(in srgb,var(--kit-accent) 26%,transparent);color:inherit}
+      :focus-visible{outline:2px solid var(--kit-accent);outline-offset:2px}
+      :where(input,textarea,select):focus-visible{outline:none;border-color:var(--kit-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--kit-accent) 22%,transparent)}
+      .button,.call-button,.icon-button,.chip,.event{transition:transform .28s var(--kit-spring),box-shadow .25s var(--kit-ease),background-color .2s,border-color .2s,color .2s,opacity .2s}
+      .button{border-radius:var(--kit-radius-sm)}
+      .button:not(:disabled):hover,.call-button:not(:disabled):hover,.chip:hover{transform:translateY(-1px)}
+      .button:not(:disabled):active,.call-button:not(:disabled):active,.chip:active{transform:translateY(0) scale(.96)}
+      .button.primary{border-color:transparent;background:linear-gradient(135deg,var(--kit-accent),color-mix(in srgb,var(--kit-accent) 62%,var(--kit-pink)));color:var(--kit-on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 6px 16px -8px var(--kit-accent)}
+      .button.primary:not(:disabled):hover{opacity:1;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),var(--kit-lift)}
+      .chip,.badge,.pill,.count{border-radius:999px}
+      .card,.panel,.comment,.finding,.window,.stats{border-radius:var(--kit-radius)}
+      .card{transition:transform .3s var(--kit-spring),box-shadow .3s var(--kit-ease),border-color .2s}
+      .card:hover{transform:translateY(-2px);box-shadow:var(--kit-lift)}
+      #toast,.toast{border-radius:999px;box-shadow:var(--kit-lift)}
+      .mark:empty{position:relative;flex:none;width:22px;height:22px;clip-path:none;border-radius:42% 58% 55% 45%/50% 44% 56% 50%;background:conic-gradient(from 210deg,var(--kit-accent),var(--kit-pink),var(--kit-peach),var(--kit-accent));box-shadow:inset 0 -2px 4px rgba(0,0,0,.14);transition:transform .6s var(--kit-spring),border-radius .6s var(--kit-ease)}
+      .mark:empty::before{content:"";position:absolute;top:20%;left:24%;width:26%;height:26%;border-radius:50%;background:rgba(255,255,255,.6)}
+      .mark:empty::after{content:none}
+      :hover>.mark:empty,.brand:hover .mark:empty{transform:rotate(-16deg) scale(1.12);border-radius:56% 44% 40% 60%/44% 56% 50% 50%}
+      @media (prefers-reduced-motion:reduce){*,::before,::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
     </style>
   </head>
   <body data-menu="closed">

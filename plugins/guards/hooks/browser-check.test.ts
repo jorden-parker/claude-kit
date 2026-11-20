@@ -28,8 +28,18 @@ const agentBrowserConsole = toolUse("Bash", {
   command: "agent-browser console",
 });
 const stop = { hook_event_name: "Stop" };
+process.env.GUARDS_BROWSER_CHECK = "1";
 const blocks = (lines: string[]) =>
   decide(stop, lines.join("\n"))?.exitCode === 2;
+
+test("is off unless GUARDS_BROWSER_CHECK is 1", () => {
+  delete process.env.GUARDS_BROWSER_CHECK;
+  try {
+    expect(blocks([editUi])).toBe(false);
+  } finally {
+    process.env.GUARDS_BROWSER_CHECK = "1";
+  }
+});
 
 test("passes when no UI file was edited", () =>
   expect(blocks([editServer])).toBe(false));

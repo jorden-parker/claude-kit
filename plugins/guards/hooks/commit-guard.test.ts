@@ -82,8 +82,8 @@ test("skips scripts when a pre-commit hook exists", () =>
     })
   ).toBeNull());
 
-test("denies a Next project with no dev server lock", () =>
-  expect(reason(decideWith({ files: nextProject }))).toContain("next dev"));
+test("passes a Next project with no dev server lock", () =>
+  expect(decideWith({ files: nextProject })).toBeNull());
 
 test("denies error-severity compilation issues", () => {
   const issues = [

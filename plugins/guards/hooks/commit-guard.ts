@@ -99,9 +99,7 @@ function nextDevServerProblem(
   readText: ReadText
 ): string | null {
   const lock = parseJson(readText(join(root, ".next/dev/lock")));
-  if (!lock?.port) {
-    return "Start `next dev` in the background, open the pages you changed in a browser, then commit again.";
-  }
+  if (!lock?.port) return null;
   const appUrl = lock.appUrl ?? `http://localhost:${lock.port}`;
   const url = `${appUrl}/_next/mcp`;
   const headers = [

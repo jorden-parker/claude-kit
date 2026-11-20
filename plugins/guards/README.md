@@ -9,7 +9,8 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 - **commit-guard** (PreToolUse, Bash, 600 s timeout): before `git commit`,
   denies `--no-verify`, `HUSKY=0` and `core.hooksPath`, runs the project's
   `lint`, `typecheck` and `test` scripts when no pre-commit hook exists, and for
-  Next.js requires a running dev server with no compilation errors. Opt out with
+  Next.js denies the commit while a running dev server reports compilation
+  errors. Opt out with
   `GUARDS_COMMIT_GUARD=0`.
 - **read-guard** (PreToolUse, Read): denies Reads of text files over 300 lines
   or 5 MB unless `limit` is 300 or less.
@@ -27,8 +28,9 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   opened before the plugin was updated runs without this guard.
 - **bash-trim** (PostToolUse, Bash): keeps the head, the tail and the error
   lines of long output.
-- **browser-check** (Stop): blocks once when a UI file was edited after the last
-  browser console read (`agent-browser console`, Playwright or Claude in Chrome).
+- **browser-check** (Stop, off by default): blocks once when a UI file was
+  edited after the last browser console read (`agent-browser console`,
+  Playwright or Claude in Chrome). Opt in with `GUARDS_BROWSER_CHECK=1`.
   A plugin's own hooks module (`hooks/*.tsx` beside `.claude-plugin/`) is not a
   page and is skipped.
 

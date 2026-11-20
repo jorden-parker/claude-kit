@@ -61,7 +61,8 @@ function uncheckedUiEdits(transcript: string): Set<string> {
 }
 
 export function decide(event: HookEvent, transcript: string): HookResult {
-  if (event.stop_hook_active) return null;
+  if (process.env.GUARDS_BROWSER_CHECK !== "1" || event.stop_hook_active)
+    return null;
   const files = [...uncheckedUiEdits(transcript)];
   if (files.length === 0) return null;
   return {

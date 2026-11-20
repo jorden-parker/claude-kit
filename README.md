@@ -16,7 +16,7 @@ install any of them on its own. Sync scripts install the same plugins into
 | [code-style](plugins/code-style/) | Writes the comment and naming rules into each session and blocks edits that break them. |
 | [tdd](plugins/tdd/) | Enforces red, green, refactor: blocks implementation edits until a failing test run and finishing while tests fail. |
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
-| [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
+| [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and, opted in, asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
 | [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
 | [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.claude/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement a whole set or one plan while the session reviews and sends back fixes. |
@@ -286,7 +286,7 @@ can run there in `portable-hooks/crush.json`, in the format of `hooks/hooks.json
 
 | Plugin | Runs in Crush | Stays in Claude Code |
 | --- | --- | --- |
-| `guards` | the Bash, commit and Read guards | output trim, lookup budget, browser check |
+| `guards` | the Bash, commit and Read guards | output trim, lookup budget, opt-in browser check |
 | `quality-gates` | the fallow gate on commit and push | the verification gate at finish |
 | `tdd` | a new implementation file needs a test file written first | recording failing test runs, the green gate at finish |
 | `code-style` | the comment and naming checks, which refuse the edit before it lands | the naming review gate at finish |

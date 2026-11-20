@@ -1927,6 +1927,23 @@ testWithSession(
 );
 
 testWithSession(
+  "the notes box keeps two columns and a blank row clear of the pane edge",
+  CONVERSATION,
+  async ($, on) => {
+    ignoreToasts(on);
+    placeBoxPane(on);
+
+    await $.command.run(handoff("new"));
+    const box = await $.ui.mount(BOX_PANE);
+
+    expect((await box.find({ key: "handoff-box" }))?.props).toMatchObject({
+      paddingX: 2,
+      paddingY: 1,
+    });
+  }
+);
+
+testWithSession(
   "pressing Enter on an empty notes box hands off without notes",
   CONVERSATION,
   async ($, on) => {

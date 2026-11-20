@@ -88,7 +88,7 @@ const PRIDE_STRIPE_COLORS = [
   "autoAccept",
 ] as const;
 const BOX_PANE_ID = "handoff";
-const BOX_ROWS = 9;
+const BOX_ROWS = 11;
 const NOTES_INPUT_ROWS = 3;
 const NOTES_BOX_TITLE = "Handoff notes";
 const RESUME_BOX_TITLE = "Resume a handoff";
@@ -1139,7 +1139,13 @@ export const register: Register = (on, options) => {
     const wording = BOX_WORDING[box.kind];
     return h(
       Box,
-      { flexDirection: "column", gap: 1 },
+      {
+        key: "handoff-box",
+        flexDirection: "column",
+        gap: 1,
+        paddingX: 2,
+        paddingY: 1,
+      },
       h(
         Box,
         { flexDirection: "row", gap: 1 },

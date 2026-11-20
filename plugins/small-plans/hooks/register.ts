@@ -710,7 +710,7 @@ export const register: Register = (on) => {
     const { Box, Text } = $.ui.resolve(e);
     return h(
       Box,
-      { flexDirection: "column" },
+      { key: "small-plans-picker", flexDirection: "column", paddingY: 1 },
       h(
         Box,
         { flexDirection: "row", gap: 1, paddingX: 1 },

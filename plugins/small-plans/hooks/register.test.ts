@@ -875,6 +875,14 @@ test("a small-plans picker opens under the shared heading with a pride stripe an
   expect(await drawing.find({ key: "small-plans-frame" })).toBeUndefined();
 });
 
+test("a small-plans picker gets a blank row above and below, and no side padding that would wrap the dialog's divider", async ($) => {
+  const drawing = await mountQuestion($, SET_QUESTION);
+  const picker = await drawing.find({ key: "small-plans-picker" });
+
+  expect(picker?.props).toMatchObject({ paddingY: 1 });
+  expect(picker?.props).not.toHaveProperty("paddingX");
+});
+
 test("another plugin's question gets no small-plans heading", async ($) => {
   const drawing = await mountQuestion($, "Which database should we use?");
 

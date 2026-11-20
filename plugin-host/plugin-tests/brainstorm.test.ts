@@ -293,7 +293,7 @@ for (const target of TARGET_NAMES) {
       expect(outcome.isError).toBe(false);
       expect(outcome.text).toStartWith("Brainstorming improvements for this project…");
       expect(outcome.text).toContain("Now carry out these instructions:");
-      expect(outcome.text).toContain("Brainstorm improvements for the project in the current working directory.");
+      expect(outcome.text).toContain("Brainstorm improvements for the project the focus below names, or else the project in the current working directory.");
       expect(outcome.text).toContain("mcp__brainstorm__render_brainstorm tool");
       expect(outcome.text).not.toContain("<focus>");
     });
@@ -375,11 +375,11 @@ for (const target of TARGET_NAMES) {
       const outcome = await plugin.callTool("run_brainstorm", { args: "build" });
 
       expect(outcome.text).toStartWith(
-        "Building the newest run with small-model implementers and a strong reviewer…"
+        "Building the run you pick, or the only one with small-model implementers and a strong reviewer…"
       );
       expect(outcome.text).toContain("Now carry out these instructions:");
       expect(outcome.text).toContain("Load the brainstorm:build-plans skill");
-      expect(outcome.text).toContain("The user named no run, so build the newest run.");
+      expect(outcome.text).toContain("The user named no run, so pick the run as the skill's \"Find the runs\" section says for a request with no detail.");
     });
   });
 

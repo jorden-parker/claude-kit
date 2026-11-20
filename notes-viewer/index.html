@@ -701,7 +701,8 @@
         overflow-wrap: anywhere;
       }
       textarea,
-      dialog input {
+      dialog input,
+      .editor input {
         width: 100%;
         border: 1px solid var(--border-strong);
         border-radius: var(--radius);
@@ -709,6 +710,12 @@
         transition:
           border-color 150ms ease,
           box-shadow 150ms ease;
+      }
+      .editor input {
+        min-height: 40px;
+        padding: 0 12px;
+        font-family: var(--mono);
+        font-size: 13px;
       }
       textarea {
         min-height: 55vh;
@@ -720,7 +727,8 @@
         tab-size: 2;
       }
       textarea:focus-visible,
-      dialog input:focus-visible {
+      dialog input:focus-visible,
+      .editor input:focus-visible {
         outline: none;
         border-color: var(--focus);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
@@ -1103,13 +1111,14 @@
         });
         if (!response.ok) {
           const failure = new Error((await response.text()).trim() || response.statusText);
-          failure.isFormatRefusal = response.status === 422;
+          failure.isRefusal = response.status >= 400 && response.status < 500;
           throw failure;
         }
+        return response;
       };
 
       const describeFailure = (action, error) =>
-        error.isFormatRefusal ? error.message : `Couldn’t ${action}. ${error.message} Check the viewer is still running, then try again.`;
+        error.isRefusal ? error.message : `Couldn’t ${action}. ${error.message} Check the viewer is still running, then try again.`;
 
       const askToConfirm = ({ title, message, confirmLabel }) =>
         new Promise((resolve) => {
@@ -1343,6 +1352,42 @@
         entryArea.focus();
       };
 
+      const FRONT_MATTER_PROJECT = /^(---\n(?:(?!---\n).*\n)*?)project: ([^\n]*)/;
+
+      const readProjectLine = (text) => text.match(FRONT_MATTER_PROJECT)?.[2].trim();
+
+      const replaceProjectLine = (text, project) => text.replace(FRONT_MATTER_PROJECT, (match, frontMatterStart) => `${frontMatterStart}project: ${project}`);
+
+      const createProjectField = (selectedSection, selectedEntry, textarea) => {
+        if (selectedSection.id === "brainstorm") return { elements: [], readProject: () => selectedEntry.project };
+        const projectLabel = createElement("label", "Project");
+        projectLabel.htmlFor = "note-project";
+        const projectInput = createElement("input");
+        projectInput.id = "note-project";
+        projectInput.name = "project";
+        projectInput.autocomplete = "off";
+        projectInput.spellcheck = false;
+        projectInput.required = true;
+        projectInput.value = selectedEntry.project;
+        projectInput.setAttribute("list", "project-options");
+        projectInput.setAttribute("aria-describedby", "project-hint");
+        const projectHint = createElement("p", `Change it to move this ${SECTION_VIEWS[selectedSection.id].noun} under another project.`, "editor-hint");
+        projectHint.id = "project-hint";
+        const projectOptions = createElement("datalist");
+        projectOptions.id = "project-options";
+        [...new Set(sections.flatMap((section) => section.entries.map((entry) => entry.project)))].sort().forEach((project) => {
+          const option = createElement("option");
+          option.value = project;
+          projectOptions.append(option);
+        });
+        projectInput.addEventListener("input", () => (textarea.value = replaceProjectLine(textarea.value, projectInput.value.trim())));
+        textarea.addEventListener("input", () => {
+          const project = readProjectLine(textarea.value);
+          if (project !== undefined) projectInput.value = project;
+        });
+        return { elements: [projectLabel, projectInput, projectOptions, projectHint], readProject: () => projectInput.value.trim() };
+      };
+
       const startEditing = (selectedSection, selectedEntry) => {
         const article = createElement("article");
         const header = createElement("div", "", "entry-header");
@@ -1372,7 +1417,8 @@
         buttons.append(cancelButton, saveButton);
         const footer = createElement("div", "", "editor-footer");
         footer.append(hint, buttons);
-        form.append(label, textarea, failure, footer);
+        const projectField = createProjectField(selectedSection, selectedEntry, textarea);
+        form.append(...projectField.elements, label, textarea, failure, footer);
 
         form.addEventListener("submit", async (event) => {
           event.preventDefault();
@@ -1380,11 +1426,18 @@
           saveButton.lastChild.textContent = "Saving…";
           failure.hidden = true;
           try {
-            await sendChange("PUT", buildNoteUrl(selectedSection.id, selectedEntry.path), textarea.value);
+            const newProject = projectField.readProject();
+            const isMove = newProject !== selectedEntry.project;
+            const moveQuery = isMove ? `?project=${encodeURIComponent(newProject)}` : "";
+            const response = await sendChange("PUT", buildNoteUrl(selectedSection.id, selectedEntry.path) + moveQuery, textarea.value);
             openEditor = null;
+            if (response.status === 200) {
+              const { path } = await response.json();
+              history.replaceState(null, "", `#${selectedSection.id}/${encodeURIComponent(path)}`);
+            }
             await loadSections();
             entryArea.focus();
-            showToast(pickOne(SAVED_MESSAGES));
+            showToast(isMove ? `Moved to ${newProject}. New home, same note.` : pickOne(SAVED_MESSAGES));
           } catch (error) {
             failure.textContent = describeFailure("save", error);
             failure.hidden = false;

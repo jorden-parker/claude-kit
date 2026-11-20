@@ -52,6 +52,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 - It is a Go program, built on first run and again after the viewer changes, so it needs Go: `brew install go`
 - On a machine with only the marketplace, link `~/.claude/plugins/marketplaces/claude-kit/notes-viewer/claude-notes` instead
 - Every note and plan has Edit and Delete buttons. A small plan set's heading adds a plan to the set or deletes the whole set. Each delete asks first and can't be undone
+- The editor's Project field moves a handoff, project note or small plan to another project. A handoff takes the next free number there, a project note gets `-2` when its name is taken, and a small plan keeps its set and number (refused if that number is taken). Brainstorm plans don't move: each run's `index.md` lists its plans
 - A save is refused, with every problem listed, unless the text follows its section's format. The rules live in `noteFormats` in `notes-viewer/note_format.go` and match what each plugin writes:
   - All: a title of up to 100 characters with a letter or digit, and a body that isn't empty
   - Handoffs, project notes and small plans: front matter of `name: value` lines with `title`, `project` and an ISO `created`. `project` matches the project folder

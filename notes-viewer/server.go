@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -25,6 +27,8 @@ import (
 var indexPage []byte
 
 const maxNoteBytes = 4 << 20
+
+var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 var (
 	markdown            = goldmark.New(goldmark.WithExtensions(extension.GFM), goldmark.WithRendererOptions(html.WithHardWraps()))
@@ -273,6 +277,86 @@ func resolveGroupFolder(sectionId string, project string, group string) (string,
 	return groupFolder, true
 }
 
+func createNoteFile(notePath string, text []byte) error {
+	noteFile, err := os.OpenFile(notePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	_, writeErr := noteFile.Write(text)
+	if closeErr := noteFile.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	return writeErr
+}
+
+func findNextHandoffName(projectFolder string, entryName string) string {
+	highestId := 0
+	handoffPaths, _ := filepath.Glob(filepath.Join(projectFolder, "*.md"))
+	for _, handoffPath := range handoffPaths {
+		idText, _, _ := strings.Cut(filepath.Base(handoffPath), "-")
+		if handoffId, err := strconv.Atoi(idText); err == nil && handoffId > highestId {
+			highestId = handoffId
+		}
+	}
+	slug := entryName
+	if _, nameAfterId, hasId := strings.Cut(entryName, "-"); hasId {
+		slug = nameAfterId
+	}
+	return fmt.Sprintf("%03d-%s.md", highestId+1, slug)
+}
+
+func findFreeNoteName(noteFolder string, entryName string) string {
+	freeName := entryName + ".md"
+	for suffix := 2; ; suffix++ {
+		if _, err := os.Stat(filepath.Join(noteFolder, freeName)); errors.Is(err, fs.ErrNotExist) {
+			return freeName
+		}
+		freeName = fmt.Sprintf("%s-%d.md", entryName, suffix)
+	}
+}
+
+func planProjectMove(layout sectionLayout, entryPath string, newProject string) (string, int, string) {
+	if !projectNamePattern.MatchString(newProject) {
+		return "", http.StatusBadRequest, "A project name starts with a letter or digit and holds only letters, digits, dots, dashes and underscores."
+	}
+	segments := strings.Split(entryPath, "/")
+	entryName := strings.TrimSuffix(segments[len(segments)-1], ".md")
+	targetFolder := filepath.Join(append([]string{resolveSectionRoot(layout), newProject}, segments[1:len(segments)-1]...)...)
+	targetFolderPath := strings.Join(append([]string{newProject}, segments[1:len(segments)-1]...), "/")
+	switch layout.Id {
+	case "handoffs":
+		return targetFolderPath + "/" + findNextHandoffName(targetFolder, entryName), 0, ""
+	case "project-notes":
+		return targetFolderPath + "/" + findFreeNoteName(targetFolder, entryName), 0, ""
+	case "small-plans":
+		orderPrefix, _, _ := strings.Cut(entryName, "-")
+		if takenPlans, _ := filepath.Glob(filepath.Join(targetFolder, orderPrefix+"-*.md")); len(takenPlans) > 0 {
+			return "", http.StatusConflict, fmt.Sprintf("Plan %s already exists in the set %s of %s. Change the plan's order first, or move it to another project.", orderPrefix, segments[1], newProject)
+		}
+		return targetFolderPath + "/" + entryName + ".md", 0, ""
+	}
+	return "", http.StatusBadRequest, "Brainstorm plans can't change project: each run's index.md lists its plans, so moving one breaks both runs."
+}
+
+func moveNoteFile(sectionRoot string, notePath string, targetPath string, text []byte) error {
+	targetFile := filepath.Join(sectionRoot, filepath.FromSlash(targetPath))
+	if err := os.MkdirAll(filepath.Dir(targetFile), 0o755); err != nil {
+		return err
+	}
+	if err := createNoteFile(targetFile, text); err != nil {
+		return err
+	}
+	if err := os.Remove(notePath); err != nil {
+		return err
+	}
+	for folder := filepath.Dir(notePath); folder != sectionRoot && strings.HasPrefix(folder, sectionRoot); folder = filepath.Dir(folder) {
+		if os.Remove(folder) != nil {
+			break
+		}
+	}
+	return nil
+}
+
 func isSameOrigin(request *http.Request) bool {
 	origin := request.Header.Get("Origin")
 	return origin == "" || origin == "http://"+request.Host
@@ -292,25 +376,46 @@ func newViewerServer() http.Handler {
 	})
 
 	routes.HandleFunc("PUT /api/notes/{section}/{path...}", func(writer http.ResponseWriter, request *http.Request) {
-		_, notePath, isEntry := resolveEntryPath(request.PathValue("section"), request.PathValue("path"))
+		layout, notePath, isEntry := resolveEntryPath(request.PathValue("section"), request.PathValue("path"))
 		if !isEntry {
 			http.Error(writer, "Note not found.", http.StatusNotFound)
 			return
+		}
+		entryPath := request.PathValue("path")
+		newProject := request.URL.Query().Get("project")
+		isMove := newProject != "" && newProject != strings.Split(entryPath, "/")[0]
+		targetPath := entryPath
+		if isMove {
+			movedPath, refusalStatus, refusal := planProjectMove(layout, entryPath, newProject)
+			if refusal != "" {
+				http.Error(writer, refusal, refusalStatus)
+				return
+			}
+			targetPath = movedPath
 		}
 		text, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, maxNoteBytes))
 		if err != nil {
 			http.Error(writer, "Note too large.", http.StatusRequestEntityTooLarge)
 			return
 		}
-		if problems := listFormatProblems(request.PathValue("section"), request.PathValue("path"), string(text)); len(problems) > 0 {
-			http.Error(writer, describeFormatRefusal(request.PathValue("section"), problems), http.StatusUnprocessableEntity)
+		if problems := listFormatProblems(layout.Id, targetPath, string(text)); len(problems) > 0 {
+			http.Error(writer, describeFormatRefusal(layout.Id, problems), http.StatusUnprocessableEntity)
 			return
 		}
-		if err := os.WriteFile(notePath, text, 0o644); err != nil {
+		if !isMove {
+			if err := os.WriteFile(notePath, text, 0o644); err != nil {
+				http.Error(writer, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writer.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if err := moveNoteFile(resolveSectionRoot(layout), notePath, targetPath, text); err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writer.WriteHeader(http.StatusNoContent)
+		writer.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(writer).Encode(map[string]string{"path": targetPath})
 	})
 
 	routes.HandleFunc("POST /api/notes/{section}/{path...}", func(writer http.ResponseWriter, request *http.Request) {
@@ -332,21 +437,13 @@ func newViewerServer() http.Handler {
 			http.Error(writer, describeFormatRefusal(request.PathValue("section"), problems), http.StatusUnprocessableEntity)
 			return
 		}
-		noteFile, err := os.OpenFile(notePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		err = createNoteFile(notePath, text)
 		if errors.Is(err, fs.ErrExist) {
 			http.Error(writer, "A plan with that file name already exists.", http.StatusConflict)
 			return
 		}
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		_, writeErr := noteFile.Write(text)
-		if closeErr := noteFile.Close(); writeErr == nil {
-			writeErr = closeErr
-		}
-		if writeErr != nil {
-			http.Error(writer, writeErr.Error(), http.StatusInternalServerError)
 			return
 		}
 		writer.WriteHeader(http.StatusCreated)

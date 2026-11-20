@@ -67,9 +67,10 @@ The files are plain Markdown: edit, move or delete them with any tool. The claud
 The session coordinates and reviews; it edits no project file itself. For each plan, in order, the way shadcn's [improve](https://github.com/shadcn/improve) `execute` works:
 
 1. The `small-plan-implementer` agent (Haiku) gets the plan's path, makes the edits and runs the check. It answers `DONE` or `BLOCKED`
-2. The session reviews the work like a pull request: it runs the check, confirms with `git diff --stat` that only files the plan names changed, reads the diff against each step and `## Review` line, and reads what new tests assert
-3. On a failed review it writes numbered findings and starts a new implementer with them, then reviews again, up to 3 fix rounds
-4. The plan ends `done` or `blocked`. A plan that depends on one that is not done waits
+2. The `small-plan-checker` agent (Haiku, read-only) runs the check, `git diff --stat`, lint, fallow and the tests, and answers PASS or FAIL for each with the output lines that show it, so that output stays out of the session's context
+3. The session reviews the work like a pull request: from the checker's output it confirms the check passed and only files the plan names changed, then reads the diff against each step and `## Review` line, and reads what new tests assert. A failing lint, fallow or test run goes to a Haiku agent to fix
+4. On a failed review it writes numbered findings and starts a new implementer with them, then reviews again, up to 3 fix rounds
+5. The plan ends `done` or `blocked`. A plan that depends on one that is not done waits
 
 Nothing is committed: the changes stay in your working tree.
 

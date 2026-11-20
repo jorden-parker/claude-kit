@@ -54,6 +54,7 @@ const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
 const STATUS_TOOL_NAME = "set_small_plan_status";
 const QUALIFIED_STATUS_TOOL_NAME = `mcp__small-plans__${STATUS_TOOL_NAME}`;
 const IMPLEMENTER_AGENT = "small-plans:small-plan-implementer";
+const CHECKER_AGENT = "small-plans:small-plan-checker";
 const PLAN_SHAPE = `The body holds these "## " headings, in this order: ${PLAN_SECTIONS.join(", ")}.
 - Goal: one sentence on what is true when the plan is done.
 - Context: all that the implementer must know and cannot guess: each file by its path, the exact names of the functions, types and commands involved, and the decisions already made. The implementer sees this plan only, never this conversation or another plan.
@@ -438,12 +439,12 @@ ${
 For each plan:
 1. Set its status to in-progress with ${QUALIFIED_STATUS_TOOL_NAME}. Create or reuse the plan's worktree and note its path and branch.
 2. Start the ${IMPLEMENTER_AGENT} agent. Its prompt is the plan file's absolute path, then a line \`Worktree: <path>\`. It answers DONE or BLOCKED.
-3. On DONE, review the work yourself, like a tech lead reviewing a pull request against the plan. Trust nothing in the agent's report until a tool result shows it:
-   a. Run the command under "## Check" and compare its output with "- Expect:".
-   b. In the worktree, run \`git status --short\` and \`git diff --stat\`. Every file this plan changed is named in the plan; a change to any other file fails the review, unless it fixes a lint, fallow, code style or test failure a check or hook reported.
-   c. Read the full \`git diff\` of those files. Every hunk traces to a step, the code the plan quotes is there as quoted, and each "## Review" line holds.
-   d. Read what each new or changed test asserts. A test that would pass without the change fails the review.
-   e. Run the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json) and, in a JavaScript or TypeScript project, \`fallow audit\`. Run the project's tests too. When lint, fallow or the tests fail, even with the plan's check passing, start a general-purpose agent in the worktree to fix every reported failure, including pre-existing ones and ones in files the plan does not name, then run the commands again. Repeat until they pass; a failing guard never sets a plan to blocked or counts as a fix round.
+3. On DONE, start the ${CHECKER_AGENT} agent with the plan file's absolute path, then the \`Worktree: <path>\` line. In the worktree it runs the command under "## Check", \`git status --short\` and \`git diff --stat\`, the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json), \`fallow audit\` in a JavaScript or TypeScript project, and the project's tests, and answers PASS or FAIL for each with the output lines that show it. Then review the work yourself, like a tech lead reviewing a pull request against the plan. Trust nothing in the implementer's report. The checker's quoted output is the evidence for a to c; when a quote is missing or does not settle the point, run that command yourself:
+   a. The check's output matches "- Expect:".
+   b. Every file this plan changed is named in the plan; a change to any other file fails the review, unless it fixes a lint, fallow, code style or test failure a check or hook reported.
+   c. When lint, fallow or the tests fail, even with the plan's check passing, start a general-purpose agent with model "haiku" in the worktree to fix every reported failure, including pre-existing ones and ones in files the plan does not name, then start the checker again. Repeat until they pass; a failing guard never sets a plan to blocked or counts as a fix round.
+   d. Read the full \`git diff\` of the changed files. Every hunk traces to a step, the code the plan quotes is there as quoted, and each "## Review" line holds.
+   e. Read what each new or changed test asserts. A test that would pass without the change fails the review.
 4. When the review passes, commit and push that work in the plan's worktree: stage everything changed there, the plan's edits and its guard fixes; match the style of \`git log --oneline -n 10\`; commit with one short conventional subject line, such as \`git commit -m "feat(scope): add the toggle"\`, with no body and no Co-Authored-By or other attribution line; then run \`git push -u origin <branch>\` and \`git worktree remove <path>\`, which keeps the branch. Never commit or push work the review has not approved. If the commit or push fails, keep the worktree and say so in the plan's report line. Then set the status to done.
 5. When it fails, write numbered findings, each naming the step or "## Review" line, the file and line, and what the plan asks for that the work does not do. Start a new ${IMPLEMENTER_AGENT} agent with the plan file's absolute path, the \`Worktree: <path>\` line, a blank line, then the findings. Review its work again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
 6. When the implementer answers BLOCKED, or the work still fails review after ${MAX_FIX_ROUNDS} fix rounds, set the status to blocked with the reason, keep its worktree so the next build carries on there, and go on with the next plan that does not depend on it.
@@ -737,13 +738,13 @@ export const register: Register = (on) => {
       name: WRITE_TOOL_NAME,
       description: `Saves one small plan as a Markdown file under ~/.claude/small-plans/<project>/<set>/, where <project> is the repository the plan changes, chosen from the work rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it once per plan when the user asks to break work into small plans that a weaker model can implement and review. ${PLAN_SHAPE}`,
       inputSchema: WRITE_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     await $.tool.register({
       name: STATUS_TOOL_NAME,
       description: `Sets the status of one saved small plan (${STATUSES.join(", ")}) in its front matter. Call it each time a plan's status changes.`,
       inputSchema: STATUS_TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     return next(e);
   });

@@ -571,6 +571,18 @@ test("/small-plans build has the session review each plan and send fixes to a ne
   expect(submittedPrompts[0]).not.toContain("small-plan-reviewer");
 });
 
+test("/small-plans build has a Haiku checker run the check, lint, fallow and tests", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(submittedPrompts[0]).toContain(
+    "start the small-plans:small-plan-checker agent"
+  );
+  expect(submittedPrompts[0]).toContain("answers PASS or FAIL for each");
+  expect(submittedPrompts[0]).toContain("then start the checker again");
+});
+
 test("/small-plans build has a failing guard fixed by a subagent instead of blocking the plan", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "build", {
     [STANDALONE_SET_PLAN]: "status: pending",
@@ -579,7 +591,7 @@ test("/small-plans build has a failing guard fixed by a subagent instead of bloc
   expect(submittedPrompts[0]).toContain("project's lint command");
   expect(submittedPrompts[0]).toContain("fallow audit");
   expect(submittedPrompts[0]).toContain(
-    "start a general-purpose agent in the worktree to fix every reported failure, including pre-existing ones and ones in files the plan does not name"
+    'start a general-purpose agent with model "haiku" in the worktree to fix every reported failure, including pre-existing ones and ones in files the plan does not name'
   );
   expect(submittedPrompts[0]).toContain(
     "a failing guard never sets a plan to blocked"
@@ -889,4 +901,23 @@ test("another plugin's question gets no small-plans heading", async ($) => {
   expect(
     await drawing.find({ type: "Text", text: "🧩 Small plans" })
   ).toBeUndefined();
+});
+
+test("every tool is registered behind ToolSearch", async ($, on) => {
+  const deferredFlags: unknown[] = [];
+  on("command.register", (_, e) => ({ value: { command: e.name } }));
+  on("tool.register", (_, e) => {
+    deferredFlags.push(e.isDeferred);
+    return { value: { tool: e.name } };
+  });
+  on("session.start", (_, e) => ({ cwd: e.cwd }));
+
+  await $.session.start({
+    cwd: "/repo",
+    surface: "terminal",
+    isInteractive: true,
+  });
+
+  expect(deferredFlags.length).toBeGreaterThan(0);
+  expect(deferredFlags.every((flag) => flag === true)).toBe(true);
 });

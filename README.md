@@ -51,7 +51,8 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 
 - It is a Go program, built on first run and again after the viewer changes, so it needs Go: `brew install go`
 - On a machine with only the marketplace, link `~/.claude/plugins/marketplaces/claude-kit/notes-viewer/claude-notes` instead
-- The server only reads the notes. It listens on `127.0.0.1`, port `47618`; `CLAUDE_NOTES_PORT` picks another, `CLAUDE_NOTES_NO_OPEN=1` skips opening the browser
+- Every note and plan has Edit and Delete buttons. A small plan set's heading adds a plan to the set or deletes the whole set. Each delete asks first and can't be undone
+- The server only writes files that match a section's note layout, and refuses requests from other hosts or origins. It listens on `127.0.0.1`, port `47618`; `CLAUDE_NOTES_PORT` picks another, `CLAUDE_NOTES_NO_OPEN=1` skips opening the browser
 - If it is already running, `claude-notes` opens the same page again. `Ctrl+C` stops it
 - The page reloads the notes when you come back to its tab. Raw HTML in a note is not rendered
 

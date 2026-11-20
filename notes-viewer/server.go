@@ -4,9 +4,13 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"errors"
+	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -19,6 +23,8 @@ import (
 
 //go:embed index.html
 var indexPage []byte
+
+const maxNoteBytes = 4 << 20
 
 var (
 	markdown            = goldmark.New(goldmark.WithExtensions(extension.GFM), goldmark.WithRendererOptions(html.WithHardWraps()))
@@ -34,6 +40,7 @@ type sectionLayout struct {
 	EntryPattern       string
 	GroupSegment       int
 	HasEntryFolder     bool
+	HasEditableSets    bool
 	IsNewestGroupFirst bool
 	IsNewestEntryFirst bool
 }
@@ -41,11 +48,12 @@ type sectionLayout struct {
 var sectionLayouts = []sectionLayout{
 	{Id: "handoffs", Title: "Handoffs", RootVariable: "HANDOFFS_DIR", EntryPattern: "*/*.md", IsNewestEntryFirst: true},
 	{Id: "project-notes", Title: "Project notes", RootVariable: "PROJECT_NOTES_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestEntryFirst: true},
-	{Id: "small-plans", Title: "Small plans", RootVariable: "SMALL_PLANS_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true},
+	{Id: "small-plans", Title: "Small plans", RootVariable: "SMALL_PLANS_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true, HasEditableSets: true},
 	{Id: "brainstorm", Title: "Brainstorm plans", RootVariable: "BRAINSTORM_DIR", EntryPattern: "*/plans/*/*/plan.md", GroupSegment: 2, HasEntryFolder: true, IsNewestGroupFirst: true},
 }
 
 type entryView struct {
+	Section string            `json:"section"`
 	Project string            `json:"project"`
 	Group   string            `json:"group"`
 	Name    string            `json:"name"`
@@ -54,6 +62,7 @@ type entryView struct {
 	Fields  map[string]string `json:"fields"`
 	Path    string            `json:"path"`
 	Html    string            `json:"html"`
+	Source  string            `json:"source"`
 }
 
 type sectionView struct {
@@ -157,6 +166,7 @@ func readEntry(layout sectionLayout, sectionRoot string, entryPath string) (entr
 		group = segments[layout.GroupSegment]
 	}
 	return entryView{
+		Section: layout.Id,
 		Project: segments[0],
 		Group:   group,
 		Name:    entryName,
@@ -165,6 +175,7 @@ func readEntry(layout sectionLayout, sectionRoot string, entryPath string) (entr
 		Fields:  fields,
 		Path:    strings.Join(segments, "/"),
 		Html:    renderMarkdown(body),
+		Source:  string(text),
 	}, true
 }
 
@@ -215,6 +226,58 @@ func isLocalHost(hostHeader string) bool {
 	return hostName == "127.0.0.1" || hostName == "localhost"
 }
 
+func findSectionLayout(sectionId string) (sectionLayout, bool) {
+	for _, layout := range sectionLayouts {
+		if layout.Id == sectionId {
+			return layout, true
+		}
+	}
+	return sectionLayout{}, false
+}
+
+func resolveEntryLocation(sectionId string, entryPath string) (sectionLayout, string, bool) {
+	layout, isKnown := findSectionLayout(sectionId)
+	if !isKnown || filepath.ToSlash(filepath.Clean(entryPath)) != entryPath {
+		return layout, "", false
+	}
+	if isEntry, _ := filepath.Match(layout.EntryPattern, entryPath); !isEntry {
+		return layout, "", false
+	}
+	return layout, filepath.Join(resolveSectionRoot(layout), filepath.FromSlash(entryPath)), true
+}
+
+func resolveEntryPath(sectionId string, entryPath string) (sectionLayout, string, bool) {
+	layout, absolutePath, isEntry := resolveEntryLocation(sectionId, entryPath)
+	if !isEntry {
+		return layout, "", false
+	}
+	if fileInfo, err := os.Stat(absolutePath); err != nil || !fileInfo.Mode().IsRegular() {
+		return layout, "", false
+	}
+	return layout, absolutePath, true
+}
+
+func isFolderName(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, `/\`)
+}
+
+func resolveGroupFolder(sectionId string, project string, group string) (string, bool) {
+	layout, isKnown := findSectionLayout(sectionId)
+	if !isKnown || !layout.HasEditableSets || !isFolderName(project) || !isFolderName(group) {
+		return "", false
+	}
+	groupFolder := filepath.Join(resolveSectionRoot(layout), project, group)
+	if folderInfo, err := os.Stat(groupFolder); err != nil || !folderInfo.IsDir() {
+		return "", false
+	}
+	return groupFolder, true
+}
+
+func isSameOrigin(request *http.Request) bool {
+	origin := request.Header.Get("Origin")
+	return origin == "" || origin == "http://"+request.Host
+}
+
 func newViewerServer() http.Handler {
 	routes := http.NewServeMux()
 
@@ -228,9 +291,97 @@ func newViewerServer() http.Handler {
 		json.NewEncoder(writer).Encode(loadSections())
 	})
 
+	routes.HandleFunc("PUT /api/notes/{section}/{path...}", func(writer http.ResponseWriter, request *http.Request) {
+		_, notePath, isEntry := resolveEntryPath(request.PathValue("section"), request.PathValue("path"))
+		if !isEntry {
+			http.Error(writer, "Note not found.", http.StatusNotFound)
+			return
+		}
+		text, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, maxNoteBytes))
+		if err != nil {
+			http.Error(writer, "Note too large.", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if err := os.WriteFile(notePath, text, 0o644); err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	})
+
+	routes.HandleFunc("POST /api/notes/{section}/{path...}", func(writer http.ResponseWriter, request *http.Request) {
+		layout, notePath, isEntry := resolveEntryLocation(request.PathValue("section"), request.PathValue("path"))
+		if !isEntry || !layout.HasEditableSets {
+			http.Error(writer, "Plans can only be added to an existing small plan set.", http.StatusNotFound)
+			return
+		}
+		if folderInfo, err := os.Stat(filepath.Dir(notePath)); err != nil || !folderInfo.IsDir() {
+			http.Error(writer, "Set not found.", http.StatusNotFound)
+			return
+		}
+		text, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, maxNoteBytes))
+		if err != nil {
+			http.Error(writer, "Note too large.", http.StatusRequestEntityTooLarge)
+			return
+		}
+		noteFile, err := os.OpenFile(notePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, fs.ErrExist) {
+			http.Error(writer, "A plan with that file name already exists.", http.StatusConflict)
+			return
+		}
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_, writeErr := noteFile.Write(text)
+		if closeErr := noteFile.Close(); writeErr == nil {
+			writeErr = closeErr
+		}
+		if writeErr != nil {
+			http.Error(writer, writeErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		writer.WriteHeader(http.StatusCreated)
+	})
+
+	routes.HandleFunc("DELETE /api/notes/{section}/{path...}", func(writer http.ResponseWriter, request *http.Request) {
+		layout, notePath, isEntry := resolveEntryPath(request.PathValue("section"), request.PathValue("path"))
+		if !isEntry {
+			http.Error(writer, "Note not found.", http.StatusNotFound)
+			return
+		}
+		removeNote := os.Remove
+		if layout.HasEntryFolder {
+			notePath = filepath.Dir(notePath)
+			removeNote = os.RemoveAll
+		}
+		if err := removeNote(notePath); err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	})
+
+	routes.HandleFunc("DELETE /api/groups/{section}/{project}/{group}", func(writer http.ResponseWriter, request *http.Request) {
+		groupFolder, isGroup := resolveGroupFolder(request.PathValue("section"), request.PathValue("project"), request.PathValue("group"))
+		if !isGroup {
+			http.Error(writer, "Group not found.", http.StatusNotFound)
+			return
+		}
+		if err := os.RemoveAll(groupFolder); err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	})
+
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if !isLocalHost(request.Host) {
+		if !isLocalHost(request.Host) || !isSameOrigin(request) {
 			http.Error(writer, "Forbidden.", http.StatusForbidden)
+			return
+		}
+		if path.Clean(request.URL.Path) != request.URL.Path {
+			http.Error(writer, "Bad path.", http.StatusBadRequest)
 			return
 		}
 		routes.ServeHTTP(writer, request)

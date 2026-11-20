@@ -223,3 +223,191 @@ func TestPageUrlOpensTheNamedSection(t *testing.T) {
 		t.Fatalf("url was %s", pageUrl)
 	}
 }
+
+func sendNoteRequest(method string, path string, body string, origin string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	request.Host = "127.0.0.1:4000"
+	if origin != "" {
+		request.Header.Set("Origin", origin)
+	}
+	response := httptest.NewRecorder()
+	newViewerServer().ServeHTTP(response, request)
+	return response
+}
+
+func readNoteFile(t *testing.T, relativePath string) (string, bool) {
+	t.Helper()
+	text, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".claude", relativePath))
+	return string(text), err == nil
+}
+
+func TestEntriesCarryTheirSectionAndRawSource(t *testing.T) {
+	seedNotes(t)
+
+	plan := loadSections()[2].Entries[1]
+	if plan.Section != "small-plans" || plan.Source != tokenPlan {
+		t.Fatalf("plan was %+v", plan)
+	}
+}
+
+func TestPutSavesTheNoteText(t *testing.T) {
+	seedNotes(t)
+
+	response := sendNoteRequest(http.MethodPut, "/api/notes/handoffs/claude-kit/002-fix-the-login.md", "Rewritten.\n", "http://127.0.0.1:4000")
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status was %d %s", response.Code, response.Body.String())
+	}
+	if text, _ := readNoteFile(t, "handoffs/claude-kit/002-fix-the-login.md"); text != "Rewritten.\n" {
+		t.Fatalf("file was %q", text)
+	}
+}
+
+func TestDeleteRemovesTheNote(t *testing.T) {
+	seedNotes(t)
+
+	response := sendNoteRequest(http.MethodDelete, "/api/notes/project-notes/claude-kit/finding/2026-11-16-the-cache-is-stale.md", "", "")
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status was %d", response.Code)
+	}
+	if _, isPresent := readNoteFile(t, "project-notes/claude-kit/finding/2026-11-16-the-cache-is-stale.md"); isPresent {
+		t.Fatal("the note still isPresent")
+	}
+}
+
+func TestDeletingABrainstormPlanRemovesItsFolder(t *testing.T) {
+	seedNotes(t)
+
+	response := sendNoteRequest(http.MethodDelete, "/api/notes/brainstorm/claude-kit/plans/plan-2026-11-16-1333/01-guard-pipe-stages/plan.md", "", "")
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status was %d", response.Code)
+	}
+	if _, isPresent := readNoteFile(t, "brainstorm/claude-kit/plans/plan-2026-11-16-1333/01-guard-pipe-stages/step-01.md"); isPresent {
+		t.Fatal("the step file still isPresent")
+	}
+	if _, isPresent := readNoteFile(t, "brainstorm/claude-kit/plans/plan-2026-11-16-1333/index.md"); !isPresent {
+		t.Fatal("the run index was removed")
+	}
+}
+
+func TestNoteChangesRefusePathsOutsideTheSectionEntries(t *testing.T) {
+	seedNotes(t)
+
+	refusedPaths := []string{
+		"/api/notes/handoffs/../project-notes/claude-kit/decision/2026-11-15-use-one-port.md",
+		"/api/notes/handoffs/stray.md",
+		"/api/notes/handoffs/claude-kit/missing.md",
+		"/api/notes/brainstorm/claude-kit/plans/plan-2026-11-16-1333/index.md",
+		"/api/notes/unknown/claude-kit/001-add-the-viewer.md",
+	}
+	for _, refusedPath := range refusedPaths {
+		if response := sendNoteRequest(http.MethodDelete, refusedPath, "", ""); response.Code < 400 {
+			t.Fatalf("%s answered %d", refusedPath, response.Code)
+		}
+	}
+	if _, isPresent := readNoteFile(t, "handoffs/stray.md"); !isPresent {
+		t.Fatal("the stray file was removed")
+	}
+}
+
+func TestNoteChangesRefuseOtherOrigins(t *testing.T) {
+	seedNotes(t)
+
+	response := sendNoteRequest(http.MethodPut, "/api/notes/handoffs/claude-kit/002-fix-the-login.md", "Hijacked.\n", "https://evil.example")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status was %d", response.Code)
+	}
+	if text, _ := readNoteFile(t, "handoffs/claude-kit/002-fix-the-login.md"); strings.Contains(text, "Hijacked") {
+		t.Fatal("the note was overwritten")
+	}
+}
+
+func TestDeletingASmallPlanGroupRemovesTheWholeSet(t *testing.T) {
+	seedNotes(t)
+
+	response := sendNoteRequest(http.MethodDelete, "/api/groups/small-plans/claude-kit/2026-11-19-1000-fix-login", "", "http://127.0.0.1:4000")
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status was %d %s", response.Code, response.Body.String())
+	}
+	if _, isPresent := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); isPresent {
+		t.Fatal("the set still isPresent")
+	}
+	if _, isPresent := readNoteFile(t, "small-plans/claude-kit/2026-11-18-0900-add-the-viewer/01-serve-the-page.md"); !isPresent {
+		t.Fatal("another set was removed")
+	}
+}
+
+func TestGroupDeletesRefuseOtherSectionsAndUnknownGroups(t *testing.T) {
+	seedNotes(t)
+
+	refusedPaths := []string{
+		"/api/groups/project-notes/claude-kit/finding",
+		"/api/groups/small-plans/claude-kit/missing-set",
+		"/api/groups/small-plans/claude-kit/..",
+		"/api/groups/small-plans/claude-kit/stray.md",
+		"/api/groups/small-plans/claude-kit/2026-11-19-1000-fix-login%2F..%2F..",
+	}
+	for _, refusedPath := range refusedPaths {
+		if response := sendNoteRequest(http.MethodDelete, refusedPath, "", ""); response.Code < 400 {
+			t.Fatalf("%s answered %d", refusedPath, response.Code)
+		}
+	}
+	if _, isPresent := readNoteFile(t, "project-notes/claude-kit/finding/2026-11-16-the-cache-is-stale.md"); !isPresent {
+		t.Fatal("a project note group was removed")
+	}
+	if _, isPresent := readNoteFile(t, "small-plans/claude-kit/stray.md"); !isPresent {
+		t.Fatal("the stray file was removed")
+	}
+}
+
+func TestSmallPlansCanBeUpdatedAndDeleted(t *testing.T) {
+	seedNotes(t)
+
+	planUrl := "/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"
+	if response := sendNoteRequest(http.MethodPut, planUrl, "---\ntitle: Add the test\nstatus: done\n---\n\nFirst, with more.\n", ""); response.Code != http.StatusNoContent {
+		t.Fatalf("update answered %d", response.Code)
+	}
+	if text, _ := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); !strings.Contains(text, "with more") {
+		t.Fatalf("plan was %q", text)
+	}
+	if response := sendNoteRequest(http.MethodDelete, planUrl, "", ""); response.Code != http.StatusNoContent {
+		t.Fatalf("delete answered %d", response.Code)
+	}
+	if _, isPresent := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); isPresent {
+		t.Fatal("the plan still isPresent")
+	}
+}
+
+func TestPostAddsANewSmallPlanToASet(t *testing.T) {
+	seedNotes(t)
+
+	response := sendNoteRequest(http.MethodPost, "/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/03-ship-it.md", "---\ntitle: Ship it\n---\n\nShip.\n", "http://127.0.0.1:4000")
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status was %d %s", response.Code, response.Body.String())
+	}
+	if text, _ := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/03-ship-it.md"); !strings.Contains(text, "Ship.") {
+		t.Fatalf("plan was %q", text)
+	}
+	if plans := loadSections()[2]; len(plans.Entries) != 4 {
+		t.Fatalf("plans were %s", listPaths(plans))
+	}
+}
+
+func TestPostRefusesExistingPlansMissingSetsAndOtherSections(t *testing.T) {
+	seedNotes(t)
+
+	refusedPaths := []string{
+		"/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md",
+		"/api/notes/small-plans/claude-kit/missing-set/01-new.md",
+		"/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/notes.txt",
+		"/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/../escape.md",
+		"/api/notes/handoffs/claude-kit/003-new.md",
+	}
+	for _, refusedPath := range refusedPaths {
+		if response := sendNoteRequest(http.MethodPost, refusedPath, "Overwritten.\n", ""); response.Code < 400 {
+			t.Fatalf("%s answered %d", refusedPath, response.Code)
+		}
+	}
+	if text, _ := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); strings.Contains(text, "Overwritten") {
+		t.Fatal("an existing plan was overwritten")
+	}
+}

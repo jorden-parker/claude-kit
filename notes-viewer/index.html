@@ -2,51 +2,73 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <title>Claude notes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+    />
     <style>
       :root {
         --background: #ffffff;
-        --sidebar: #f8fafc;
-        --surface: #f1f5f9;
-        --hover: #eef2f6;
-        --selected: #e2e8f0;
-        --text: #0f172a;
-        --text-soft: #334155;
-        --muted: #64748b;
-        --border: #e2e8f0;
-        --border-strong: #cbd5e1;
-        --accent: #2563eb;
-        --focus: #2563eb;
-        --done: #15803d;
-        --in-progress: #b45309;
-        --pending: #64748b;
-        --blocked: #b91c1c;
+        --sidebar: #fafafa;
+        --surface: #f2f2f2;
+        --hover: #ebebeb;
+        --selected: #e6e6e6;
+        --text: #0a0a0a;
+        --text-soft: #262626;
+        --muted: #666666;
+        --border: #ebebeb;
+        --border-strong: #d4d4d4;
+        --dot: #d9d9d9;
+        --accent: #0068d6;
+        --focus: #0068d6;
+        --danger: #c50f1f;
+        --danger-hover: #a30d1a;
+        --on-danger: #ffffff;
+        --primary: #0a0a0a;
+        --on-primary: #ffffff;
+        --done: #107d32;
+        --in-progress: #a35200;
+        --pending: #737373;
+        --blocked: #c50f1f;
+        --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.08);
         --radius: 8px;
-        --sidebar-width: 304px;
-        --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+        --sidebar-width: 312px;
+        --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
         color-scheme: light;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --background: #0b1120;
-          --sidebar: #020617;
-          --surface: #111827;
-          --hover: #131c2e;
-          --selected: #1e293b;
-          --text: #f1f5f9;
-          --text-soft: #cbd5e1;
-          --muted: #94a3b8;
-          --border: #1e293b;
-          --border-strong: #334155;
-          --accent: #60a5fa;
-          --focus: #60a5fa;
-          --done: #4ade80;
-          --in-progress: #fbbf24;
-          --pending: #94a3b8;
-          --blocked: #f87171;
+          --background: #0a0a0a;
+          --sidebar: #000000;
+          --surface: #1a1a1a;
+          --hover: #1f1f1f;
+          --selected: #262626;
+          --text: #ededed;
+          --text-soft: #d4d4d4;
+          --muted: #a1a1a1;
+          --border: #262626;
+          --border-strong: #3d3d3d;
+          --dot: #2a2a2a;
+          --accent: #52a8ff;
+          --focus: #52a8ff;
+          --danger: #ff6369;
+          --danger-hover: #ff8589;
+          --on-danger: #0a0a0a;
+          --primary: #ededed;
+          --on-primary: #0a0a0a;
+          --done: #45dd7f;
+          --in-progress: #ffb224;
+          --pending: #a1a1a1;
+          --blocked: #ff6369;
+          --shadow: 0 0 0 1px #262626, 0 8px 32px rgb(0 0 0 / 0.6);
           color-scheme: dark;
         }
       }
@@ -57,94 +79,181 @@
         margin: 0;
         display: grid;
         grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+        grid-template-areas: "sidebar note";
         height: 100vh;
         height: 100dvh;
-        font:
-          14px/1.6 system-ui,
-          -apple-system,
-          "Segoe UI",
-          sans-serif;
+        font: 14px/1.6 var(--sans);
         color: var(--text);
         background: var(--background);
         -webkit-font-smoothing: antialiased;
         -webkit-tap-highlight-color: transparent;
       }
+      @media (pointer: fine) {
+        html {
+          overscroll-behavior: none;
+        }
+      }
+      button,
+      input,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      :focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
       .skip-link {
         position: fixed;
         top: 8px;
         left: 8px;
-        z-index: 10;
+        z-index: 30;
         padding: 8px 12px;
         border-radius: var(--radius);
-        background: var(--text);
-        color: var(--background);
+        background: var(--primary);
+        color: var(--on-primary);
         text-decoration: none;
         transform: translateY(-200%);
       }
       .skip-link:focus-visible {
         transform: none;
       }
+      .mark {
+        flex: none;
+        position: relative;
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        background: var(--text);
+        clip-path: polygon(0 0, 100% 0, 100% 64%, 64% 100%, 0 100%);
+        transition: transform 300ms var(--spring);
+      }
+      .mark::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 36%;
+        height: 36%;
+        background: var(--accent);
+        clip-path: polygon(0 0, 100% 0, 0 100%);
+      }
+      .brand:hover .mark {
+        transform: rotate(-12deg) scale(1.08);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .topbar {
+        display: none;
+      }
       nav {
+        grid-area: sidebar;
         overflow-y: auto;
         overscroll-behavior: contain;
-        padding: 0 12px 24px;
+        padding: 0 12px calc(24px + env(safe-area-inset-bottom));
+        padding-left: max(12px, env(safe-area-inset-left));
         background: var(--sidebar);
         border-right: 1px solid var(--border);
       }
-      nav h1 {
+      .sidebar-header {
         position: sticky;
         top: 0;
-        z-index: 1;
+        z-index: 2;
+        margin: 0 -12px 8px;
+        padding: 18px 20px 14px;
+        background: var(--sidebar);
+        border-bottom: 1px solid var(--border);
+      }
+      .greeting {
+        margin: 2px 0 0 28px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      nav h2 {
+        margin: 22px 10px 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        overflow-wrap: anywhere;
+      }
+      .group-heading {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 4px 8px;
+        margin: 14px 4px 4px 10px;
+      }
+      nav h3 {
+        min-width: 0;
+        margin: 0;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .progress {
         display: flex;
         align-items: center;
         gap: 8px;
-        margin: 0 -12px 8px;
-        padding: 16px 20px 12px;
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-        background: var(--sidebar);
-      }
-      nav h1::before {
-        content: "";
-        width: 10px;
-        height: 10px;
-        border-radius: 3px;
-        background: var(--accent);
-      }
-      nav h2 {
-        margin: 20px 8px 4px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text-soft);
-        overflow-wrap: anywhere;
-      }
-      nav h3 {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 8px;
-        overflow-wrap: anywhere;
-        margin: 12px 8px 4px;
+        grid-column: 1 / -1;
         font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
         color: var(--muted);
-      }
-      nav h3 .progress {
-        flex: none;
-        font-weight: 500;
-        text-transform: none;
-        letter-spacing: 0;
         font-variant-numeric: tabular-nums;
+      }
+      .progress-bar {
+        flex: 1;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--border);
+        overflow: hidden;
+      }
+      .progress-bar::before {
+        content: "";
+        display: block;
+        height: 100%;
+        background: var(--done);
+        transform-origin: left;
+        transform: scaleX(var(--progress, 0));
+        transition: transform 500ms var(--spring);
+      }
+      .progress[data-complete] {
+        color: var(--done);
+      }
+      .group-actions {
+        display: flex;
+        gap: 2px;
+        grid-row: 1;
+        grid-column: 2;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .group-actions {
+          opacity: 0;
+          transition: opacity 150ms ease;
+        }
+        .group-heading:hover .group-actions,
+        .group-heading:focus-within .group-actions {
+          opacity: 1;
+        }
       }
       nav a {
         display: block;
         min-width: 0;
-        padding: 6px 10px;
+        padding: 7px 10px;
         border-radius: 6px;
-        color: inherit;
+        color: var(--text-soft);
         text-decoration: none;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -152,7 +261,8 @@
         touch-action: manipulation;
         transition:
           background-color 150ms ease,
-          color 150ms ease;
+          color 150ms ease,
+          transform 200ms var(--spring);
       }
       nav a + a {
         margin-top: 1px;
@@ -180,12 +290,18 @@
       }
       nav a[data-status="in-progress"] small::before {
         background: var(--in-progress);
+        animation: pulse 2s ease-in-out infinite;
       }
       nav a[data-status="blocked"] small {
         color: var(--blocked);
       }
       nav a[data-status="blocked"] small::before {
         background: var(--blocked);
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+        }
       }
       .sections {
         display: grid;
@@ -202,15 +318,16 @@
         padding: 8px 10px;
         font-weight: 500;
       }
-      .sections .count {
+      .count {
         flex: none;
         min-width: 24px;
         padding: 0 7px;
+        border: 1px solid var(--border);
         border-radius: 999px;
-        background: var(--surface);
+        background: var(--background);
         color: var(--muted);
-        font-size: 12px;
-        font-weight: 500;
+        font-family: var(--mono);
+        font-size: 11px;
         text-align: center;
         font-variant-numeric: tabular-nums;
       }
@@ -218,50 +335,184 @@
         background: var(--hover);
         color: var(--text);
       }
+      @media (hover: hover) {
+        nav a:not(.sections a):hover {
+          transform: translateX(2px);
+        }
+      }
       nav a[aria-current] {
         background: var(--selected);
         color: var(--text);
         font-weight: 600;
-        box-shadow: inset 2px 0 0 var(--accent);
       }
       .sections a[aria-current] .count {
-        background: var(--accent);
-        color: var(--background);
+        border-color: var(--primary);
+        background: var(--primary);
+        color: var(--on-primary);
       }
-      :is(a, main):focus-visible {
-        outline: 2px solid var(--focus);
+      nav a:focus-visible {
         outline-offset: -2px;
       }
       main {
+        grid-area: note;
         overflow-y: auto;
-        padding: 48px 56px 96px;
+        padding: 56px 56px 120px;
+        padding-right: max(56px, env(safe-area-inset-right));
       }
       main:focus {
         outline: none;
       }
       article {
+        position: relative;
+        isolation: isolate;
         max-width: 72ch;
         margin: 0 auto;
         font-size: 15px;
         line-height: 1.7;
         color: var(--text-soft);
+        animation: rise 300ms ease-out;
       }
-      article > h1 {
+      article::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        inset: -56px -40px auto;
+        height: 260px;
+        background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+        background-size: 20px 20px;
+        mask-image: linear-gradient(to bottom, black, transparent);
+        pointer-events: none;
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+      }
+      .entry-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      article h1 {
+        flex: 1 1 320px;
+        min-width: 0;
         margin: 0;
-        font-size: 28px;
+        font-size: clamp(24px, 4vw, 36px);
         font-weight: 700;
-        line-height: 1.25;
-        letter-spacing: -0.02em;
+        line-height: 1.15;
+        letter-spacing: -0.04em;
         color: var(--text);
         text-wrap: balance;
         overflow-wrap: anywhere;
+      }
+      .entry-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 40px;
+        padding: 0 14px;
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        background: var(--background);
+        color: var(--text);
+        font-weight: 500;
+        white-space: nowrap;
+        transition:
+          background-color 150ms ease,
+          border-color 150ms ease,
+          color 150ms ease,
+          transform 100ms ease;
+      }
+      .button:hover {
+        background: var(--hover);
+        border-color: var(--muted);
+      }
+      .button:active {
+        transform: scale(0.97);
+      }
+      .button:disabled {
+        cursor: progress;
+        opacity: 0.6;
+      }
+      .button.primary {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: var(--on-primary);
+      }
+      .button.primary:hover {
+        opacity: 0.88;
+      }
+      .button.danger {
+        border-color: var(--danger);
+        background: var(--danger);
+        color: var(--on-danger);
+      }
+      .button.danger:hover {
+        border-color: var(--danger-hover);
+        background: var(--danger-hover);
+      }
+      .button.quiet-danger:hover {
+        border-color: var(--danger);
+        color: var(--danger);
+        background: var(--background);
+      }
+      .button svg,
+      .icon-button svg {
+        flex: none;
+        width: 16px;
+        height: 16px;
+      }
+      .icon-button {
+        display: inline-grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        transition:
+          background-color 150ms ease,
+          color 150ms ease,
+          transform 200ms var(--spring);
+      }
+      .icon-button:hover {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .icon-button.add:hover svg {
+        transform: rotate(90deg);
+      }
+      .icon-button svg {
+        transition: transform 250ms var(--spring);
+      }
+      .icon-button.delete:hover {
+        color: var(--danger);
+      }
+      @media (pointer: coarse) {
+        .icon-button {
+          width: 44px;
+          height: 44px;
+        }
+        .button {
+          min-height: 44px;
+        }
       }
       .entry-details {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        margin: 14px 0 32px;
-        padding: 0 0 20px;
+        margin: 18px 0 36px;
+        padding: 0 0 24px;
         list-style: none;
         border-bottom: 1px solid var(--border);
         font-size: 12px;
@@ -272,8 +523,8 @@
         max-width: 100%;
         padding: 2px 8px;
         border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--sidebar);
+        border-radius: 999px;
+        background: var(--background);
         overflow-wrap: anywhere;
       }
       .entry-details li:last-child {
@@ -281,40 +532,57 @@
         font-size: 11px;
       }
       .empty {
-        max-width: 420px;
-        margin: 15vh auto 0;
-        padding: 32px 28px;
+        max-width: 440px;
+        margin: 14vh auto 0;
+        padding: 40px 28px;
         border: 1px dashed var(--border-strong);
         border-radius: 12px;
         text-align: center;
         color: var(--muted);
         text-wrap: pretty;
       }
+      .empty strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 16px;
+        color: var(--text);
+      }
+      .empty-mark {
+        display: inline-block;
+        margin-bottom: 14px;
+        font-size: 28px;
+        animation: bob 3s ease-in-out infinite;
+      }
+      @keyframes bob {
+        50% {
+          transform: translateY(-4px) rotate(-6deg);
+        }
+      }
+      .entry-body {
+        overflow-wrap: anywhere;
+      }
       .entry-body > :first-child {
         margin-top: 0;
       }
       .entry-body :is(h1, h2, h3, h4, h5, h6) {
-        margin: 36px 0 10px;
+        margin: 40px 0 10px;
         line-height: 1.3;
+        letter-spacing: -0.02em;
         color: var(--text);
         text-wrap: balance;
         scroll-margin-top: 24px;
       }
       .entry-body h1 {
-        font-size: 22px;
-        letter-spacing: -0.01em;
+        font-size: 24px;
       }
       .entry-body h2 {
-        font-size: 18px;
-        padding-bottom: 6px;
-        border-bottom: 1px solid var(--border);
+        font-size: 20px;
       }
       .entry-body h3 {
-        font-size: 15px;
+        font-size: 17px;
       }
       .entry-body :is(h4, h5, h6) {
-        font-size: 14px;
-        color: var(--text-soft);
+        font-size: 15px;
       }
       .entry-body :is(p, ul, ol, pre, blockquote, table) {
         margin: 0 0 16px;
@@ -333,32 +601,28 @@
       }
       .entry-body li:has(> input[type="checkbox"]) {
         list-style: none;
-        margin-left: -24px;
+        margin-left: -22px;
       }
       .entry-body input[type="checkbox"] {
-        width: 15px;
-        height: 15px;
         margin: 0 8px 0 0;
-        vertical-align: -2px;
         accent-color: var(--done);
+        vertical-align: -2px;
       }
       .entry-body strong {
         color: var(--text);
-        font-weight: 600;
       }
       .entry-body code {
-        font: 0.875em var(--mono);
-        padding: 2px 5px;
-        border-radius: 4px;
+        padding: 1px 5px;
         border: 1px solid var(--border);
-        background: var(--surface);
-        color: var(--text);
-        overflow-wrap: anywhere;
+        border-radius: 5px;
+        background: var(--sidebar);
+        font-family: var(--mono);
+        font-size: 0.86em;
       }
       .entry-body pre {
-        padding: 14px 16px;
-        border-radius: var(--radius);
+        padding: 16px 18px;
         border: 1px solid var(--border);
+        border-radius: var(--radius);
         background: var(--sidebar);
         overflow-x: auto;
         line-height: 1.55;
@@ -367,7 +631,7 @@
         padding: 0;
         border: 0;
         background: none;
-        overflow-wrap: normal;
+        font-size: 13px;
       }
       .entry-body a {
         color: var(--accent);
@@ -380,28 +644,26 @@
         text-decoration-color: currentColor;
       }
       .entry-body blockquote {
-        padding: 8px 16px;
-        border-left: 3px solid var(--accent);
-        border-radius: 0 var(--radius) var(--radius) 0;
-        background: var(--sidebar);
-        color: var(--text-soft);
+        margin-left: 0;
+        padding: 2px 16px;
+        border-left: 2px solid var(--border-strong);
+        color: var(--muted);
       }
       .entry-body blockquote > :last-child {
         margin-bottom: 0;
       }
       .entry-body table {
         display: block;
+        width: max-content;
         max-width: 100%;
-        overflow-x: auto;
         border-collapse: collapse;
+        overflow-x: auto;
         font-size: 14px;
-        font-variant-numeric: tabular-nums;
       }
       .entry-body :is(th, td) {
-        padding: 6px 12px;
+        padding: 8px 12px;
         border: 1px solid var(--border);
         text-align: left;
-        vertical-align: top;
       }
       .entry-body th {
         background: var(--sidebar);
@@ -409,69 +671,362 @@
         font-weight: 600;
       }
       .entry-body hr {
-        margin: 32px 0;
+        margin: 40px 0;
         border: 0;
-        border-top: 1px solid var(--border);
+        border-top: 1px dashed var(--border-strong);
       }
       .entry-body img {
         max-width: 100%;
         height: auto;
-        border-radius: var(--radius);
       }
-      @media (prefers-reduced-motion: reduce) {
-        * {
-          transition: none !important;
+      .editor {
+        display: grid;
+        gap: 10px;
+      }
+      .editor label,
+      dialog label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text);
+      }
+      .editor label code {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      textarea,
+      dialog input {
+        width: 100%;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius);
+        background: var(--background);
+        transition:
+          border-color 150ms ease,
+          box-shadow 150ms ease;
+      }
+      textarea {
+        min-height: 55vh;
+        padding: 16px;
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.65;
+        resize: vertical;
+        tab-size: 2;
+      }
+      textarea:focus-visible,
+      dialog input:focus-visible {
+        outline: none;
+        border-color: var(--focus);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
+      }
+      .editor-footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .editor-hint {
+        margin: 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      kbd {
+        padding: 1px 5px;
+        border: 1px solid var(--border-strong);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .editor-buttons,
+      .dialog-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .field-error {
+        margin: 0;
+        padding: 8px 12px;
+        border: 1px solid var(--danger);
+        border-radius: 6px;
+        color: var(--danger);
+        font-size: 13px;
+      }
+      dialog {
+        width: min(440px, calc(100vw - 32px));
+        padding: 24px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--background);
+        color: var(--text);
+        box-shadow: var(--shadow);
+        overscroll-behavior: contain;
+      }
+      dialog[open] {
+        animation: pop 200ms var(--spring);
+      }
+      dialog::backdrop {
+        background: rgb(0 0 0 / 0.4);
+        backdrop-filter: blur(2px);
+      }
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: scale(0.96) translateY(4px);
         }
+      }
+      dialog h2 {
+        margin: 0 0 8px;
+        font-size: 18px;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+      dialog p {
+        margin: 0 0 16px;
+        color: var(--muted);
+        text-wrap: pretty;
+        overflow-wrap: anywhere;
+      }
+      dialog form {
+        display: grid;
+        gap: 4px;
+      }
+      dialog input {
+        min-height: 40px;
+        margin: 4px 0 12px;
+        padding: 0 12px;
+      }
+      .dialog-actions {
+        margin-top: 8px;
+      }
+      .toast-region {
+        position: fixed;
+        z-index: 40;
+        right: max(16px, env(safe-area-inset-right));
+        bottom: max(16px, env(safe-area-inset-bottom));
+        display: grid;
+        gap: 8px;
+        justify-items: end;
+        pointer-events: none;
+      }
+      .toast {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: min(360px, calc(100vw - 32px));
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--background);
+        box-shadow: var(--shadow);
+        font-size: 13px;
+        animation: slide-in 300ms var(--spring);
+      }
+      .toast::before {
+        content: "";
+        flex: none;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--done);
+      }
+      .toast[data-tone="error"]::before {
+        background: var(--danger);
+      }
+      .toast[data-leaving] {
+        opacity: 0;
+        transform: translateY(8px);
+        transition:
+          opacity 200ms ease,
+          transform 200ms ease;
+      }
+      @keyframes slide-in {
+        from {
+          opacity: 0;
+          transform: translateY(12px) scale(0.98);
+        }
+      }
+      .backdrop {
+        display: none;
       }
       @media (max-width: 960px) {
         :root {
-          --sidebar-width: 260px;
+          --sidebar-width: 272px;
         }
         main {
-          padding: 32px 32px 72px;
+          padding: 40px 32px 96px;
         }
       }
       @media (max-width: 720px) {
         body {
-          grid-template-columns: 1fr;
-          grid-template-rows: 40vh 1fr;
-          grid-template-rows: 40dvh 1fr;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
+          grid-template-areas: "topbar" "note";
+        }
+        .topbar {
+          grid-area: topbar;
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+          padding-left: max(12px, env(safe-area-inset-left));
+          border-bottom: 1px solid var(--border);
+          background: color-mix(in srgb, var(--background) 85%, transparent);
+          backdrop-filter: blur(8px);
         }
         nav {
-          border-right: 0;
-          border-bottom: 1px solid var(--border);
+          position: fixed;
+          z-index: 20;
+          inset: 0 auto 0 0;
+          width: min(88vw, 340px);
+          box-shadow: var(--shadow);
+          transform: translateX(-102%);
+          transition: transform 250ms cubic-bezier(0.32, 0.72, 0, 1);
+          padding-top: env(safe-area-inset-top);
+        }
+        body[data-menu="open"] nav {
+          transform: none;
+        }
+        .backdrop {
+          display: block;
+          position: fixed;
+          z-index: 15;
+          inset: 0;
+          background: rgb(0 0 0 / 0.4);
+        }
+        .backdrop[hidden] {
+          display: none;
         }
         nav a {
-          padding-block: 10px;
+          padding: 10px 12px;
         }
         main {
-          padding: 24px 16px 48px;
+          padding: 28px 16px 96px;
+          padding-left: max(16px, env(safe-area-inset-left));
+          padding-right: max(16px, env(safe-area-inset-right));
         }
-        article > h1 {
-          font-size: 24px;
+        article::before {
+          inset: -28px -16px auto;
+        }
+        .entry-actions {
+          width: 100%;
+        }
+        .entry-actions .button {
+          flex: 1;
+        }
+        .editor-footer {
+          flex-direction: column-reverse;
+          align-items: stretch;
+        }
+        .editor-buttons .button {
+          flex: 1;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition-duration: 0ms !important;
         }
       }
     </style>
   </head>
-  <body>
-    <a class="skip-link" href="#note">Skip to note</a>
-    <nav aria-label="All notes"></nav>
+  <body data-menu="closed">
+    <a class="skip-link" href="#note">Skip to Note</a>
+    <header class="topbar">
+      <button
+        class="icon-button"
+        id="menu-button"
+        type="button"
+        aria-expanded="false"
+        aria-controls="sidebar"
+        aria-label="Open Notes List"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h10" />
+        </svg>
+      </button>
+      <span class="brand" translate="no"><span class="mark" aria-hidden="true"></span>Claude notes</span>
+    </header>
+    <div class="backdrop" hidden></div>
+    <nav id="sidebar" aria-label="All notes"></nav>
     <main id="note" tabindex="-1" aria-busy="true">
       <p class="empty" role="status">Loading notes…</p>
     </main>
+    <div class="toast-region" role="status" aria-live="polite"></div>
+
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <form method="dialog">
+        <h2 id="confirm-title"></h2>
+        <p id="confirm-message"></p>
+        <div class="dialog-actions">
+          <button class="button" value="cancel" id="confirm-cancel">Keep It</button>
+          <button class="button danger" value="confirm" id="confirm-button"></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="add-plan-dialog" aria-labelledby="add-plan-title" aria-describedby="add-plan-set">
+      <form method="dialog" id="add-plan-form">
+        <h2 id="add-plan-title">Add a Plan</h2>
+        <p id="add-plan-set"></p>
+        <label for="plan-title">Plan title</label>
+        <input id="plan-title" name="title" required autocomplete="off" maxlength="120" placeholder="Clear the cached token…" />
+        <p class="field-error" id="add-plan-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button" type="button" id="add-plan-cancel">Cancel</button>
+          <button class="button primary" value="confirm" id="add-plan-button">Add Plan</button>
+        </div>
+      </form>
+    </dialog>
+
     <script>
       const sidebar = document.querySelector("nav");
       const entryArea = document.querySelector("main");
+      const menuButton = document.querySelector("#menu-button");
+      const backdrop = document.querySelector(".backdrop");
+      const toastRegion = document.querySelector(".toast-region");
+      const confirmDialog = document.querySelector("#confirm-dialog");
+      const addPlanDialog = document.querySelector("#add-plan-dialog");
+      const addPlanForm = document.querySelector("#add-plan-form");
+      const narrowScreen = matchMedia("(max-width: 720px)");
       let sections = [];
+      let openEditor = null;
+
+      const ICONS = {
+        pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+        trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        check: '<path d="M20 6 9 17l-5-5"/>',
+      };
 
       const EMPTY_HINTS = {
-        handoffs: "No handoffs yet. Run /handoff to create one.",
-        "project-notes":
-          "No project notes yet. Ask Claude to write one, or run /project-note.",
-        "small-plans":
-          "No plans yet. Run /small-plans to plan work as small plans.",
-        brainstorm:
-          "No brainstorm plans yet. Run /brainstorm, then /brainstorm plan.",
+        handoffs: ["No handoffs yet", "Run /handoff and your future self gets a head start."],
+        "project-notes": ["No project notes yet", "Ask Claude to write one, or run /project-note."],
+        "small-plans": ["No plans yet", "Run /small-plans to break big work into bite-size pieces."],
+        brainstorm: ["No brainstorm plans yet", "Run /brainstorm, then /brainstorm plan. Big ideas welcome."],
+      };
+
+      const SAVED_MESSAGES = ["Saved. Future you says thanks.", "Saved and sound.", "Changes tucked in safely."];
+      const DELETED_MESSAGES = ["Poof. Gone for good.", "Deleted. Clean slate.", "Swept away."];
+      const ADDED_MESSAGES = ["New plan, fresh page.", "Plan added. Let’s go."];
+
+      const pickOne = (choices) => choices[Math.floor(Math.random() * choices.length)];
+
+      const greetByHour = () => {
+        const hour = new Date().getHours();
+        if (hour < 5) return "Burning the midnight oil?";
+        if (hour < 12) return "Good morning.";
+        if (hour < 18) return "Good afternoon.";
+        return "Good evening.";
       };
 
       const createElement = (tagName, text, className) => {
@@ -481,18 +1036,90 @@
         return element;
       };
 
+      const createIcon = (iconName) => {
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        icon.setAttribute("viewBox", "0 0 24 24");
+        icon.setAttribute("fill", "none");
+        icon.setAttribute("stroke", "currentColor");
+        icon.setAttribute("stroke-width", "2");
+        icon.setAttribute("stroke-linecap", "round");
+        icon.setAttribute("stroke-linejoin", "round");
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = ICONS[iconName];
+        return icon;
+      };
+
+      const createButton = (label, iconName, className, onClick) => {
+        const button = createElement("button", "", className);
+        button.type = "button";
+        if (iconName) button.append(createIcon(iconName));
+        button.append(label);
+        button.addEventListener("click", onClick);
+        return button;
+      };
+
+      const createIconButton = (label, iconName, className, onClick) => {
+        const button = createElement("button", "", `icon-button ${className}`);
+        button.type = "button";
+        button.setAttribute("aria-label", label);
+        button.title = label;
+        button.append(createIcon(iconName));
+        button.addEventListener("click", onClick);
+        return button;
+      };
+
+      const showToast = (message, tone) => {
+        const toast = createElement("div", message, "toast");
+        if (tone) toast.dataset.tone = tone;
+        toastRegion.append(toast);
+        setTimeout(() => {
+          toast.dataset.leaving = "";
+          setTimeout(() => toast.remove(), 220);
+        }, 3200);
+      };
+
+      const formatCreated = (created) => {
+        if (!created) return "";
+        const isDateOnly = created.length <= 10;
+        const moment = new Date(created);
+        if (Number.isNaN(moment.getTime())) return created;
+        return new Intl.DateTimeFormat(undefined, isDateOnly ? { dateStyle: "medium", timeZone: "UTC" } : { dateStyle: "medium", timeStyle: "short" }).format(moment);
+      };
+
+      const buildNoteUrl = (sectionId, entryPath) => `/api/notes/${encodeURIComponent(sectionId)}/${entryPath.split("/").map(encodeURIComponent).join("/")}`;
+
+      const buildGroupUrl = (sectionId, project, group) => `/api/groups/${[sectionId, project, group].map(encodeURIComponent).join("/")}`;
+
+      const sendChange = async (method, url, body) => {
+        const response = await fetch(url, {
+          method,
+          body,
+          headers: body === undefined ? {} : { "Content-Type": "text/markdown; charset=utf-8" },
+        });
+        if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+      };
+
+      const describeFailure = (error) => `${error.message} Check the viewer is still running, then try again.`;
+
+      const askToConfirm = ({ title, message, confirmLabel }) =>
+        new Promise((resolve) => {
+          confirmDialog.querySelector("#confirm-title").textContent = title;
+          confirmDialog.querySelector("#confirm-message").textContent = message;
+          confirmDialog.querySelector("#confirm-button").textContent = confirmLabel;
+          confirmDialog.returnValue = "";
+          confirmDialog.addEventListener("close", () => resolve(confirmDialog.returnValue === "confirm"), { once: true });
+          confirmDialog.showModal();
+          confirmDialog.querySelector("#confirm-cancel").focus();
+        });
+
       const readSelection = () => {
-        const [sectionId, ...pathSegments] = decodeURIComponent(
-          location.hash.slice(1)
-        ).split("/");
+        const [sectionId, ...pathSegments] = decodeURIComponent(location.hash.slice(1)).split("/");
         const section =
           sections.find((candidate) => candidate.id === sectionId) ??
           sections.find((candidate) => candidate.entries.length) ??
           sections[0];
         const entryPath = pathSegments.join("/");
-        const entry =
-          section?.entries.find((candidate) => candidate.path === entryPath) ??
-          section?.entries[0];
+        const entry = section?.entries.find((candidate) => candidate.path === entryPath) ?? section?.entries[0];
         return { section, entry };
       };
 
@@ -502,54 +1129,48 @@
 
       const readOrder = (entry) => entry.name.slice(0, 2);
 
-      const describeProgress = (section, memberEntry) => {
-        const entriesOfGroup = section.entries.filter(
-          (entry) =>
-            entry.project === memberEntry.project &&
-            entry.group === memberEntry.group
-        );
-        const doneCount = entriesOfGroup.filter(
-          (entry) => readStatus(entry) === "done"
-        ).length;
-        return `${doneCount} of ${entriesOfGroup.length} done`;
-      };
+      const listGroupEntries = (section, memberEntry) =>
+        section.entries.filter((entry) => entry.project === memberEntry.project && entry.group === memberEntry.group);
 
       const readDependency = (entry) =>
-        entry.fields.depends_on &&
-        entry.fields.depends_on !== "none" &&
-        `needs plan ${entry.fields.depends_on}`;
+        entry.fields.depends_on && entry.fields.depends_on !== "none" && `needs plan ${entry.fields.depends_on}`;
 
       const PLAN_VIEW = {
+        noun: "plan",
         describeLink: (entry) => ({
           label: `${readOrder(entry)} ${entry.title}`,
           caption: `${readKind(entry)} · ${readStatus(entry)}`,
           status: readStatus(entry),
         }),
-        describeGroup: describeProgress,
-        listDetails: (entry) => [
-          entry.group,
-          `plan ${readOrder(entry)}`,
-          readKind(entry),
-          readStatus(entry),
-          readDependency(entry),
-        ],
+        hasProgress: true,
+        listDetails: (entry) => [entry.group, `plan ${readOrder(entry)}`, readKind(entry), readStatus(entry), readDependency(entry)],
       };
 
       const SECTION_VIEWS = {
         handoffs: {
+          noun: "handoff",
           describeLink: (entry) => ({ label: entry.title }),
           listDetails: (entry) => [
             entry.fields.focus && `focus: ${entry.fields.focus}`,
-            /^\d/.test(entry.name) &&
-              `/handoff resume ${parseInt(entry.name, 10)}`,
+            /^\d/.test(entry.name) && `/handoff resume ${parseInt(entry.name, 10)}`,
           ],
         },
         "project-notes": {
+          noun: "note",
           describeLink: (entry) => ({ label: entry.title }),
           listDetails: (entry) => [entry.group],
         },
-        "small-plans": PLAN_VIEW,
-        brainstorm: PLAN_VIEW,
+        "small-plans": { ...PLAN_VIEW, hasEditableSets: true },
+        brainstorm: { ...PLAN_VIEW, deleteWarning: "Its step files go with it." },
+      };
+
+      const setMenuOpen = (isOpen) => {
+        document.body.dataset.menu = isOpen ? "open" : "closed";
+        menuButton.setAttribute("aria-expanded", String(isOpen));
+        menuButton.setAttribute("aria-label", isOpen ? "Close Notes List" : "Open Notes List");
+        sidebar.inert = narrowScreen.matches && !isOpen;
+        backdrop.hidden = !isOpen;
+        if (isOpen) (sidebar.querySelector("[aria-current='page']") ?? sidebar.querySelector("a"))?.focus();
       };
 
       const createSectionLinks = (selectedSection) => {
@@ -557,19 +1178,15 @@
         sections.forEach((section) => {
           const link = createElement("a", section.title);
           link.href = `#${section.id}`;
-          link.append(
-            createElement("span", String(section.entries.length), "count")
-          );
-          if (section === selectedSection)
-            link.setAttribute("aria-current", "true");
+          link.append(createElement("span", String(section.entries.length), "count"));
+          if (section === selectedSection) link.setAttribute("aria-current", "true");
           sectionLinks.append(link);
         });
         return sectionLinks;
       };
 
       const createEntryLink = (section, entry, selectedEntry) => {
-        const { label, caption, status } =
-          SECTION_VIEWS[section.id].describeLink(entry);
+        const { label, caption, status } = SECTION_VIEWS[section.id].describeLink(entry);
         const link = createElement("a", label);
         link.href = `#${section.id}/${encodeURIComponent(entry.path)}`;
         link.title = entry.title;
@@ -579,35 +1196,58 @@
         return link;
       };
 
+      const createProgress = (section, entry) => {
+        const entriesOfGroup = listGroupEntries(section, entry);
+        const doneCount = entriesOfGroup.filter((member) => readStatus(member) === "done").length;
+        const isComplete = doneCount === entriesOfGroup.length;
+        const progress = createElement("span", "", "progress");
+        const progressBar = createElement("span", "", "progress-bar");
+        progressBar.setAttribute("aria-hidden", "true");
+        progressBar.style.setProperty("--progress", String(doneCount / entriesOfGroup.length));
+        progress.append(progressBar, isComplete ? `all ${doneCount} done ✦` : `${doneCount} of ${entriesOfGroup.length} done`);
+        if (isComplete) progress.dataset.complete = "";
+        return progress;
+      };
+
       const createGroupHeading = (section, entry) => {
-        const groupHeading = createElement("h3", entry.group);
-        const describeGroup = SECTION_VIEWS[section.id].describeGroup;
-        if (describeGroup)
-          groupHeading.append(
-            createElement("span", describeGroup(section, entry), "progress")
+        const view = SECTION_VIEWS[section.id];
+        const groupHeading = createElement("div", "", "group-heading");
+        groupHeading.append(createElement("h3", entry.group));
+        if (view.hasEditableSets) {
+          const actions = createElement("div", "", "group-actions");
+          actions.append(
+            createIconButton(`Add a plan to ${entry.group}`, "plus", "add", () => openAddPlan(section, entry)),
+            createIconButton(`Delete set ${entry.group}`, "trash", "delete", () => deleteGroup(section, entry))
           );
+          groupHeading.append(actions);
+        }
+        if (view.hasProgress) groupHeading.append(createProgress(section, entry));
         return groupHeading;
       };
 
+      const createSidebarHeader = () => {
+        const header = createElement("div", "", "sidebar-header");
+        const brand = createElement("div", "", "brand");
+        brand.setAttribute("translate", "no");
+        const mark = createElement("span", "", "mark");
+        mark.setAttribute("aria-hidden", "true");
+        brand.append(mark, "Claude notes");
+        header.append(brand, createElement("p", greetByHour(), "greeting"));
+        return header;
+      };
+
       const renderSidebar = (selectedSection, selectedEntry) => {
-        sidebar.replaceChildren(
-          createElement("h1", "Claude notes"),
-          createSectionLinks(selectedSection)
-        );
+        const scrollPosition = sidebar.scrollTop;
+        sidebar.replaceChildren(createSidebarHeader(), createSectionLinks(selectedSection));
         const entries = selectedSection?.entries ?? [];
         entries.forEach((entry, entryIndex) => {
           const previousEntry = entries[entryIndex - 1] ?? {};
           const isNewProject = entry.project !== previousEntry.project;
           if (isNewProject) sidebar.append(createElement("h2", entry.project));
-          if (
-            entry.group &&
-            (isNewProject || entry.group !== previousEntry.group)
-          )
-            sidebar.append(createGroupHeading(selectedSection, entry));
-          sidebar.append(
-            createEntryLink(selectedSection, entry, selectedEntry)
-          );
+          if (entry.group && (isNewProject || entry.group !== previousEntry.group)) sidebar.append(createGroupHeading(selectedSection, entry));
+          sidebar.append(createEntryLink(selectedSection, entry, selectedEntry));
         });
+        sidebar.scrollTop = scrollPosition;
       };
 
       const createDetailList = (selectedSection, selectedEntry) => {
@@ -616,65 +1256,317 @@
         [
           selectedEntry.project,
           ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
-          selectedEntry.created.slice(0, 16).replace("T", " "),
+          formatCreated(selectedEntry.created),
           selectedEntry.path,
         ]
           .filter(Boolean)
-          .forEach((detail) =>
-            detailList.append(createElement("li", detail))
-          );
+          .forEach((detail) => detailList.append(createElement("li", detail)));
         return detailList;
+      };
+
+      const createEmptyState = (sectionId) => {
+        const [headline, hint] = EMPTY_HINTS[sectionId] ?? ["Nothing here yet", "Fresh page, fresh start."];
+        const empty = createElement("div", "", "empty");
+        const emptyMark = createElement("span", "✎", "empty-mark");
+        emptyMark.setAttribute("aria-hidden", "true");
+        empty.append(emptyMark, createElement("strong", headline), hint);
+        return empty;
+      };
+
+      const createEntryHeader = (selectedSection, selectedEntry) => {
+        const noun = SECTION_VIEWS[selectedSection.id].noun;
+        const capitalNoun = noun[0].toUpperCase() + noun.slice(1);
+        const header = createElement("div", "", "entry-header");
+        const actions = createElement("div", "", "entry-actions");
+        actions.append(
+          createButton(`Edit ${capitalNoun}`, "pencil", "button", () => startEditing(selectedSection, selectedEntry)),
+          createButton(`Delete ${capitalNoun}`, "trash", "button quiet-danger", () => deleteEntry(selectedSection, selectedEntry))
+        );
+        header.append(createElement("h1", selectedEntry.title), actions);
+        return header;
       };
 
       const renderEntry = (selectedSection, selectedEntry) => {
         if (!selectedEntry) {
-          entryArea.replaceChildren(
-            createElement("p", EMPTY_HINTS[selectedSection?.id], "empty")
-          );
+          entryArea.replaceChildren(createEmptyState(selectedSection?.id));
           return;
         }
         const article = createElement("article");
         const body = createElement("div", "", "entry-body");
         body.innerHTML = selectedEntry.html;
-        body
-          .querySelectorAll("input[type=checkbox]")
-          .forEach((checkbox) => (checkbox.disabled = true));
-        article.append(
-          createElement("h1", selectedEntry.title),
-          createDetailList(selectedSection, selectedEntry),
-          body
-        );
+        body.querySelectorAll("input[type=checkbox]").forEach((checkbox) => (checkbox.disabled = true));
+        article.append(createEntryHeader(selectedSection, selectedEntry), createDetailList(selectedSection, selectedEntry), body);
         entryArea.replaceChildren(article);
       };
 
       const render = () => {
         const { section, entry } = readSelection();
-        document.title = entry
-          ? `${entry.title} · ${section.title}`
-          : "Claude notes";
+        document.title = entry ? `${entry.title} · ${section.title}` : "Claude notes";
         renderSidebar(section, entry);
-        renderEntry(section, entry);
+        if (!openEditor) renderEntry(section, entry);
       };
 
       const loadSections = async () => {
-        sections = await (await fetch("/api/sections")).json();
+        try {
+          sections = await (await fetch("/api/sections")).json();
+        } catch (error) {
+          entryArea.replaceChildren(createElement("p", "Can’t reach the notes server. Run claude-notes again, then reload this page.", "empty"));
+          return;
+        }
         render();
         entryArea.removeAttribute("aria-busy");
       };
+
+      const hasUnsavedChanges = () => openEditor !== null && openEditor.textarea.value !== openEditor.entry.source;
+
+      const confirmDiscard = () =>
+        !hasUnsavedChanges() ||
+        askToConfirm({
+          title: "Discard your changes?",
+          message: `Your edits to “${openEditor.entry.title}” haven’t been saved.`,
+          confirmLabel: "Discard Changes",
+        });
+
+      const stopEditing = () => {
+        openEditor = null;
+        render();
+        entryArea.focus();
+      };
+
+      const startEditing = (selectedSection, selectedEntry) => {
+        const article = createElement("article");
+        const header = createElement("div", "", "entry-header");
+        header.append(createElement("h1", selectedEntry.title));
+        const form = createElement("form", "", "editor");
+        form.setAttribute("aria-label", `Edit ${selectedEntry.title}`);
+        const label = createElement("label", "Markdown ");
+        label.htmlFor = "note-source";
+        label.append(createElement("code", selectedEntry.path));
+        const textarea = createElement("textarea");
+        textarea.id = "note-source";
+        textarea.name = "source";
+        textarea.autocomplete = "off";
+        textarea.value = selectedEntry.source;
+        const failure = createElement("p", "", "field-error");
+        failure.setAttribute("role", "alert");
+        failure.hidden = true;
+        const hint = createElement("p", "", "editor-hint");
+        hint.innerHTML = "<kbd>⌘</kbd>&nbsp;/&nbsp;<kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>Enter</kbd> saves · <kbd>Esc</kbd> cancels";
+        const saveButton = createElement("button", "", "button primary");
+        saveButton.type = "submit";
+        saveButton.append(createIcon("check"), "Save Changes");
+        const cancelButton = createButton("Cancel", "", "button", async () => {
+          if (await confirmDiscard()) stopEditing();
+        });
+        const buttons = createElement("div", "", "editor-buttons");
+        buttons.append(cancelButton, saveButton);
+        const footer = createElement("div", "", "editor-footer");
+        footer.append(hint, buttons);
+        form.append(label, textarea, failure, footer);
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          saveButton.disabled = true;
+          saveButton.lastChild.textContent = "Saving…";
+          failure.hidden = true;
+          try {
+            await sendChange("PUT", buildNoteUrl(selectedSection.id, selectedEntry.path), textarea.value);
+            openEditor = null;
+            await loadSections();
+            entryArea.focus();
+            showToast(pickOne(SAVED_MESSAGES));
+          } catch (error) {
+            failure.textContent = `Couldn’t save. ${describeFailure(error)}`;
+            failure.hidden = false;
+            saveButton.disabled = false;
+            saveButton.lastChild.textContent = "Save Changes";
+          }
+        });
+        textarea.addEventListener("keydown", async (event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            form.requestSubmit();
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            if (await confirmDiscard()) stopEditing();
+          }
+        });
+
+        article.append(header, form);
+        entryArea.replaceChildren(article);
+        openEditor = { entry: selectedEntry, hash: location.hash, textarea };
+        textarea.focus();
+        textarea.setSelectionRange(0, 0);
+        textarea.scrollTop = 0;
+      };
+
+      const deleteEntry = async (selectedSection, selectedEntry) => {
+        const view = SECTION_VIEWS[selectedSection.id];
+        const capitalNoun = view.noun[0].toUpperCase() + view.noun.slice(1);
+        const isConfirmed = await askToConfirm({
+          title: `Delete “${selectedEntry.title}”?`,
+          message: [`This ${view.noun} will be gone for good.`, view.deleteWarning, "No undo, no take-backsies."].filter(Boolean).join(" "),
+          confirmLabel: `Delete ${capitalNoun}`,
+        });
+        if (!isConfirmed) return;
+        try {
+          await sendChange("DELETE", buildNoteUrl(selectedSection.id, selectedEntry.path));
+        } catch (error) {
+          showToast(`Couldn’t delete. ${describeFailure(error)}`, "error");
+          return;
+        }
+        showToast(pickOne(DELETED_MESSAGES));
+        history.replaceState(null, "", `#${selectedSection.id}`);
+        await loadSections();
+        entryArea.focus();
+      };
+
+      const deleteGroup = async (section, memberEntry) => {
+        const planCount = listGroupEntries(section, memberEntry).length;
+        const isConfirmed = await askToConfirm({
+          title: `Delete the set “${memberEntry.group}”?`,
+          message: `${planCount === 1 ? "The only plan" : `All ${planCount} plans`} in this set will be deleted for good. No undo, no take-backsies.`,
+          confirmLabel: `Delete ${planCount} ${planCount === 1 ? "Plan" : "Plans"}`,
+        });
+        if (!isConfirmed) return;
+        try {
+          await sendChange("DELETE", buildGroupUrl(section.id, memberEntry.project, memberEntry.group));
+        } catch (error) {
+          showToast(`Couldn’t delete the set. ${describeFailure(error)}`, "error");
+          return;
+        }
+        showToast(pickOne(DELETED_MESSAGES));
+        history.replaceState(null, "", `#${section.id}`);
+        await loadSections();
+        sidebar.querySelector(".sections [aria-current]")?.focus();
+      };
+
+      const slugify = (title) =>
+        title
+          .toLowerCase()
+          .normalize("NFKD")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 48)
+          .replace(/-+$/, "") || "plan";
+
+      const buildPlanText = (title, memberEntry) =>
+        [
+          "---",
+          `title: ${title}`,
+          `project: ${memberEntry.project}`,
+          "kind: feature",
+          "status: pending",
+          `created: ${new Date().toISOString()}`,
+          "---",
+          "",
+          "## Goal",
+          "",
+          "",
+          "## Context",
+          "",
+          "",
+          "## Steps",
+          "",
+          "1. ",
+          "",
+          "## Check",
+          "",
+          "- Run: ``",
+          "- Expect: ",
+          "",
+          "## Review",
+          "",
+          "- ",
+          "",
+        ].join("\n");
+
+      let addPlanTarget = null;
+
+      const openAddPlan = (section, memberEntry) => {
+        addPlanTarget = { section, memberEntry };
+        addPlanForm.reset();
+        addPlanDialog.querySelector("#add-plan-error").hidden = true;
+        addPlanDialog.querySelector("#add-plan-set").textContent = `It joins the set ${memberEntry.group} as the next plan in line.`;
+        addPlanDialog.showModal();
+        addPlanDialog.querySelector("#plan-title").focus();
+      };
+
+      addPlanDialog.querySelector("#add-plan-cancel").addEventListener("click", () => addPlanDialog.close());
+
+      addPlanForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const { section, memberEntry } = addPlanTarget;
+        const title = addPlanForm.elements.title.value.trim();
+        const errorMessage = addPlanDialog.querySelector("#add-plan-error");
+        const addButton = addPlanDialog.querySelector("#add-plan-button");
+        if (!title) {
+          errorMessage.textContent = "Give the plan a title first.";
+          errorMessage.hidden = false;
+          addPlanForm.elements.title.focus();
+          return;
+        }
+        const highestOrder = Math.max(0, ...listGroupEntries(section, memberEntry).map((entry) => parseInt(readOrder(entry), 10) || 0));
+        const entryPath = `${memberEntry.project}/${memberEntry.group}/${String(highestOrder + 1).padStart(2, "0")}-${slugify(title)}.md`;
+        addButton.disabled = true;
+        addButton.textContent = "Adding…";
+        try {
+          await sendChange("POST", buildNoteUrl(section.id, entryPath), buildPlanText(title, memberEntry));
+        } catch (error) {
+          errorMessage.textContent = `Couldn’t add the plan. ${describeFailure(error)}`;
+          errorMessage.hidden = false;
+          return;
+        } finally {
+          addButton.disabled = false;
+          addButton.textContent = "Add Plan";
+        }
+        addPlanDialog.close();
+        history.replaceState(null, "", `#${section.id}/${encodeURIComponent(entryPath)}`);
+        await loadSections();
+        showToast(pickOne(ADDED_MESSAGES));
+        const { section: newSection, entry: newEntry } = readSelection();
+        if (newEntry?.path === entryPath) startEditing(newSection, newEntry);
+      });
 
       document.querySelector(".skip-link").addEventListener("click", (event) => {
         event.preventDefault();
         entryArea.focus();
       });
 
-      addEventListener("hashchange", () => {
+      menuButton.addEventListener("click", () => setMenuOpen(document.body.dataset.menu !== "open"));
+      backdrop.addEventListener("click", () => setMenuOpen(false));
+      narrowScreen.addEventListener("change", () => setMenuOpen(false));
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && document.body.dataset.menu === "open") {
+          setMenuOpen(false);
+          menuButton.focus();
+        }
+      });
+
+      addEventListener("hashchange", async () => {
+        if (openEditor) {
+          const newHash = location.hash;
+          if (!(await confirmDiscard())) {
+            history.replaceState(null, "", openEditor.hash);
+            render();
+            return;
+          }
+          openEditor = null;
+          history.replaceState(null, "", newHash);
+        }
+        if (narrowScreen.matches) setMenuOpen(false);
         render();
         entryArea.scrollTop = 0;
         entryArea.focus();
       });
-      document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) loadSections();
+      addEventListener("beforeunload", (event) => {
+        if (hasUnsavedChanges()) event.preventDefault();
       });
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && !openEditor) loadSections();
+      });
+      setMenuOpen(false);
       loadSections();
     </script>
   </body>

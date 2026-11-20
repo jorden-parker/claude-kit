@@ -38,12 +38,14 @@ The old dashed forms (`--new`, `--save`, `--each`, `--list`, `--resume`) still w
 
 ## Open questions
 
-A recap can end with decisions only you can make. Before a handoff is saved, filled or handed off, `/handoff` asks them one at a time in Claude Code's own question dialog. With `/handoff save` or `/handoff new` this comes after the notes box, once the recap is written.
+A handoff can hinge on decisions only you can make. `/handoff` asks them before the recap is written, one at a time in Claude Code's own question dialog, so the recap is written once with your answers already part of it. With `/handoff save` or `/handoff new` this comes after the notes box.
 
-- Each question offers the likely answers the recap writer listed, or Yes and No, plus `Leave open`. Other takes any text
-- An answer is written into the handoff under `Decisions from the user:`, so the next session starts with the decision made
+- The recap writer replies with the questions alone when it finds any. A session with nothing to ask is still written in one go
+- Each question offers the likely answers the writer listed, or Yes and No, plus `Leave open`. Other takes any text
+- An answer goes to the writer as a decision. The writer puts it into the recap in its own words, where it belongs (the goal, a constraint, a next step), so the handoff holds no question-and-answer lines
 - `Leave open` keeps that question under `Open questions for the user:`
-- Esc stops the asking. The questions not yet answered stay open, and the handoff is still saved
+- Esc stops the asking. The questions not yet answered stay open, and the handoff is still written and saved
+- With the `subagent` writer, one subagent lists the questions and a second writes the recap once you have answered. With the `conversation` writer, the session's own model asks you itself, in the turn that writes the recap
 - `/handoff each` asks nothing
 
 ## Where handoffs live

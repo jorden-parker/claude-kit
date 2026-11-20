@@ -9,13 +9,14 @@ import type {
 const OPEN_QUESTIONS_HEADING = "Open questions for the user:";
 
 const RECAP_RULES = `You write a prompt that a fresh coding-agent session could receive to continue the work in the conversation below.
-The working directory, the conversation and a <guidance> block, when present, are the only sources: invent nothing they do not contain.
+The working directory, the conversation and the <guidance> and <decisions> blocks, when present, are the only sources: invent nothing they do not contain.
 Start with a one-line title that names the work, in 60 characters at most and with no period at the end, then a blank line.
 Right after the title line, when the work is about a git repository other than the working directory's, write a line "Repository: <absolute folder path>" naming it, judged from the files and commands in the conversation. When the work could belong to more than one repository, list each folder: "Repository: <path> | <path>". Leave the line out when the work is in the working directory's repository.
 Include the goal, what has been done, what is left, and the files and commands mentioned.
-If decisions are left that only the user can make, end with a line reading exactly "${OPEN_QUESTIONS_HEADING}", then one line per decision in the form "- <question ending in a question mark> (<likely answer> | <likely answer>)", with two or three likely answers. Leave that section out when no such decision is left, and never list there what the next session can check for itself.
+If decisions are left that only the user can make and no <decisions> block is present, do not write the prompt: output only a line reading exactly "${OPEN_QUESTIONS_HEADING}", then one line per decision in the form "- <question ending in a question mark> (<likely answer> | <likely answer>)", with two or three likely answers. Never list there what the next session can check for itself.
 If a <focus> block is present, center the recap on it and keep the rest brief.
 If a <guidance> block is present, it holds the user's rough notes for the next session: a direction to take, or extra requests. Work out what they mean and write that into the prompt in your own clear words, where it belongs: as the next step, a priority, a constraint or an added task. Do not quote the notes, label them, or add them as a separate block.
+If a <decisions> block is present, the user has been asked those questions, so always write the prompt. The block holds each question the user answered, with the answer, and each is settled: write it into the prompt in your own clear words, where it belongs, in the goal, as a constraint, a next step or an added task, and make the rest of the prompt agree with it. Do not quote the questions or the answers, label them, add them as a separate block, or list a settled question as open. If decisions that only the user can make are still left, end the prompt with the "${OPEN_QUESTIONS_HEADING}" line and its question lines.
 Output only the prompt, with no preamble, quotes or explanation.`;
 
 const PLAN_SEPARATOR = "---handoff---";
@@ -187,6 +188,13 @@ const describeFocus = (focus: string) =>
 const describeGuidance = (notes: string) =>
   notes ? `\n\n<guidance>\n${notes}\n</guidance>` : "";
 
+const NO_DECISION_LINE = "The user left every question open.";
+
+const describeDecisions = (decisionLines: string | undefined) =>
+  decisionLines === undefined
+    ? ""
+    : `\n\n<decisions>\n${decisionLines || NO_DECISION_LINE}\n</decisions>`;
+
 const buildRecapPrompt = (
   workingDirectory: string,
   recentMessages: string,
@@ -195,7 +203,12 @@ const buildRecapPrompt = (
   return `Working directory: ${workingDirectory}\n\nConversation:\n${recentMessages}${steering}`;
 };
 
-const CONVERSATION_PREAMBLE = `Stop the work here. Do not use any tools for this message: answer it straight away.
+const NO_TOOLS_RULE =
+  "Do not use any tools for this message: answer it straight away.";
+const ASK_FIRST_RULE =
+  "Use no tool for this message except AskUserQuestion. First ask the user, with AskUserQuestion, each decision that only they can make and that the work cannot continue without, offering two or three likely answers each; never ask what the next session can check for itself. Then answer straight away. For the rules below, a <decisions> block is present: it holds the questions the user answered, with their answers, and is empty when they answered none.";
+const buildConversationPreamble = (toolRule: string) =>
+  `Stop the work here. ${toolRule}
 The conversation above is what the rules below call "the conversation below".`;
 
 type HandoffArguments =
@@ -208,6 +221,7 @@ type HandoffArguments =
       isSaveOnly: boolean;
       focus: string;
       notes: string;
+      decisionLines?: string;
     };
 
 const parseHandoffArguments = (args: string): HandoffArguments => {
@@ -484,10 +498,18 @@ const chooseRecapStyle = (request: RecapRequest) =>
 
 const describeSteering = (request: RecapRequest) =>
   describeFocus(request.focus) +
-  describeGuidance(request.action === "recap" ? request.notes : "");
+  (request.action === "recap"
+    ? describeGuidance(request.notes) + describeDecisions(request.decisionLines)
+    : "");
 
-const buildConversationPrompt = (request: RecapRequest) =>
-  `${CONVERSATION_PREAMBLE}\n\n${chooseRecapStyle(request).rules}${describeSteering(request)}`;
+const buildConversationPrompt = (request: RecapRequest) => {
+  const shouldAskFirst =
+    request.action === "recap" && request.decisionLines === undefined;
+  const preamble = buildConversationPreamble(
+    shouldAskFirst ? ASK_FIRST_RULE : NO_TOOLS_RULE
+  );
+  return `${preamble}\n\n${chooseRecapStyle(request).rules}${describeSteering(request)}`;
+};
 
 const RECAP_MODEL = "haiku";
 const HAIKU_WRITER = "haiku";
@@ -545,6 +567,11 @@ const describeUnansweredReply = (
 
 type RecapDelegation = { awaitedRecap: AwaitedRecap; routeNotice: string };
 
+const markQuestionsAsked = (request: RecapRequest): RecapRequest =>
+  request.action === "recap"
+    ? { ...request, decisionLines: request.decisionLines ?? "" }
+    : request;
+
 const askConversationForRecap = (
   engine: EngineInterface,
   request: RecapRequest
@@ -555,7 +582,7 @@ const askConversationForRecap = (
     () => void engine.prompt.submit({ text: promptText, asUser: true })
   );
   return {
-    awaitedRecap: { request, promptText },
+    awaitedRecap: { request: markQuestionsAsked(request), promptText },
     routeNotice: WRITING_IN_CONVERSATION_MESSAGE,
   };
 };
@@ -770,14 +797,12 @@ const LEAVE_OPEN_ANSWER = "Leave open";
 const YES_OR_NO_ANSWERS = ["Yes", "No"];
 const MAX_SUGGESTED_ANSWERS = 3;
 const QUESTION_DIALOG_HEADER = "Handoff";
-const OPEN_QUESTIONS_PHRASE = /open questions for the user/i;
 const OPEN_QUESTIONS_HEADING_LINE =
   /^[#*\s]*open questions for the user:?[*\s]*$/i;
 const QUESTION_BULLET = /^\s*[-*]\s+(.*)$/;
 const QUESTION_WITH_ANSWERS = /^(.*?\?)\s*\(([^()]*\|[^()]*)\)\s*$/;
 
 type OpenQuestion = {
-  bulletLine: string;
   question: string;
   suggestedAnswers: string[];
 };
@@ -794,34 +819,11 @@ const readOpenQuestion = (bulletLine: string): OpenQuestion[] => {
     .slice(0, MAX_SUGGESTED_ANSWERS);
   return [
     {
-      bulletLine,
       question,
       suggestedAnswers:
         listedAnswers.length > 1 ? listedAnswers : YES_OR_NO_ANSWERS,
     },
   ];
-};
-
-const findOpenQuestions = (recap: string) => {
-  const recapLines = recap.split("\n");
-  const headingIndex = recapLines.findIndex((line) =>
-    OPEN_QUESTIONS_HEADING_LINE.test(line)
-  );
-  if (headingIndex < 0) return undefined;
-  const linesAfterHeading = recapLines.slice(headingIndex + 1);
-  const laterTextIndex = linesAfterHeading.findIndex(
-    (line) => line.trim() && !QUESTION_BULLET.test(line)
-  );
-  const questionLineCount =
-    laterTextIndex < 0 ? linesAfterHeading.length : laterTextIndex;
-  return {
-    linesBefore: recapLines.slice(0, headingIndex),
-    headingLine: recapLines[headingIndex] ?? "",
-    openQuestions: linesAfterHeading
-      .slice(0, questionLineCount)
-      .flatMap(readOpenQuestion),
-    linesAfter: linesAfterHeading.slice(questionLineCount),
-  };
 };
 
 const askOpenQuestion = async (
@@ -851,48 +853,47 @@ const collectAnswers = async (
   return answers;
 };
 
-const settleOpenQuestions = async (engine: EngineInterface, recap: string) => {
-  const section = findOpenQuestions(recap);
-  if (!section || section.openQuestions.length === 0) return recap;
-  const answers = await collectAnswers(engine, section.openQuestions);
-  const isDecided = (questionIndex: number) =>
-    Boolean(answers[questionIndex]) &&
-    answers[questionIndex] !== LEAVE_OPEN_ANSWER;
-  const decisionLines = section.openQuestions.flatMap(
-    (openQuestion, questionIndex) =>
-      isDecided(questionIndex)
-        ? [`- ${openQuestion.question} Answer: ${answers[questionIndex]}`]
-        : []
+const findOpenQuestions = (recap: string) => {
+  const recapLines = recap.split("\n");
+  const headingIndex = recapLines.findIndex((line) =>
+    OPEN_QUESTIONS_HEADING_LINE.test(line)
   );
-  if (decisionLines.length === 0) return recap;
-  const stillOpenLines = section.openQuestions
-    .filter((_, questionIndex) => !isDecided(questionIndex))
-    .map((openQuestion) => openQuestion.bulletLine);
-  return [
-    ...section.linesBefore,
-    section.headingLine.replace(
-      OPEN_QUESTIONS_PHRASE,
-      "Decisions from the user"
-    ),
-    ...decisionLines,
-    ...(stillOpenLines.length
-      ? ["", section.headingLine, ...stillOpenLines]
-      : []),
-    ...(section.linesAfter.length ? ["", ...section.linesAfter] : []),
-  ].join("\n");
+  return headingIndex < 0
+    ? []
+    : recapLines.slice(headingIndex + 1).flatMap(readOpenQuestion);
+};
+
+const askOpenQuestions = async (
+  engine: EngineInterface,
+  openQuestions: OpenQuestion[]
+) => {
+  const answers = await collectAnswers(engine, openQuestions);
+  return openQuestions
+    .flatMap((openQuestion, questionIndex) => {
+      const answer = answers[questionIndex];
+      return answer && answer !== LEAVE_OPEN_ANSWER
+        ? [`- ${openQuestion.question} Answer: ${answer}`]
+        : [];
+    })
+    .join("\n");
 };
 
 const deliverRecap = async (
   engine: EngineInterface,
+  progress: HandoffProgress,
   request: RecapRequest,
-  writtenRecap: string,
-  isWrittenRecapOnScreen: boolean
+  recapText: string,
+  isRecapOnScreen: boolean
 ) => {
   if (request.action === "each") {
-    return savePlanHandoffs(engine, writtenRecap, request.focus);
+    return savePlanHandoffs(engine, recapText, request.focus);
   }
-  const recapText = await settleOpenQuestions(engine, writtenRecap);
-  const isRecapOnScreen = isWrittenRecapOnScreen && recapText === writtenRecap;
+  const openQuestions =
+    request.decisionLines === undefined ? findOpenQuestions(recapText) : [];
+  if (openQuestions.length > 0) {
+    const decisionLines = await askOpenQuestions(engine, openQuestions);
+    return runRecap(engine, progress, { ...request, decisionLines });
+  }
   const saveOutcome = await saveSessionHandoff(
     engine,
     recapText,
@@ -1022,7 +1023,7 @@ const cancelBox = async (
 type HandoffProgress = {
   writer: string;
   awaitedRecap: AwaitedRecap | undefined;
-  recapAgentId: string | undefined;
+  recapAgentIds: string[];
   openBox: HandoffBox | undefined;
 };
 
@@ -1030,17 +1031,19 @@ const runRecap = async (
   engine: EngineInterface,
   progress: HandoffProgress,
   request: RecapRequest
-) => {
+): Promise<{ text: string }> => {
   const recapStart = await startRecap(engine, request, progress.writer);
   if (recapStart.delegation !== undefined) {
     const { delegation, delegationPrefix } = recapStart;
     progress.awaitedRecap = delegation.awaitedRecap;
-    progress.recapAgentId = delegation.awaitedRecap.agentId;
+    if (delegation.awaitedRecap.agentId !== undefined) {
+      progress.recapAgentIds.push(delegation.awaitedRecap.agentId);
+    }
     showStatus(engine, delegation.routeNotice);
     return { text: `${delegationPrefix}${delegation.routeNotice}` };
   }
   if (recapStart.failure !== undefined) return { text: recapStart.failure };
-  return deliverRecap(engine, request, recapStart.recap, false);
+  return deliverRecap(engine, progress, request, recapStart.recap, false);
 };
 
 const showBox = async (
@@ -1075,7 +1078,7 @@ export const register: Register = (on, options) => {
   const progress: HandoffProgress = {
     writer: readStringOption(options, "writer"),
     awaitedRecap: undefined,
-    recapAgentId: undefined,
+    recapAgentIds: [],
     openBox: undefined,
   };
   let hasPinnedOutcome = false;
@@ -1209,12 +1212,16 @@ export const register: Register = (on, options) => {
   });
 
   on("prompt.submit", (_, e, next) => {
-    const isRecapAgentReport =
-      e.origin?.kind === "peer" &&
-      progress.recapAgentId !== undefined &&
-      e.text.includes(`<agent-message from="${progress.recapAgentId}">`);
-    if (!isRecapAgentReport) return next(e);
-    progress.recapAgentId = undefined;
+    const reportingAgentId =
+      e.origin?.kind === "peer"
+        ? progress.recapAgentIds.find((agentId) =>
+            e.text.includes(`<agent-message from="${agentId}">`)
+          )
+        : undefined;
+    if (reportingAgentId === undefined) return next(e);
+    progress.recapAgentIds = progress.recapAgentIds.filter(
+      (agentId) => agentId !== reportingAgentId
+    );
     return { drop: RECAP_AGENT_DONE_NOTICE };
   });
 
@@ -1240,7 +1247,7 @@ export const register: Register = (on, options) => {
     progress.awaitedRecap = undefined;
 
     const isConversationTurn = e.agentId === undefined;
-    progress.recapAgentId = e.agentId;
+    if (e.agentId !== undefined) progress.recapAgentIds.push(e.agentId);
     const recap = stripWrappingCodeFence(e.answer);
     if (!recap && !isConversationTurn) {
       const delegation = askConversationForRecap($, request);
@@ -1249,7 +1256,8 @@ export const register: Register = (on, options) => {
       return turnResult;
     }
     const outcome = recap
-      ? (await deliverRecap($, request, recap, isConversationTurn)).text
+      ? (await deliverRecap($, progress, request, recap, isConversationTurn))
+          .text
       : EMPTY_REPLY_MESSAGE;
     if (isConversationTurn) {
       showStatus($, undefined);

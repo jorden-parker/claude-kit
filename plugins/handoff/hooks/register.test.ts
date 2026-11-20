@@ -2223,18 +2223,14 @@ testWithSession(
   }
 );
 
-const RECAP_WITH_QUESTIONS = [
-  "Fix the login",
-  "",
-  "Goal: the login works.",
-  "",
-  "**Open questions for the user:**",
+const QUESTION_LIST = [
   "- Should the token live in a cookie? (Cookie | Local storage)",
   "- Is the old endpoint still needed?",
 ].join("\n");
 
 const COOKIE_QUESTION = "Should the token live in a cookie?";
 const ENDPOINT_QUESTION = "Is the old endpoint still needed?";
+const WRITTEN_RECAP = "Fix the login\n\nGoal: the login works.";
 
 const answerQuestions = (on: On, answers: Record<string, string>) => {
   const askedOptions: Record<string, string[]> = {};
@@ -2258,13 +2254,38 @@ const answerQuestions = (on: On, answers: Record<string, string>) => {
 const readSavedRecap = (handoffFiles: Map<string, string>) =>
   [...handoffFiles.values()][0]?.split("\n---\n\n")[1];
 
+const QUESTIONS_REPLY = `**Open questions for the user:**\n${QUESTION_LIST}`;
+const BOTH_DECISIONS = [
+  "<decisions>",
+  `- ${COOKIE_QUESTION} Answer: Cookie`,
+  `- ${ENDPOINT_QUESTION} Answer: No`,
+  "</decisions>",
+].join("\n");
+
+const answerQuestionsThenRecap = (on: On) => {
+  const writerRequests: { system: string; prompt: string }[] = [];
+  on("model.complete", (_, e) => {
+    writerRequests.push({ system: e.system ?? "", prompt: e.prompt });
+    return {
+      value: {
+        isAnswered: true,
+        text: e.prompt.includes("<decisions>")
+          ? WRITTEN_RECAP
+          : QUESTIONS_REPLY,
+        usage: MODEL_USAGE,
+      },
+    };
+  });
+  return writerRequests;
+};
+
 testWithSession(
-  "save asks each open question of the recap and files the answers as decisions",
+  "save asks each open question before the recap is written and hands the answers to the writer",
   CONVERSATION,
   async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    answerRecap(on, RECAP_WITH_QUESTIONS);
+    const writerRequests = answerQuestionsThenRecap(on);
     const askedOptions = answerQuestions(on, {
       [COOKIE_QUESTION]: "Cookie",
       [ENDPOINT_QUESTION]: "No",
@@ -2276,28 +2297,19 @@ testWithSession(
       [COOKIE_QUESTION]: ["Cookie", "Local storage", "Leave open"],
       [ENDPOINT_QUESTION]: ["Yes", "No", "Leave open"],
     });
-    expect(readSavedRecap(handoffFiles)).toBe(
-      [
-        "Fix the login",
-        "",
-        "Goal: the login works.",
-        "",
-        "**Decisions from the user:**",
-        `- ${COOKIE_QUESTION} Answer: Cookie`,
-        `- ${ENDPOINT_QUESTION} Answer: No`,
-        "",
-      ].join("\n")
-    );
+    expect(writerRequests).toHaveLength(2);
+    expect(writerRequests[1]?.prompt).toContain(BOTH_DECISIONS);
+    expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
   }
 );
 
 testWithSession(
-  "a question the user leaves open stays an open question in the handoff",
+  "a question the user leaves open is not handed to the writer as a decision",
   CONVERSATION,
-  async ($, on, handoffFiles) => {
+  async ($, on) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    answerRecap(on, RECAP_WITH_QUESTIONS);
+    const writerRequests = answerQuestionsThenRecap(on);
     answerQuestions(on, {
       [COOKIE_QUESTION]: "Leave open",
       [ENDPOINT_QUESTION]: "Only for the mobile app",
@@ -2305,59 +2317,142 @@ testWithSession(
 
     await $.command.run(handoff("save the auth change"));
 
-    expect(readSavedRecap(handoffFiles)).toBe(
+    expect(writerRequests[1]?.prompt).toContain(
       [
-        "Fix the login",
-        "",
-        "Goal: the login works.",
-        "",
-        "**Decisions from the user:**",
+        "<decisions>",
         `- ${ENDPOINT_QUESTION} Answer: Only for the mobile app`,
-        "",
-        "**Open questions for the user:**",
-        "- Should the token live in a cookie? (Cookie | Local storage)",
-        "",
+        "</decisions>",
       ].join("\n")
     );
+    expect(writerRequests[1]?.prompt).not.toContain(COOKIE_QUESTION);
   }
 );
 
 testWithSession(
-  "dismissing the first question stops the asking and saves the recap as written",
+  "dismissing the first question stops the asking and the writer is told every question was left open",
   CONVERSATION,
   async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    answerRecap(on, RECAP_WITH_QUESTIONS);
+    const writerRequests = answerQuestionsThenRecap(on);
     const askedOptions = answerQuestions(on, {});
 
     await $.command.run(handoff("save the auth change"));
 
     expect(Object.keys(askedOptions)).toEqual([COOKIE_QUESTION]);
-    expect(readSavedRecap(handoffFiles)).toBe(`${RECAP_WITH_QUESTIONS}\n`);
+    expect(writerRequests[1]?.prompt).toContain(
+      "<decisions>\nThe user left every question open.\n</decisions>"
+    );
+    expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
   }
 );
 
 testWithSession(
-  "the recap writer is told to start with a short title and to list open questions with their likely answers",
+  "a recap with no open questions is written in one call and asks nothing",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    let modelCallCount = 0;
+    on("model.complete", () => {
+      modelCallCount += 1;
+      return {
+        value: { isAnswered: true, text: WRITTEN_RECAP, usage: MODEL_USAGE },
+      };
+    });
+    const askedOptions = answerQuestions(on, {});
+
+    await $.command.run(handoff("save the auth change"));
+
+    expect(modelCallCount).toBe(1);
+    expect(askedOptions).toEqual({});
+    expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
+  }
+);
+
+testWithSession(
+  "the recap writer is told to start with a short title, to list open questions first and to write decisions into the prompt",
   CONVERSATION,
   async ($, on) => {
     ignoreToasts(on);
-    const recapSystemPrompts: string[] = [];
-    on("model.complete", (_, e) => {
-      recapSystemPrompts.push(JSON.stringify(e));
-      return {
-        value: { isAnswered: true, text: "Resume prompt", usage: MODEL_USAGE },
-      };
-    });
+    const writerRequests = answerQuestionsThenRecap(on);
+    answerQuestions(on, {});
     on("prompt.fill", () => ({ isFilled: true }));
 
     await $.command.run(handoff("the auth change"));
 
-    expect(recapSystemPrompts[0]).toContain(
+    expect(writerRequests[0]?.system).toContain(
       "Start with a one-line title that names the work"
     );
-    expect(recapSystemPrompts[0]).toContain("Open questions for the user:");
+    expect(writerRequests[0]?.system).toContain(
+      'do not write the prompt: output only a line reading exactly "Open questions for the user:"'
+    );
+    expect(writerRequests[0]?.system).toContain(
+      "If a <decisions> block is present"
+    );
+  }
+);
+
+testWithConversationWriter(
+  "the conversation asks the open questions itself, and the ones it leaves open are not asked again",
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    answerTurns(on);
+    ignoreToasts(on);
+    collectStatuses(on);
+    const writerRequests = answerQuestionsThenRecap(on);
+    const askedOptions = answerQuestions(on, {});
+    const submittedPrompts = collectSubmittedPrompts(on);
+    const recapWithOpenQuestion = `${WRITTEN_RECAP}\n\n${QUESTIONS_REPLY}`;
+
+    await $.command.run(handoff("save"));
+    await clock.settle();
+    await endRecapTurn($, submittedPrompts[0] ?? "", recapWithOpenQuestion);
+
+    expect(submittedPrompts[0]).toContain(
+      "First ask the user, with AskUserQuestion"
+    );
+    expect(writerRequests).toEqual([]);
+    expect(askedOptions).toEqual({});
+    expect(readSavedRecap(handoffFiles)).toBe(`${recapWithOpenQuestion}\n`);
+  }
+);
+
+testWithSubagentWriter(
+  "a subagent lists the open questions, a second one writes the recap from the answers, and both reports stay out of the conversation",
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    answerTurns(on);
+    ignoreToasts(on);
+    collectStatuses(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+    const spawnedPrompts: string[] = [];
+    on("agent.spawn", (_, e) => {
+      spawnedPrompts.push(e.prompt);
+      return {
+        model: "claude-haiku-5-5",
+        agentId: `agent-${spawnedPrompts.length}`,
+      };
+    });
+    answerQuestions(on, {
+      [COOKIE_QUESTION]: "Cookie",
+      [ENDPOINT_QUESTION]: "No",
+    });
+
+    await $.command.run(handoff("save"));
+    await endAgentTurn($, "agent-1", spawnedPrompts[0] ?? "", QUESTIONS_REPLY);
+    const questionListReport = await submitAgentReport($, "agent-1");
+    await endAgentTurn($, "agent-2", spawnedPrompts[1] ?? "", WRITTEN_RECAP);
+    const recapReport = await submitAgentReport($, "agent-2");
+
+    expect(spawnedPrompts[0]).not.toContain("\n<decisions>\n");
+    expect(spawnedPrompts[1]).toContain(BOTH_DECISIONS);
+    expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
+    expect([questionListReport.drop, recapReport.drop]).toEqual([
+      "The handoff subagent finished; its result is in the status line.",
+      "The handoff subagent finished; its result is in the status line.",
+    ]);
+    expect(submittedPrompts).toEqual([]);
   }
 );
 

@@ -15,6 +15,7 @@
     // formatFileStamp and escapeHtml are copied between brainstorm, draft-pr and design.
     // openInBrowser, describeError and resolveProjectPath are copied between brainstorm and design.
     // resolveProjectName, toProjectName, trimText and toSlug are copied between handoff, small-plans, brainstorm and project-notes.
+    // secret-patterns.ts is copied between handoff and project-notes: secret patterns copied per plugin on purpose; plugins cannot import each other.
     "ignoredClones": [
       "dup:e67f2e0e:2",
       "dup:f469e6dc:2",
@@ -28,7 +29,8 @@
       "dup:efbf4a15:2",
       "dup:fdb5bdd8:2",
       "dup:577fa913:2",
-      "dup:16cd138d:2"
+      "dup:16cd138d:2",
+      "dup:beaaf42e:2"
     ]
   }
 }

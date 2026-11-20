@@ -1824,6 +1824,62 @@ test(
   }
 );
 
+const SAMPLE_SECRET = `ghp_${"a".repeat(36)}`;
+
+test(
+  "save refuses to write a recap that holds a secret and names its kind",
+  { options: { writer: "haiku", hasConversationTurns: false } },
+  async ($, on) => {
+    const writtenPaths: string[] = [];
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    on("env.get", () => ({ value: "/home/tester" }));
+    on("process.run", () => answerGit("/repo/.git\n"));
+    on("fs.list", () => ({ value: [] }));
+    on("fs.write", (_, e) => {
+      writtenPaths.push(e.path);
+      return { value: undefined };
+    });
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    mockStore(on);
+    answerRecap(on, `Resume prompt\n\nDeploy with ${SAMPLE_SECRET}.`);
+
+    const reply = await $.command.run(handoff("save"));
+
+    expect(reply.text).toContain("holds a secret (GitHub token)");
+    expect(reply.text).not.toContain(SAMPLE_SECRET);
+    expect(writtenPaths).toEqual([]);
+  }
+);
+
+testWithSession(
+  "new refuses a recap that holds a secret and hands nothing on",
+  CONVERSATION,
+  async ($, on, handoffFiles, store) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    const handoffSteps: string[] = [];
+    answerRecap(on, `Resume prompt\n\nDeploy with ${SAMPLE_SECRET}.`);
+    on("command.run", { command: "clear" }, () => {
+      handoffSteps.push("clear");
+      return { text: "" };
+    });
+    on("prompt.submit", (_, e) => {
+      handoffSteps.push(`submit:${e.text}`);
+      return { text: e.text };
+    });
+
+    const reply = await $.command.run(handoff("new"));
+    await clock.settle();
+
+    expect(reply.text).toContain("holds a secret (GitHub token)");
+    expect(reply.text).not.toContain(SAMPLE_SECRET);
+    expect(handoffSteps).toEqual([]);
+    expect(store.has(PENDING_HANDOFF_KEY)).toBe(false);
+    expect(handoffFiles.size).toBe(0);
+  }
+);
+
 const BOX_PANE = {
   plugin: "handoff",
   component: "Pane",

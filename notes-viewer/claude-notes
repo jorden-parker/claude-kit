@@ -8,11 +8,7 @@ fail() {
 
 viewer_directory="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 
-if [ "${1:-}" = "--dev" ]; then
-  shift
-  export CLAUDE_NOTES_DEV="$viewer_directory"
-  export CLAUDE_NOTES_PORT="${CLAUDE_NOTES_PORT:-47619}"
-fi
+export CLAUDE_NOTES_DEV="$viewer_directory"
 source_checksum="$(cat "$viewer_directory"/*.go "$viewer_directory"/go.* "$viewer_directory"/index.html | cksum | cut -d ' ' -f 1)"
 viewer_path="${XDG_CACHE_HOME:-$HOME/.cache}/claude-notes/viewer-$source_checksum"
 

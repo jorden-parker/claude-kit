@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   decideDelegation,
@@ -8,7 +8,7 @@ import {
 } from "./delegate-guard.ts";
 import type { HookEvent, HookResult } from "./types.ts";
 
-const LIMIT = 40_000;
+const LIMIT = 20_000;
 const SCOUT_PROMPT_LIMIT = 1_500;
 
 const mainEvent = (
@@ -68,7 +68,7 @@ const specificOf = (result: HookResult) =>
   )?.hookSpecificOutput;
 const isDenied = (result: HookResult) =>
   specificOf(result)?.permissionDecision === "deny";
-const WARNING_LINE = 30_000;
+const WARNING_LINE = 10_000;
 const reasonOf = (result: HookResult) =>
   (
     result?.output as {
@@ -85,7 +85,7 @@ test("denies a Read after lookups reached the budget", () => {
   expect(isDenied(result)).toBe(true);
   expect(reasonOf(result)).toContain("guards:context-scout");
   expect(reasonOf(result)).toContain("Haiku");
-  expect(reasonOf(result)).toContain("40000");
+  expect(reasonOf(result)).toContain("20000");
 });
 
 test("allows a Read one character under the budget", () => {
@@ -97,7 +97,7 @@ test("warns, without denying, once lookups reach three quarters of the budget", 
   const nearBudget = transcript(...readPair("r1", WARNING_LINE));
   const result = decideDelegation(readEvent, nearBudget);
   expect(isDenied(result)).toBe(false);
-  expect(specificOf(result)?.additionalContext).toContain("30000 of 40000");
+  expect(specificOf(result)?.additionalContext).toContain("10000 of 20000");
   expect(specificOf(result)?.additionalContext).toContain(
     "guards:context-scout"
   );
@@ -145,7 +145,7 @@ test.each([
 
 test("never denies a non-lookup tool over budget", () => {
   expect(
-    decideDelegation(mainEvent("Edit", { file_path: "/a.ts" }), overBudget)
+    decideDelegation(mainEvent("TodoWrite", { todos: [] }), overBudget)
   ).toBeNull();
 });
 
@@ -375,4 +375,38 @@ test("decideDelegationFromTranscript reads the transcript file and denies over b
 
 test("decideDelegationFromTranscript allows when transcript_path is missing", () => {
   expect(decideDelegationFromTranscript(readEvent)).toBeNull();
+});
+
+test.each(["Edit", "Write", "MultiEdit", "NotebookEdit"])(
+  "denies %s of a project file in the main session",
+  (toolName) => {
+    const result = decideDelegation(
+      mainEvent(toolName, { file_path: "/repo/src/a.ts" }),
+      ""
+    );
+    expect(result?.output).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "deny" },
+    });
+    expect(JSON.stringify(result)).toContain("guards:worker");
+  }
+);
+
+test.each([
+  join(homedir(), ".claude/projects/x/memory/note.md"),
+  join(tmpdir(), "scratch/plan.md"),
+  "/private/tmp/claude-501/scratchpad/page.html",
+  "/tmp/notes.md",
+])("allows an edit of the orchestration file %s", (filePath) => {
+  expect(
+    decideDelegation(mainEvent("Write", { file_path: filePath }), "")
+  ).toBeNull();
+});
+
+test("lets a subagent edit project files", () => {
+  expect(
+    decideDelegation(
+      { ...mainEvent("Edit", { file_path: "/repo/src/a.ts" }), agent_id: "a1" },
+      ""
+    )
+  ).toBeNull();
 });

@@ -1,11 +1,15 @@
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import { transcriptTail } from "./browser-check.ts";
 import { GIT_OPTIONS, withoutQuotedText } from "./bash-guard.ts";
 import { deny, type HookEvent, type HookResult } from "./types.ts";
 
-const LOOKUP_BUDGET = 40_000;
-const WARNING_LINE = 30_000;
+const LOOKUP_BUDGET = 20_000;
+const WARNING_LINE = 10_000;
 const SCOUT_PROMPT_LIMIT = 1_500;
 const SCOUT_AGENT = "guards:context-scout";
+const WORKER_AGENT = "guards:worker";
+const EDIT_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 const DEFAULT_AGENT = "general-purpose";
 const SESSION_MODEL_AGENTS = [DEFAULT_AGENT, "claude"];
 const LOOKUP_TOOLS = ["Read", "Grep", "Glob"];
@@ -63,10 +67,27 @@ function delegationProblem(event: HookEvent): HookResult {
   }
   if (SESSION_MODEL_AGENTS.includes(agentType) && input.model === undefined) {
     return deny(
-      `Name a model: "haiku" to read or search, "sonnet" to write code. With none, this agent runs on the session model, the costliest choice.`
+      `Use subagent_type: "${WORKER_AGENT}" to write code or run checks, "${SCOUT_AGENT}" to read or search, or name model: "haiku". With no model, this agent runs on the session model, the costliest choice.`
     );
   }
   return null;
+}
+
+function orchestrationFolders(): string[] {
+  return [join(homedir(), ".claude"), tmpdir(), "/tmp", "/private/tmp"];
+}
+
+function isProjectEdit(event: HookEvent): boolean {
+  if (!EDIT_TOOLS.includes(event.tool_name ?? "")) return false;
+  const input = event.tool_input ?? {};
+  const filePath = String(input.file_path ?? input.notebook_path ?? "");
+  return !orchestrationFolders().some((folder) =>
+    filePath.startsWith(`${folder}/`)
+  );
+}
+
+function editReason(event: HookEvent): string {
+  return `The main session orchestrates and does not edit project files. Send this change to ${WORKER_AGENT} through the Agent tool: the files, the exact change and the check to run. Blocked: ${event.tool_name} of ${event.tool_input?.file_path ?? event.tool_input?.notebook_path}.`;
 }
 
 function budgetReason(spent: number): string {
@@ -111,7 +132,7 @@ function isHaikuDelegation(block: any): boolean {
   return (
     DELEGATION_TOOLS.includes(block.name) &&
     (block.input?.model === "haiku" ||
-      block.input?.subagent_type === SCOUT_AGENT)
+      [SCOUT_AGENT, WORKER_AGENT].includes(block.input?.subagent_type))
   );
 }
 
@@ -163,6 +184,7 @@ export function decideDelegation(
   transcript: string
 ): HookResult {
   if (isExempt(event)) return null;
+  if (isProjectEdit(event)) return deny(editReason(event));
   if (isAgentCall(event)) return delegationProblem(event);
   if (!isLookup(event.tool_name, event.tool_input)) return null;
   const spent = lookupCharacters(transcript);

@@ -19,25 +19,31 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 - **read-guard** (PreToolUse, Read): caps a Read of a text file over 300 lines
   at `limit: 300`, keeping the `offset`, and tells Claude the file's length so
   it can read on. Denies a text file over 5 MB unless `limit` is 300 or less.
-- **delegation-rules** (SessionStart): tells Claude to delegate by default:
-  multi-file lookups to `guards:context-scout`, fully specified multi-file
-  edits to an Agent call with `model: "haiku"` (or `"sonnet"`), and
-  independent work to parallel agents, while keeping single reads, design and
-  review inline. Off with `GUARDS_DELEGATE_GUARD=0`.
+- **delegation-rules** (SessionStart): makes the main session an orchestrator.
+  It plans, talks to the user and judges results, and hands lookups to
+  `guards:context-scout` and implementation and verification to `guards:worker`
+  (Haiku), sending independent work out in parallel. Off with
+  `GUARDS_DELEGATE_GUARD=0`.
+- **worker** (agent, Haiku): implements a fully specified change or runs a
+  check, then replies DONE or BLOCKED with changed `path:line`s and the check's
+  result line.
 - **delegate-guard** (PreToolUse, Read, Grep, Glob, Bash, Agent): forces
   context-heavy work onto Haiku subagents. In the main session it adds up the
   characters that lookups (`Read`, `Grep`, `Glob`, and Bash commands that start
   with `cat`, `grep`, `rg`, `find`, `ls`, `git log`, `git diff` and the like)
-  put into the context. From 30,000 characters it warns with each lookup; at
-  40,000 it denies the next lookup and points Claude at the
+  put into the context. From 10,000 characters it warns with each lookup; at
+  20,000 it denies the next lookup and points Claude at the
   `guards:context-scout` agent. Only a delegation to Haiku
-  (that agent, or any agent spawned with `model: "haiku"`) resets the budget;
+  (`guards:context-scout`, `guards:worker`, or any agent spawned with
+  `model: "haiku"`) resets the budget;
   a new user prompt does not, since the context keeps the earlier reads. It
   also denies three kinds of Agent call: an `Explore` subagent (the scout is
   the only lookup agent, since its reply is capped), a scout prompt over 1,500
   characters, and a `general-purpose` or `claude` agent (or one with no
   `subagent_type`) that names no `model`, since it would run on the session
   model. Plugin agents keep the model their own file pins.
+  It also denies Edit, Write, MultiEdit and NotebookEdit of any file outside
+  `~/.claude` and the temp folders, and points Claude at `guards:worker`.
   Subagents are never limited. Claude Code only. Opt out with
   `GUARDS_DELEGATE_GUARD=0`. Hooks load when a session starts, so a session
   opened before the plugin was updated runs without this guard.

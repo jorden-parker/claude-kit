@@ -17,6 +17,8 @@ test("adds the delegation rules as session context", () => {
     hookSpecificOutput: { hookEventName: "SessionStart" },
   });
   expect(contextOf(result)).toContain("guards:context-scout");
+  expect(contextOf(result)).toContain("guards:worker");
+  expect(contextOf(result)).toContain("orchestrator");
   expect(contextOf(result)).toContain('model: "haiku"');
 });
 

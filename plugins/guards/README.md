@@ -24,6 +24,10 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   `guards:context-scout` and implementation and verification to `guards:worker`
   (Haiku), sending independent work out in parallel. Off with
   `GUARDS_DELEGATE_GUARD=0`.
+- **ci-status** (SessionStart): in a repository whose `origin` is on GitHub,
+  asks `gh` for the latest run on `main` and shows one warning line when it
+  failed. Silent when `gh` is missing or signed out, when it takes over 10
+  seconds, and when the run passed.
 - **worker** (agent, Haiku): implements a fully specified change or runs a
   check, then replies DONE or BLOCKED with changed `path:line`s and the check's
   result line.

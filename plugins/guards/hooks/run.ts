@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { decide as bashGuard } from "./bash-guard.ts";
 import { decideFromTranscript as browserCheck } from "./browser-check.ts";
+import { decideCiStatus as ciStatus } from "./ci-status.ts";
 import { decide as commitGuard } from "./commit-guard.ts";
 import { decideDelegationFromTranscript as delegateGuard } from "./delegate-guard.ts";
 import { decide as delegationRules } from "./delegation-rules.ts";
@@ -22,6 +23,7 @@ const HOOKS: Record<string, (event: HookEvent) => HookResult> = {
   "bash-guard": bashGuard,
   "bash-trim": bashTrim,
   "browser-check": browserCheck,
+  "ci-status": ciStatus,
   "commit-guard": commitGuard,
   "delegate-guard": delegateGuard,
   "delegation-rules": delegationRules,

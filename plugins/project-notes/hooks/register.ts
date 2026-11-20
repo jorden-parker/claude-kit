@@ -1,6 +1,7 @@
 import type { EngineInterface, Register } from "claude-code";
 import {
   auditNoteFolders,
+  listStoreRoots,
   moveNoteFolder,
   NOTE_STORES,
   QUALIFIED_MOVE_TOOL_NAME,
@@ -41,6 +42,11 @@ const SUBCOMMAND_SUGGESTIONS = [
   {
     text: "organise",
     description: "File the existing session notes as project notes",
+  },
+  {
+    text: "edit",
+    description:
+      "Have Claude change a saved note, handoff, small plan or brainstorm",
   },
   {
     text: "audit",
@@ -278,8 +284,31 @@ const askClaude = (engine: EngineInterface, instruction: string) => {
   engine.clock.after(0, () => void engine.prompt.submit({ text: instruction }));
 };
 
+const NOTE_EDITING_TOOLS = ["Edit", "Write", "MultiEdit"];
+const GENERATED_INDEX_FILE = "index.md";
+const OWN_NOTE_REASON =
+  "The file is a saved note, handoff, small plan or brainstorm under ~/.claude.";
+
+const isInsideFolder = (filePath: string, folder: string) =>
+  filePath.startsWith(`${folder}/`) && !filePath.split("/").includes("..");
+
+const isEditableSavedNote = async (
+  engine: EngineInterface,
+  tool: string,
+  filePath: string
+) => {
+  if (!NOTE_EDITING_TOOLS.includes(tool)) return false;
+  if (filePath.endsWith(`/${GENERATED_INDEX_FILE}`)) return false;
+  const storeRoots = await listStoreRoots(engine);
+  if (!storeRoots.some((root) => isInsideFolder(filePath, root))) return false;
+  return tool !== "Write" || (await engine.fs.exists(filePath));
+};
+
+const buildEditInstruction = (storeRoots: string[], requestedChange: string) =>
+  `Change a saved note: ${requestedChange || "ask the user which note to change and how"}. Notes, handoffs, small plans and brainstorms are Markdown files under ${storeRoots.join(", ")}, one folder per repository. Find the file with Glob or Grep there, Read it, then change it with Edit, never with a shell command, keeping its front matter lines (project:, status:, cwd:) unless the change is to them. Never edit an ${GENERATED_INDEX_FILE}: the plugins rewrite it. Change a small plan's status with mcp__small-plans__set_small_plan_status. Reply with one line naming each changed file.`;
+
 const VIEWER_HINT =
-  "Run claude-notes in a terminal to browse every project note. /project-notes organise files existing session notes as project notes. /project-notes audit moves notes saved under a worktree's name to the repository's name.";
+  "Run claude-notes in a terminal to browse every project note. /project-notes organise files existing session notes as project notes. /project-notes edit <change> has Claude change a saved note, handoff, plan or brainstorm. /project-notes audit moves notes saved under a worktree's name to the repository's name.";
 
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
@@ -292,8 +321,8 @@ export const register: Register = (on) => {
     await $.command.register({
       name: "project-notes",
       description:
-        "/project-notes organise files existing session notes as project notes; /project-notes audit moves notes saved under a worktree's name to the repository's name",
-      argumentHint: "organise | audit",
+        "/project-notes organise files existing session notes as project notes; /project-notes edit changes a saved note, handoff, plan or brainstorm; /project-notes audit moves notes saved under a worktree's name to the repository's name",
+      argumentHint: "organise | edit <change> | audit",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
@@ -349,6 +378,14 @@ export const register: Register = (on) => {
   });
 
   on("command.run", { command: "project-notes" }, async ($, e) => {
+    const editRequest = /^edit\b\s*(.*)$/is.exec(e.args.trim());
+    if (editRequest) {
+      askClaude(
+        $,
+        buildEditInstruction(await listStoreRoots($), editRequest[1].trim())
+      );
+      return { text: "Editing the saved note…" };
+    }
     if (/^audit$/i.test(e.args.trim())) {
       askClaude($, AUDIT_INSTRUCTION);
       return {
@@ -373,6 +410,17 @@ export const register: Register = (on) => {
     if (e.tool === "Skill" && /humanizer/i.test(String(toolInput.skill)))
       isHumanizerLoaded = true;
     return next(e);
+  });
+
+  on("tool.check", async ($, e, next) => {
+    const verdict = await next(e);
+    if (verdict.decision !== "ask") return verdict;
+    const filePath = String(
+      (e.input as { file_path?: unknown })?.file_path ?? ""
+    );
+    return (await isEditableSavedNote($, e.tool, filePath))
+      ? { decision: "allow", reason: OWN_NOTE_REASON }
+      : verdict;
   });
 
   on("prompt.autocomplete", async (_, e, next) => {

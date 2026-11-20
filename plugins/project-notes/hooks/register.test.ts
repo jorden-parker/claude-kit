@@ -431,13 +431,13 @@ const autocomplete = ($: Engine, text: string) =>
 const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
   reply.suggestions.map((suggestion) => suggestion.text);
 
-test("typing the first word after /project-notes suggests organise and audit", async ($, on) => {
+test("typing the first word after /project-notes suggests organise, edit and audit", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
   const emptyReply = await autocomplete($, "/project-notes ");
   const partReply = await autocomplete($, "/project-notes org");
 
-  expect(suggestedTexts(emptyReply)).toEqual(["organise", "audit"]);
+  expect(suggestedTexts(emptyReply)).toEqual(["organise", "edit", "audit"]);
   expect(suggestedTexts(partReply)).toEqual(["organise"]);
   expect(emptyReply.suggestions[0]!.description).toContain("session notes");
 });
@@ -699,4 +699,75 @@ test("/project-notes audit asks Claude to audit the note folders", async ($, on)
 
   expect(submittedPrompts[0]).toContain(AUDIT_TOOL);
   expect(submittedPrompts[0]).toContain(MOVE_TOOL);
+});
+
+test("editing a saved note, handoff, plan or brainstorm needs no permission", async ($, on) => {
+  mockEngine(on, {
+    "/home/tester/.claude/handoffs/claude-kit/003-auth.md": "handoff",
+    "/home/tester/.claude/small-plans/claude-kit/set/01-a.md": "plan",
+  });
+  on("tool.check", () => ({ decision: "ask" }));
+
+  const handoffEdit = await $.tool.check({
+    tool: "Edit",
+    input: {
+      file_path: "/home/tester/.claude/handoffs/claude-kit/003-auth.md",
+    },
+  });
+  const planWrite = await $.tool.check({
+    tool: "Write",
+    input: {
+      file_path: "/home/tester/.claude/small-plans/claude-kit/set/01-a.md",
+    },
+  });
+  const noteEdit = await $.tool.check({
+    tool: "MultiEdit",
+    input: { file_path: `${NOTES_ROOT}/claude-kit/fact/2026-11-20-x.md` },
+  });
+
+  expect(handoffEdit.decision).toBe("allow");
+  expect(planWrite.decision).toBe("allow");
+  expect(noteEdit.decision).toBe("allow");
+});
+
+test("new files, index files and files outside the stores still ask", async ($, on) => {
+  mockEngine(on);
+  on("tool.check", () => ({ decision: "ask" }));
+
+  const newFileWrite = await $.tool.check({
+    tool: "Write",
+    input: { file_path: `${NOTES_ROOT}/claude-kit/fact/new.md` },
+  });
+  const indexEdit = await $.tool.check({
+    tool: "Edit",
+    input: {
+      file_path: "/home/tester/.claude/small-plans/claude-kit/set/index.md",
+    },
+  });
+  const settingsEdit = await $.tool.check({
+    tool: "Edit",
+    input: { file_path: "/home/tester/.claude/settings.json" },
+  });
+  const escapingEdit = await $.tool.check({
+    tool: "Edit",
+    input: { file_path: `${NOTES_ROOT}/../settings.json` },
+  });
+
+  expect(newFileWrite.decision).not.toBe("allow");
+  expect(indexEdit.decision).not.toBe("allow");
+  expect(settingsEdit.decision).not.toBe("allow");
+  expect(escapingEdit.decision).not.toBe("allow");
+});
+
+test("/project-notes edit asks Claude to find the note and change it with Edit", async ($, on) => {
+  const { submittedPrompts } = await runCommand(
+    $,
+    on,
+    "project-notes",
+    "edit mark the auth handoff done"
+  );
+
+  expect(submittedPrompts[0]).toContain("mark the auth handoff done");
+  expect(submittedPrompts[0]).toContain("Edit");
+  expect(submittedPrompts[0]).toContain("/home/tester/.claude/handoffs");
 });

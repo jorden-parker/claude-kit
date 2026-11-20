@@ -75,6 +75,12 @@ async function resolveStoreRoot(engine: EngineInterface, store: NoteStore) {
   );
 }
 
+export async function listStoreRoots(engine: EngineInterface) {
+  return Promise.all(
+    NOTE_STORES.map((store) => resolveStoreRoot(engine, store))
+  );
+}
+
 async function listFilesUnder(
   engine: EngineInterface,
   folder: string

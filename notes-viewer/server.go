@@ -497,6 +497,16 @@ func newViewerServer() http.Handler {
 		writer.WriteHeader(http.StatusNoContent)
 	})
 
+	routes.HandleFunc("POST /api/projects/{project}/rename", func(writer http.ResponseWriter, request *http.Request) {
+		newProject := request.URL.Query().Get("to")
+		if status, refusal := renameProject(request.PathValue("project"), newProject); refusal != "" {
+			http.Error(writer, refusal, status)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(writer).Encode(map[string]string{"project": newProject})
+	})
+
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if !isLocalHost(request.Host) || !isSameOrigin(request) {
 			http.Error(writer, "Forbidden.", http.StatusForbidden)

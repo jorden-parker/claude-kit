@@ -197,6 +197,13 @@
         gap: 4px 8px;
         margin: 14px 4px 4px 10px;
       }
+      .project-heading {
+        margin: 22px 4px 6px 10px;
+      }
+      .project-heading h2 {
+        min-width: 0;
+        margin: 0;
+      }
       nav h3 {
         min-width: 0;
         margin: 0;
@@ -1001,6 +1008,20 @@
       </form>
     </dialog>
 
+    <dialog id="rename-project-dialog" aria-labelledby="rename-project-title" aria-describedby="rename-project-scope">
+      <form method="dialog" id="rename-project-form">
+        <h2 id="rename-project-title">Rename Project</h2>
+        <p id="rename-project-scope"></p>
+        <label for="project-name">New name</label>
+        <input id="project-name" name="name" required autocomplete="off" spellcheck="false" maxlength="100" />
+        <p class="field-error" id="rename-project-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button" type="button" id="rename-project-cancel">Cancel</button>
+          <button class="button primary" value="confirm" id="rename-project-button">Rename</button>
+        </div>
+      </form>
+    </dialog>
+
     <script>
       const sidebar = document.querySelector("nav");
       const entryArea = document.querySelector("main");
@@ -1010,6 +1031,8 @@
       const confirmDialog = document.querySelector("#confirm-dialog");
       const addPlanDialog = document.querySelector("#add-plan-dialog");
       const addPlanForm = document.querySelector("#add-plan-form");
+      const renameProjectDialog = document.querySelector("#rename-project-dialog");
+      const renameProjectForm = document.querySelector("#rename-project-form");
       const narrowScreen = matchMedia("(max-width: 720px)");
       let sections = [];
       let openEditor = null;
@@ -1244,6 +1267,14 @@
         return groupHeading;
       };
 
+      const createProjectHeading = (project) => {
+        const projectHeading = createElement("div", "", "group-heading project-heading");
+        const actions = createElement("div", "", "group-actions");
+        actions.append(createIconButton(`Rename project ${project}`, "pencil", "rename", () => openRenameProject(project)));
+        projectHeading.append(createElement("h2", project), actions);
+        return projectHeading;
+      };
+
       const createSidebarHeader = () => {
         const header = createElement("div", "", "sidebar-header");
         const brand = createElement("div", "", "brand");
@@ -1262,7 +1293,7 @@
         entries.forEach((entry, entryIndex) => {
           const previousEntry = entries[entryIndex - 1] ?? {};
           const isNewProject = entry.project !== previousEntry.project;
-          if (isNewProject) sidebar.append(createElement("h2", entry.project));
+          if (isNewProject) sidebar.append(createProjectHeading(entry.project));
           if (entry.group && (isNewProject || entry.group !== previousEntry.group)) sidebar.append(createGroupHeading(selectedSection, entry));
           sidebar.append(createEntryLink(selectedSection, entry, selectedEntry));
         });
@@ -1595,6 +1626,66 @@
         showToast(pickOne(ADDED_MESSAGES));
         const { section: newSection, entry: newEntry } = readSelection();
         if (newEntry?.path === entryPath) startEditing(newSection, newEntry);
+      });
+
+      const PROJECT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+      let renameProjectTarget = null;
+
+      const openRenameProject = (project) => {
+        renameProjectTarget = project;
+        renameProjectForm.reset();
+        renameProjectForm.elements.name.value = project;
+        renameProjectDialog.querySelector("#rename-project-error").hidden = true;
+        renameProjectDialog.querySelector("#rename-project-scope").textContent = `Renames the ${project} folder in every section and rewrites the project: line of each note inside.`;
+        renameProjectDialog.showModal();
+        renameProjectForm.elements.name.select();
+      };
+
+      const describeProjectNameProblem = (newProject, project) => {
+        if (!newProject) return "Give the project a name first.";
+        if (newProject === project) return "That’s the name it already has.";
+        if (!PROJECT_NAME_PATTERN.test(newProject)) return "Start with a letter or digit, then use only letters, digits, dots, dashes and underscores.";
+        if (openEditor) return "Save or cancel the note you’re editing first.";
+        return "";
+      };
+
+      const replaceHashProject = (project, newProject) => {
+        const [sectionId, ...pathSegments] = decodeURIComponent(location.hash.slice(1)).split("/");
+        if (pathSegments[0] !== project) return;
+        history.replaceState(null, "", `#${sectionId}/${encodeURIComponent([newProject, ...pathSegments.slice(1)].join("/"))}`);
+      };
+
+      renameProjectDialog.querySelector("#rename-project-cancel").addEventListener("click", () => renameProjectDialog.close());
+
+      renameProjectForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const project = renameProjectTarget;
+        const newProject = renameProjectForm.elements.name.value.trim();
+        const errorMessage = renameProjectDialog.querySelector("#rename-project-error");
+        const renameButton = renameProjectDialog.querySelector("#rename-project-button");
+        const problem = describeProjectNameProblem(newProject, project);
+        if (problem) {
+          errorMessage.textContent = problem;
+          errorMessage.hidden = false;
+          renameProjectForm.elements.name.focus();
+          return;
+        }
+        renameButton.disabled = true;
+        renameButton.textContent = "Renaming…";
+        try {
+          await sendChange("POST", `/api/projects/${encodeURIComponent(project)}/rename?to=${encodeURIComponent(newProject)}`);
+        } catch (error) {
+          errorMessage.textContent = describeFailure("rename the project", error);
+          errorMessage.hidden = false;
+          return;
+        } finally {
+          renameButton.disabled = false;
+          renameButton.textContent = "Rename";
+        }
+        renameProjectDialog.close();
+        replaceHashProject(project, newProject);
+        await loadSections();
+        showToast(`Renamed ${project} to ${newProject}.`);
       });
 
       document.querySelector(".skip-link").addEventListener("click", (event) => {

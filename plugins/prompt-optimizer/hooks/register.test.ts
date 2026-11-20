@@ -1280,7 +1280,7 @@ testBehindProxy(
     expect(reply.exitCode).toBe(undefined);
     expect(modelCalls).toEqual([]);
     expect(spawnedAgents).toHaveLength(1);
-    expect(spawnedAgents[0]?.agentType).toBe("general-purpose");
+    expect(spawnedAgents[0]?.agentType).toBe("prompt-optimizer:rewriter");
     expect(spawnedAgents[0]?.model).toBe("sonnet");
     expect(spawnedAgents[0]?.prompt).toContain("Do not use any tools");
     expect(spawnedAgents[0]?.prompt).toContain(

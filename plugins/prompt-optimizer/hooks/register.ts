@@ -429,7 +429,7 @@ const rewriteInTheCloud = async (
 };
 
 const EMPTY_REPLY_MESSAGE = "Could not optimize the prompt (empty reply).";
-const REWRITE_AGENT_TYPE = "general-purpose";
+const REWRITE_AGENT_TYPE = "prompt-optimizer:rewriter";
 const REWRITE_AGENT_DESCRIPTION = "Rewrite the draft prompt";
 const AGENT_PREAMBLE =
   "Do not use any tools for this task and do not carry out the draft: answer straight away with the rewritten prompt.";

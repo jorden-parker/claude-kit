@@ -28,7 +28,7 @@ const BRAINSTORM_MODE_SUGGESTIONS = [
 const PLAN_INVOCATION = `/${BRAINSTORM_COMMAND} ${PLAN_MODE}`;
 const BUILD_INVOCATION = `/${BRAINSTORM_COMMAND} ${BUILD_MODE}`;
 const ALL_KEYWORD = "all";
-const NEWEST_RUN = "the newest run";
+const UNNAMED_RUN = "the run you pick, or the only one";
 
 const TOOL_NAME = "render_brainstorm";
 const QUALIFIED_TOOL_NAME = `mcp__brainstorm__${TOOL_NAME}`;
@@ -961,7 +961,7 @@ const describeRunsToBuild = (requestedRuns: string) =>
 <runs>
 ${requestedRuns}
 </runs>`
-    : `The user named no run, so build ${NEWEST_RUN}.`;
+    : `The user named no run, so pick the run as the skill's "Find the runs" section says for a request with no detail.`;
 
 const buildImplementationPrompt = (
   requestedRuns: string,
@@ -1124,7 +1124,7 @@ const startBuild = async (engine: EngineInterface, requestedRuns: string) => {
     buildImplementationPrompt(requestedRuns, plansFolder)
   );
   return {
-    text: `Building ${requestedRuns || NEWEST_RUN} with small-model implementers and a strong reviewer…`,
+    text: `Building ${requestedRuns || UNNAMED_RUN} with small-model implementers and a strong reviewer…`,
   };
 };
 

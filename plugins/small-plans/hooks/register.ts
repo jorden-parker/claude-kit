@@ -19,7 +19,7 @@ const MAX_STEPS = 6;
 const MAX_ORDER = 99;
 const ORDER_WIDTH = 2;
 const MAX_SLUG_LENGTH = 60;
-const MAX_ASKED_SETS = 4;
+const MAX_ASKED_OPTIONS = 4;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
 const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
 const HANDOFF_FILE_NAME = /^\d+-.*\.md$/;
@@ -34,7 +34,7 @@ const SUBCOMMAND_SUGGESTIONS = [
   {
     text: "handoff",
     description:
-      "Plan what a saved handoff leaves: the newest, or one by id, plus optional extra context",
+      "Plan what a saved handoff leaves: one picked from the newest, or one by id, plus optional extra context",
   },
   {
     text: "build",
@@ -356,17 +356,29 @@ const planWork = (engine: EngineInterface, requestedWork: string) => {
   return { text: `Planning the work as small plans in set ${setName}…` };
 };
 
-const findHandoffFileName = async (
+const listHandoffNamesNewestFirst = async (
   engine: EngineInterface,
-  handoffFolder: string,
-  requestedNumber: string
-) => {
-  const newestFirst = (await listNames(engine, handoffFolder))
+  handoffFolder: string
+) =>
+  (await listNames(engine, handoffFolder))
     .filter((name) => HANDOFF_FILE_NAME.test(name))
-    .sort((first, second) => parseInt(second, 10) - parseInt(first, 10));
-  return requestedNumber
-    ? newestFirst.find((name) => parseInt(name, 10) === Number(requestedNumber))
-    : newestFirst[0];
+    .sort((first, second) => parseInt(second, 10) - parseInt(first, 10))
+    .map((name) => name.replace(/\.md$/, ""));
+
+const pickFromList = async (
+  engine: EngineInterface,
+  question: string,
+  header: string,
+  namesNewestFirst: string[]
+) => {
+  try {
+    return await engine.ui.ask(question, {
+      header,
+      options: namesNewestFirst.slice(0, MAX_ASKED_OPTIONS),
+    });
+  } catch {
+    return undefined;
+  }
 };
 
 const splitHandoff = async (
@@ -376,16 +388,34 @@ const splitHandoff = async (
 ) => {
   const projectName = await resolveProjectName(engine);
   const handoffFolder = `${await resolveHandoffsRoot(engine)}/${projectName}`;
-  const handoffFileName = await findHandoffFileName(
-    engine,
-    handoffFolder,
-    requestedNumber
-  );
-  if (!handoffFileName)
+  const handoffNames = await listHandoffNamesNewestFirst(engine, handoffFolder);
+  if (handoffNames.length === 0)
     return {
-      text: `No handoff ${requestedNumber ? `${requestedNumber} ` : ""}is saved for ${projectName}. Run /handoff save first, or name the work: /${COMMAND_NAME} <work to plan>.`,
+      text: `No handoffs for ${projectName} yet. Run /handoff save first, or name the work: /${COMMAND_NAME} <work to plan>.`,
     };
-  const setSlug = `handoff-${handoffFileName.replace(/\.md$/, "")}`;
+  const shouldAsk = !requestedNumber && handoffNames.length > 1;
+  const pickedName = shouldAsk
+    ? await pickFromList(
+        engine,
+        "Which handoff should be split into small plans?",
+        "Handoff",
+        handoffNames
+      )
+    : handoffNames.find(
+        (name) =>
+          !requestedNumber || parseInt(name, 10) === Number(requestedNumber)
+      );
+  if (shouldAsk && pickedName === undefined)
+    return {
+      text: `No handoff was picked. Run /${COMMAND_NAME} handoff <id> with one of: ${handoffNames.map((name) => parseInt(name, 10)).join(", ")}.`,
+    };
+  const handoffName = handoffNames.find((name) => name === pickedName);
+  if (!handoffName)
+    return {
+      text: `No handoff #${requestedNumber} for ${projectName}. Run /handoff list to see its handoffs.`,
+    };
+  const handoffFileName = `${handoffName}.md`;
+  const setSlug = `handoff-${handoffName}`;
   const savedSetName = (await listSetsNewestFirst(engine)).find((name) =>
     name.endsWith(`-${setSlug}`)
   );
@@ -408,23 +438,16 @@ const splitHandoff = async (
   return { text: `Splitting the handoff into small plans in set ${setName}…` };
 };
 
-const pickSetToBuild = async (engine: EngineInterface, setNames: string[]) => {
-  const listedSets = setNames.slice(0, MAX_ASKED_SETS);
-  try {
-    return await engine.ui.ask("Which set of small plans should be built?", {
-      header: "Plan set",
-      options: listedSets,
-    });
-  } catch {
-    return undefined;
-  }
-};
-
 const buildPlans = async (engine: EngineInterface, requestedName: string) => {
   const setNames = await listSetsNewestFirst(engine);
   const shouldAsk = !requestedName && setNames.length > 1;
   const pickedName = shouldAsk
-    ? await pickSetToBuild(engine, setNames)
+    ? await pickFromList(
+        engine,
+        "Which set of small plans should be built?",
+        "Plan set",
+        setNames
+      )
     : requestedName;
   if (pickedName === undefined)
     return {

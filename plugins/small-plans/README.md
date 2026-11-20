@@ -4,12 +4,12 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 
 ## Usage
 
-| Command                                     | What it does                                                         |
-| ------------------------------------------- | -------------------------------------------------------------------- |
-| `/small-plans <work to plan>`               | Plans the work you name                                              |
-| `/small-plans`                              | Plans the work this conversation still leaves to do                  |
-| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: the newest, or handoff `<id>` |
-| `/small-plans build [set]`                  | Has small-model agents implement and review each plan of a set       |
+| Command                                     | What it does                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `/small-plans <work to plan>`               | Plans the work you name                                                                   |
+| `/small-plans`                              | Plans the work this conversation still leaves to do                                       |
+| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>` |
+| `/small-plans build [set]`                  | Has small-model agents implement and review each plan of a set                            |
 
 Typing `/small-plans ` suggests the actions.
 

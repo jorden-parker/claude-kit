@@ -764,7 +764,7 @@ test("brainstorm build hands the build to the build-plans skill and does not rep
   expect(instructions).not.toContain("<focus>");
 });
 
-test("brainstorm build with no run named asks for the newest run", async ($, on) => {
+test("brainstorm build with no run named has the skill list the runs to pick from", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockHome(on);
   on("session.cwd", () => ({ value: "/repo" }));
@@ -772,8 +772,10 @@ test("brainstorm build with no run named asks for the newest run", async ($, on)
   const reply = await $.command.run(buildBrainstormCommand("build"));
   await clock.settle();
 
-  expect(reply.text).toContain("the newest run");
-  expect(submittedPrompts[0]).toContain("the newest run");
+  expect(reply.text).toContain("the run you pick");
+  expect(submittedPrompts[0]).toContain(
+    'The user named no run, so pick the run as the skill\'s "Find the runs" section says for a request with no detail.'
+  );
   expect(submittedPrompts[0]).not.toContain("<runs>");
 });
 

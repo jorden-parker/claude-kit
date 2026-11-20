@@ -291,19 +291,46 @@ test("/small-plans <work> that starts with a command word is still planned as wo
   expect(submittedPrompts[0]).toContain(WRITE_TOOL);
 });
 
-test("/small-plans handoff splits the newest handoff of the project", async ($, on) => {
+test("/small-plans handoff lists the handoffs newest first and splits the one picked", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, "001-add-the-viewer");
   const { reply, submittedPrompts } = await runCommand($, on, "handoff", {
     [OLDER_HANDOFF]: "older",
     [NEWER_HANDOFF]: "newer",
   });
 
-  const setPattern = `${NEW_SET_STAMP}-handoff-002-fix-login`;
+  const setPattern = `${NEW_SET_STAMP}-handoff-001-add-the-viewer`;
+  expect(askedLabels(askedQuestions)).toEqual([
+    "002-fix-login",
+    "001-add-the-viewer",
+  ]);
   expect(reply.text).toMatch(new RegExp(setPattern));
   expect(submittedPrompts).toHaveLength(1);
-  expect(submittedPrompts[0]).toContain(NEWER_HANDOFF);
+  expect(submittedPrompts[0]).toContain(OLDER_HANDOFF);
   expect(submittedPrompts[0]).toContain(WRITE_TOOL);
   expect(submittedPrompts[0]).toMatch(new RegExp(`set "${setPattern}"`));
   expect(submittedPrompts[0]).not.toContain("already has plans");
+});
+
+test("/small-plans handoff splits nothing when the list is dismissed", async ($, on) => {
+  answerAskUserQuestion(on);
+  const { reply, submittedPrompts } = await runCommand($, on, "handoff", {
+    [OLDER_HANDOFF]: "older",
+    [NEWER_HANDOFF]: "newer",
+  });
+
+  expect(submittedPrompts).toHaveLength(0);
+  expect(reply.text).toContain("/small-plans handoff <id>");
+});
+
+test("/small-plans handoff <id> points to /handoff list when no handoff has that id", async ($, on) => {
+  const { reply, submittedPrompts } = await runCommand($, on, "handoff 7", {
+    [NEWER_HANDOFF]: "newer",
+  });
+
+  expect(reply.text).toBe(
+    "No handoff #7 for claude-kit. Run /handoff list to see its handoffs."
+  );
+  expect(submittedPrompts).toHaveLength(0);
 });
 
 test("/small-plans handoff <id> splits that handoff with the extra context", async ($, on) => {
@@ -332,6 +359,7 @@ test("/small-plans handoff adds to the set its handoff already has", async ($, o
 test("/small-plans handoff says so when the project has no handoff", async ($, on) => {
   const { reply, submittedPrompts } = await runCommand($, on, "handoff");
 
+  expect(reply.text).toContain("No handoffs for claude-kit yet.");
   expect(reply.text).toContain("/handoff save");
   expect(submittedPrompts).toHaveLength(0);
 });

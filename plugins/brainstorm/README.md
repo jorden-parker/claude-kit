@@ -92,7 +92,7 @@ Before it finishes, the planner calls the `check_brainstorm_plan` tool on the ru
 
 ### Building
 
-`/brainstorm build` builds the newest run. To pick others, add run folder names, paths, a date or words from a title, or `all` for every run, oldest first. The command passes those words on as they are, and the `build-plans` skill finds the runs. Saying "implement the latest plan" in plain words works too, and so does naming one plan of a run.
+`/brainstorm build` lists the four newest runs and builds the one you pick; with one run it builds that one without asking. To name runs instead, add run folder names, paths, a date or words from a title, or `all` for every run, oldest first. The command passes those words on as they are, and the `build-plans` skill finds the runs. Saying "implement the latest plan" in plain words works too, and so does naming one plan of a run.
 
 For each run, the build:
 

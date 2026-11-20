@@ -30,7 +30,8 @@ If it gives paths, use them as they are, and skip the rest of this section. A re
 
 Otherwise list the plans folder. `/brainstorm build` names it in its prompt. With no such prompt it is `~/.claude/brainstorm/<project>/plans/`, where `<project>` is the name of the folder that holds the repository (for a git worktree, the main repository's folder), or the working directory's name outside git. Never ask the user where the plans are. The run folders are the entries named `plan-YYYY-MM-DD-HHMM`. The names are UTC timestamps, so they sort oldest to newest.
 
-- "the plan", "the latest plan" or no detail: the newest run.
+- "the plan" or "the latest plan": the newest run.
+- No detail: the only run when there is one. With more, ask with AskUserQuestion which run to build, listing the four newest runs newest first, each option labelled with the run folder name and described by its title.
 - A name, a date, or words from a title: the matching runs. A run's title is the `# Plans:` line of its index.md, and the table below it has each plan's title.
 - "all of them" or several runs: every matching run, oldest first.
 - One plan of a run: that run, building only that plan.

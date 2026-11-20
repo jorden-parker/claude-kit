@@ -90,6 +90,11 @@ if should_check claude-kit-update tests/claude-kit-update.test.sh notes-viewer/c
   run_outside_the_commit_hook bash tests/claude-kit-update.test.sh
 fi
 
+if should_check claude-kit-doctor tests/claude-kit-doctor.test.sh; then
+  echo "check: tests/claude-kit-doctor.test.sh"
+  run_outside_the_commit_hook bash tests/claude-kit-doctor.test.sh
+fi
+
 if should_check check tests/check.test.sh; then
   echo "check: tests/check.test.sh"
   run_outside_the_commit_hook bash tests/check.test.sh

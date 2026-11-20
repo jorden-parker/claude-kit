@@ -78,9 +78,11 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 2. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
 3. Updates every marketplace
 4. Updates every installed plugin, from any marketplace, in its own scope
-5. Links `claude-notes` and `claude-kit-update` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
+5. Links `claude-notes`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 
 It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not stop the others; the run ends by naming each failure and exits 1. Start a new Claude Code session afterwards to load the updated plugins.
+
+`claude-kit-doctor` prints each claude-kit plugin's version in this checkout beside the version Claude Code has installed (from `~/.claude/plugins/installed_plugins.json`), marks each `ok`, `stale` or `not installed`, and exits 1 when any is stale.
 
 ### Plugin profiles
 
@@ -341,6 +343,7 @@ design-studio/                    standalone tool: fresh mockups from a local Qw
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
 claude-kit-update                 sets up the marketplace, updates every installed plugin
 claude-kit-update profile <name>  turns plugins on or off for the project in the current folder
+claude-kit-doctor                 compares each plugin's checkout version with the installed one
 check                             runs every test suite; --staged runs only staged ones (the pre-commit hook); --changed-since <rev> runs only the ones changed since that commit (CI); fails when a plugin changed since origin/main without a version bump
 ```
 

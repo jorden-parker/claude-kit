@@ -83,6 +83,7 @@ expect "installed plugins of other marketplaces are updated" called "plugin upda
 expect "plugins that are not installed stay uninstalled" not_called "plugin install"
 expect "claude-notes is linked onto the PATH folder" links_to claude-notes "$repository_root/notes-viewer/claude-notes"
 expect "claude-kit-update is linked onto the PATH folder" links_to claude-kit-update "$repository_root/claude-kit-update"
+expect "claude-kit-doctor is linked onto the PATH folder" links_to claude-kit-doctor "$repository_root/claude-kit-doctor"
 
 echo '[{"name": "claude-kit"}]' > "$sandbox/marketplaces.json"
 output="$(run_update)"

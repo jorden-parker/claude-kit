@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+installed_plugins="$HOME/.claude/plugins/installed_plugins.json"
+stale_count=0
+
+command -v jq >/dev/null || { echo "claude-kit-doctor needs jq: brew install jq" >&2; exit 1; }
+
+read_installed_version() {
+  [ -f "$installed_plugins" ] || return 0
+  jq -r --arg plugin_id "$1@claude-kit" '[.plugins[$plugin_id][]?.version] | first // empty' "$installed_plugins"
+}
+
+printf '%-18s %-10s %-10s %s\n' plugin checkout installed status
+for plugin_folder in "$repository_root"/plugins/*/; do
+  plugin_name="$(basename "$plugin_folder")"
+  checkout_version="$(jq -r .version "$plugin_folder.claude-plugin/plugin.json")"
+  installed_version="$(read_installed_version "$plugin_name")"
+  if [ -z "$installed_version" ]; then
+    plugin_status="not installed"
+  elif [ "$installed_version" = "$checkout_version" ]; then
+    plugin_status="ok"
+  else
+    plugin_status="stale"
+    stale_count=$((stale_count + 1))
+  fi
+  printf '%-18s %-10s %-10s %s\n' "$plugin_name" "$checkout_version" "${installed_version:--}" "$plugin_status"
+done
+
+if [ "$stale_count" -eq 1 ]; then
+  echo "1 plugin differs from this checkout: run claude-kit-update"
+elif [ "$stale_count" -gt 1 ]; then
+  echo "$stale_count plugins differ from this checkout: run claude-kit-update"
+fi
+[ "$stale_count" -eq 0 ]

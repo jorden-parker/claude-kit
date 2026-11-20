@@ -52,6 +52,12 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 - It is a Go program, built on first run and again after the viewer changes, so it needs Go: `brew install go`
 - On a machine with only the marketplace, link `~/.claude/plugins/marketplaces/claude-kit/notes-viewer/claude-notes` instead
 - Every note and plan has Edit and Delete buttons. A small plan set's heading adds a plan to the set or deletes the whole set. Each delete asks first and can't be undone
+- A save is refused, with every problem listed, unless the text follows its section's format. The rules live in `noteFormats` in `notes-viewer/note_format.go` and match what each plugin writes:
+  - All: a title of up to 100 characters with a letter or digit, and a body that isn't empty
+  - Handoffs, project notes and small plans: front matter of `name: value` lines with `title`, `project` and an ISO `created`. `project` matches the project folder
+  - Handoffs also need `cwd`. Project notes need a `category` (fact, finding, decision, reference or debugging) that matches its folder; debugging notes need the six `##` sections the project-notes plugin asks for
+  - Small plans: `set`, `order`, `kind` and `status` as small-plans writes them, `order` matching the file number, `depends_on` naming earlier plans, `## Goal`, `## Context`, `## Steps` (1 to 6 numbered), `## Check` (a command in backticks) and `## Review`, and none of the banned vague phrases outside code fences
+  - Brainstorm plans: a `# Plan: <title>` first line, a `- Status:` line, `## Context`, `## Steps`, and no banned phrases
 - The server only writes files that match a section's note layout, and refuses requests from other hosts or origins. It listens on `127.0.0.1`, port `47618`; `CLAUDE_NOTES_PORT` picks another, `CLAUDE_NOTES_NO_OPEN=1` skips opening the browser
 - If it is already running, `claude-notes` opens the same page again. `Ctrl+C` stops it
 - The page reloads the notes when you come back to its tab. Raw HTML in a note is not rendered

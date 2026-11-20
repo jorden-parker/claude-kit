@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -235,6 +236,12 @@ func sendNoteRequest(method string, path string, body string, origin string) *ht
 	return response
 }
 
+func buildSmallPlan(order int, goal string) string {
+	plan := strings.Replace(validSmallPlan, "order: 2", fmt.Sprintf("order: %d", order), 1)
+	plan = strings.Replace(plan, "depends_on: 1\n", "", 1)
+	return strings.Replace(plan, "Logout clears the token.", goal, 1)
+}
+
 func readNoteFile(t *testing.T, relativePath string) (string, bool) {
 	t.Helper()
 	text, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".claude", relativePath))
@@ -253,11 +260,12 @@ func TestEntriesCarryTheirSectionAndRawSource(t *testing.T) {
 func TestPutSavesTheNoteText(t *testing.T) {
 	seedNotes(t)
 
-	response := sendNoteRequest(http.MethodPut, "/api/notes/handoffs/claude-kit/002-fix-the-login.md", "Rewritten.\n", "http://127.0.0.1:4000")
+	rewrittenHandoff := strings.Replace(validHandoff, "The login works again.", "Rewritten.", 1)
+	response := sendNoteRequest(http.MethodPut, "/api/notes/handoffs/claude-kit/002-fix-the-login.md", rewrittenHandoff, "http://127.0.0.1:4000")
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("status was %d %s", response.Code, response.Body.String())
 	}
-	if text, _ := readNoteFile(t, "handoffs/claude-kit/002-fix-the-login.md"); text != "Rewritten.\n" {
+	if text, _ := readNoteFile(t, "handoffs/claude-kit/002-fix-the-login.md"); text != rewrittenHandoff {
 		t.Fatalf("file was %q", text)
 	}
 }
@@ -363,7 +371,7 @@ func TestSmallPlansCanBeUpdatedAndDeleted(t *testing.T) {
 	seedNotes(t)
 
 	planUrl := "/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"
-	if response := sendNoteRequest(http.MethodPut, planUrl, "---\ntitle: Add the test\nstatus: done\n---\n\nFirst, with more.\n", ""); response.Code != http.StatusNoContent {
+	if response := sendNoteRequest(http.MethodPut, planUrl, buildSmallPlan(1, "Logout clears the token, with more."), ""); response.Code != http.StatusNoContent {
 		t.Fatalf("update answered %d", response.Code)
 	}
 	if text, _ := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); !strings.Contains(text, "with more") {
@@ -380,7 +388,7 @@ func TestSmallPlansCanBeUpdatedAndDeleted(t *testing.T) {
 func TestPostAddsANewSmallPlanToASet(t *testing.T) {
 	seedNotes(t)
 
-	response := sendNoteRequest(http.MethodPost, "/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/03-ship-it.md", "---\ntitle: Ship it\n---\n\nShip.\n", "http://127.0.0.1:4000")
+	response := sendNoteRequest(http.MethodPost, "/api/notes/small-plans/claude-kit/2026-11-19-1000-fix-login/03-ship-it.md", buildSmallPlan(3, "Ship."), "http://127.0.0.1:4000")
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status was %d %s", response.Code, response.Body.String())
 	}

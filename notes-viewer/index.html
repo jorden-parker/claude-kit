@@ -754,6 +754,7 @@
       }
       .field-error {
         margin: 0;
+        white-space: pre-line;
         padding: 8px 12px;
         border: 1px solid var(--danger);
         border-radius: 6px;
@@ -983,7 +984,7 @@
         <h2 id="add-plan-title">Add a Plan</h2>
         <p id="add-plan-set"></p>
         <label for="plan-title">Plan title</label>
-        <input id="plan-title" name="title" required autocomplete="off" maxlength="120" placeholder="Clear the cached token…" />
+        <input id="plan-title" name="title" required autocomplete="off" maxlength="100" placeholder="Clear the cached token…" />
         <p class="field-error" id="add-plan-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button" type="button" id="add-plan-cancel">Cancel</button>
@@ -1100,10 +1101,15 @@
           body,
           headers: body === undefined ? {} : { "Content-Type": "text/markdown; charset=utf-8" },
         });
-        if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+        if (!response.ok) {
+          const failure = new Error((await response.text()).trim() || response.statusText);
+          failure.isFormatRefusal = response.status === 422;
+          throw failure;
+        }
       };
 
-      const describeFailure = (error) => `${error.message} Check the viewer is still running, then try again.`;
+      const describeFailure = (action, error) =>
+        error.isFormatRefusal ? error.message : `Couldn’t ${action}. ${error.message} Check the viewer is still running, then try again.`;
 
       const askToConfirm = ({ title, message, confirmLabel }) =>
         new Promise((resolve) => {
@@ -1380,7 +1386,7 @@
             entryArea.focus();
             showToast(pickOne(SAVED_MESSAGES));
           } catch (error) {
-            failure.textContent = `Couldn’t save. ${describeFailure(error)}`;
+            failure.textContent = describeFailure("save", error);
             failure.hidden = false;
             saveButton.disabled = false;
             saveButton.lastChild.textContent = "Save Changes";
@@ -1417,7 +1423,7 @@
         try {
           await sendChange("DELETE", buildNoteUrl(selectedSection.id, selectedEntry.path));
         } catch (error) {
-          showToast(`Couldn’t delete. ${describeFailure(error)}`, "error");
+          showToast(describeFailure("delete", error), "error");
           return;
         }
         showToast(pickOne(DELETED_MESSAGES));
@@ -1437,7 +1443,7 @@
         try {
           await sendChange("DELETE", buildGroupUrl(section.id, memberEntry.project, memberEntry.group));
         } catch (error) {
-          showToast(`Couldn’t delete the set. ${describeFailure(error)}`, "error");
+          showToast(describeFailure("delete the set", error), "error");
           return;
         }
         showToast(pickOne(DELETED_MESSAGES));
@@ -1455,7 +1461,7 @@
           .slice(0, 48)
           .replace(/-+$/, "") || "plan";
 
-      const buildPlanText = (title, memberEntry) =>
+      const buildPlanText = (title, memberEntry, order) =>
         [
           "---",
           `title: ${title}`,
@@ -1463,26 +1469,30 @@
           "kind: feature",
           "status: pending",
           `created: ${new Date().toISOString()}`,
+          `set: ${memberEntry.group}`,
+          `order: ${order}`,
           "---",
           "",
           "## Goal",
           "",
+          "Describe what is true when this plan is done.",
           "",
           "## Context",
           "",
+          "Name the files, functions and decisions the implementer needs.",
           "",
           "## Steps",
           "",
-          "1. ",
+          "1. Name the first edit: the file, the place and what to write.",
           "",
           "## Check",
           "",
-          "- Run: ``",
-          "- Expect: ",
+          "- Run: `<command>`",
+          "- Expect: <what the output shows when the plan worked>",
           "",
           "## Review",
           "",
-          "- ",
+          "- <a fact the reviewer confirms in the diff>",
           "",
         ].join("\n");
 
@@ -1512,13 +1522,14 @@
           return;
         }
         const highestOrder = Math.max(0, ...listGroupEntries(section, memberEntry).map((entry) => parseInt(readOrder(entry), 10) || 0));
-        const entryPath = `${memberEntry.project}/${memberEntry.group}/${String(highestOrder + 1).padStart(2, "0")}-${slugify(title)}.md`;
+        const order = highestOrder + 1;
+        const entryPath = `${memberEntry.project}/${memberEntry.group}/${String(order).padStart(2, "0")}-${slugify(title)}.md`;
         addButton.disabled = true;
         addButton.textContent = "Adding…";
         try {
-          await sendChange("POST", buildNoteUrl(section.id, entryPath), buildPlanText(title, memberEntry));
+          await sendChange("POST", buildNoteUrl(section.id, entryPath), buildPlanText(title, memberEntry, order));
         } catch (error) {
-          errorMessage.textContent = `Couldn’t add the plan. ${describeFailure(error)}`;
+          errorMessage.textContent = describeFailure("add the plan", error);
           errorMessage.hidden = false;
           return;
         } finally {

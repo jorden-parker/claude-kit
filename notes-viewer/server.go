@@ -302,6 +302,10 @@ func newViewerServer() http.Handler {
 			http.Error(writer, "Note too large.", http.StatusRequestEntityTooLarge)
 			return
 		}
+		if problems := listFormatProblems(request.PathValue("section"), request.PathValue("path"), string(text)); len(problems) > 0 {
+			http.Error(writer, describeFormatRefusal(request.PathValue("section"), problems), http.StatusUnprocessableEntity)
+			return
+		}
 		if err := os.WriteFile(notePath, text, 0o644); err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
@@ -322,6 +326,10 @@ func newViewerServer() http.Handler {
 		text, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, maxNoteBytes))
 		if err != nil {
 			http.Error(writer, "Note too large.", http.StatusRequestEntityTooLarge)
+			return
+		}
+		if problems := listFormatProblems(request.PathValue("section"), request.PathValue("path"), string(text)); len(problems) > 0 {
+			http.Error(writer, describeFormatRefusal(request.PathValue("section"), problems), http.StatusUnprocessableEntity)
 			return
 		}
 		noteFile, err := os.OpenFile(notePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)

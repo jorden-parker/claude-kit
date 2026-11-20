@@ -234,11 +234,29 @@ export function recordSession(
   };
   mkdirSync(dirname(entryPath), { recursive: true });
   writeFileSync(entryPath, `${JSON.stringify(entry, null, 2)}\n`);
-  return nudge ? { systemMessage: nudge } : null;
+  return {
+    systemMessage: [composeSummary(entry), ...(nudge ? [nudge] : [])].join(
+      "\n"
+    ),
+  };
 }
 
 const describeTotals = (totals: TokenTotals) =>
   `in ${inThousands(totals.input)}, cache write ${inThousands(totals.cacheWrite)}, cache read ${inThousands(totals.cacheRead)}, out ${inThousands(totals.output)}`;
+
+const sumModels = (byModel: TotalsByModel) =>
+  Object.values(byModel).reduce(addTotals, toTotals({}));
+
+export function composeSummary(entry: LedgerEntry): string {
+  const hasSubagents = Object.keys(entry.subagents).length > 0;
+  return [
+    `Context ${inThousands(entry.contextTokens)}.`,
+    `Session: ${describeTotals(sumModels(entry.main))}.`,
+    ...(hasSubagents
+      ? [`Subagents: ${describeTotals(sumModels(entry.subagents))}.`]
+      : []),
+  ].join(" ");
+}
 
 const describeModels = (label: string, byModel: TotalsByModel) =>
   Object.entries(byModel).map(

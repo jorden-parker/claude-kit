@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   composeNudge,
+  composeSummary,
   formatReport,
+  type LedgerEntry,
   recordSession,
   summarizeTranscript,
 } from "./ledger.ts";
@@ -154,7 +156,9 @@ test("a recorded session holds the main and subagent totals", () => {
     userHome,
     new Date("2026-01-02T03:04:05Z")
   );
-  expect(output).toBeNull();
+  expect(output?.systemMessage).toBe(
+    "Context 1k. Session: in 0k, cache write 0k, cache read 1k, out 0k. Subagents: in 0k, cache write 0k, cache read 0k, out 0k."
+  );
   expect(savedEntry(userHome)).toEqual({
     session: "session-1",
     project: "shop",
@@ -172,7 +176,28 @@ test("a large context shows the user a nudge once", () => {
   const firstOutput = recordSession(event, userHome, new Date());
   expect(firstOutput?.systemMessage).toContain("160k tokens");
   expect(savedEntry(userHome).lastNudgeTokens).toBe(160_000);
-  expect(recordSession(event, userHome, new Date())).toBeNull();
+  const secondOutput = recordSession(event, userHome, new Date());
+  expect(secondOutput?.systemMessage).toStartWith("Context 160k.");
+  expect(secondOutput?.systemMessage).not.toContain("/handoff");
+});
+
+test("a session with no subagents leaves them out of the summary", () => {
+  const entry: LedgerEntry = {
+    session: "session-1",
+    project: "shop",
+    updatedAt: "2026-01-02T03:04:05.000Z",
+    contextTokens: 60_000,
+    lastNudgeTokens: 0,
+    main: {
+      fable: { input: 2000, cacheWrite: 60_000, cacheRead: 0, output: 1000 },
+      haiku: { input: 1000, cacheWrite: 0, cacheRead: 0, output: 0 },
+    },
+    subagents: {},
+    resultCharactersByTool: {},
+  };
+  expect(composeSummary(entry)).toBe(
+    "Context 60k. Session: in 3k, cache write 60k, cache read 0k, out 1k."
+  );
 });
 
 test("TOKEN_LEDGER_NUDGE_TOKENS moves the threshold", () => {

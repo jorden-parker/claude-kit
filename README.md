@@ -20,7 +20,7 @@ install any of them on its own. Sync scripts install the same plugins into
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
 | [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
 | [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.claude/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement a whole set or one plan while the session reviews and sends back fixes. |
-| [token-ledger](plugins/token-ledger/) | Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool), prints a report of recent sessions, and suggests `/handoff` then `/clear` when the context grows large. |
+| [token-ledger](plugins/token-ledger/) | Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool), shows a one-line summary after each turn, prints a report of recent sessions, and suggests `/handoff` then `/clear` when the context grows large. |
 
 ## Saved notes
 

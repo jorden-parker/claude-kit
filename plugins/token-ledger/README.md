@@ -3,8 +3,9 @@
 Records what each Claude Code session spends, so a change meant to save tokens can be measured and not guessed.
 
 - **Stop hook**: each time Claude finishes a turn, the hook reads the session's transcript and writes the session's totals to `~/.cache/token-ledger/sessions/<session id>.json`. The file is replaced each turn, so it always holds the session's totals so far.
+- **Summary line**: after each turn the hook shows you one line with the context size and the session's totals so far, for example `Context 60k. Session: in 0k, cache write 60k, cache read 0k, out 0k.` Subagent totals are added when the session started any. The line is a message to you, not context for the model.
 - **Report**: `bun ~/src/claude-kit/plugins/token-ledger/hooks/run.ts report` prints the ten newest sessions; add a number for more (`report 30`).
-- **Nudge**: when the context reaches 150,000 tokens, the hook shows you one line suggesting `/handoff` then `/clear`. It shows again after each further 50,000 tokens. The line is a message to you, not context for the model. `TOKEN_LEDGER_NUDGE_TOKENS` moves the threshold.
+- **Nudge**: when the context reaches 150,000 tokens, the hook adds a second line suggesting `/handoff` then `/clear`. It shows again after each further 50,000 tokens. `TOKEN_LEDGER_NUDGE_TOKENS` moves the threshold.
 
 ## What a session's entry holds
 

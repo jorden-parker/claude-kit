@@ -32,6 +32,7 @@ Cache reads are usually the largest number: every turn reads the whole context a
 
 - It counts tokens, not money: the transcript holds no prices
 - The transcript's format is internal to Claude Code and can change. A line the hook cannot read is skipped, and a hook that fails never blocks a turn
+- Claude Code writes a turn's last reply to the transcript at about the moment it runs the hook. The hook waits up to two seconds for that reply, so the totals include the turn that just ended
 - Claude Code only
 
 Requires `bun` on the PATH.

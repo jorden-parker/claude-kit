@@ -53,6 +53,8 @@ type ApiUsage = {
 
 type TranscriptMessage = {
   id?: string;
+  role?: string;
+  stop_reason?: string;
   model?: string;
   usage?: ApiUsage;
   content?: unknown;
@@ -152,6 +154,33 @@ export function summarizeTranscript(transcript: string): TranscriptSummary {
       lastTotals.input + lastTotals.cacheWrite + lastTotals.cacheRead,
     resultCharactersByTool: state.resultCharactersByTool,
   };
+}
+
+function hasLastReply(transcript: string): boolean {
+  for (const text of transcript.split("\n").reverse()) {
+    const message = parseMessage(text);
+    if (message?.role === "assistant")
+      return message.stop_reason !== "tool_use";
+    if (message?.role === "user") return false;
+  }
+  return false;
+}
+
+export async function waitForLastReply(
+  transcriptPath: string | undefined,
+  pauseMilliseconds: number,
+  attempts: number
+): Promise<boolean> {
+  if (!transcriptPath) return false;
+  for (let i = 0; i < attempts; i++) {
+    if (
+      existsSync(transcriptPath) &&
+      hasLastReply(readFileSync(transcriptPath, "utf8"))
+    )
+      return true;
+    await Bun.sleep(pauseMilliseconds);
+  }
+  return false;
 }
 
 const inThousands = (count: number) => `${Math.round(count / 1000)}k`;

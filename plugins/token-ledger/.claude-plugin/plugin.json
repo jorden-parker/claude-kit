@@ -1,5 +1,5 @@
 {
   "name": "token-ledger",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool) under ~/.cache/token-ledger, shows a one-line summary after each turn, prints a report of recent sessions, and suggests /handoff then /clear when the context grows large"
 }

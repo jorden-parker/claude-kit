@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,6 +15,7 @@ import {
   type LedgerEntry,
   recordSession,
   summarizeTranscript,
+  waitForLastReply,
 } from "./ledger.ts";
 
 const assistantLine = (
@@ -26,6 +33,7 @@ const toolResultLine = (toolUseId: string, text: string) =>
   JSON.stringify({
     type: "user",
     message: {
+      role: "user",
       content: [{ type: "tool_result", tool_use_id: toolUseId, content: text }],
     },
   });
@@ -67,6 +75,45 @@ test("the context size is what the last message read and wrote", () => {
     )
   );
   expect(summary.contextTokens).toBe(2220);
+});
+
+const toolCallLine = JSON.stringify({
+  type: "assistant",
+  message: {
+    role: "assistant",
+    id: "msg_1",
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", id: "toolu_1", name: "Bash" }],
+  },
+});
+
+const lastReplyLine = JSON.stringify({
+  type: "assistant",
+  message: { role: "assistant", id: "msg_2", stop_reason: "end_turn" },
+});
+
+function writeTranscriptFile(...lines: string[]): string {
+  const transcriptPath = join(
+    mkdtempSync(join(tmpdir(), "ledger-")),
+    "session.jsonl"
+  );
+  writeFileSync(transcriptPath, transcript(...lines));
+  return transcriptPath;
+}
+
+test("waits until Claude Code has written the turn's last reply", async () => {
+  const transcriptPath = writeTranscriptFile(
+    toolCallLine,
+    toolResultLine("toolu_1", "hello")
+  );
+  setTimeout(() => appendFileSync(transcriptPath, `\n${lastReplyLine}`), 20);
+  expect(await waitForLastReply(transcriptPath, 5, 200)).toBe(true);
+  expect(readFileSync(transcriptPath, "utf8")).toContain("msg_2");
+});
+
+test("stops waiting when the last reply never arrives", async () => {
+  const transcriptPath = writeTranscriptFile(lastReplyLine, toolCallLine);
+  expect(await waitForLastReply(transcriptPath, 1, 3)).toBe(false);
 });
 
 test("adds up tool result characters per tool", () => {

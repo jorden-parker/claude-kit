@@ -537,7 +537,7 @@ test("/small-plans build has a failing guard fixed by a subagent instead of bloc
   expect(submittedPrompts[0]).toContain("project's lint command");
   expect(submittedPrompts[0]).toContain("fallow audit");
   expect(submittedPrompts[0]).toContain(
-    "start a general-purpose agent to fix every reported failure, including pre-existing ones and ones in files the plan does not name"
+    "start a general-purpose agent in the worktree to fix every reported failure, including pre-existing ones and ones in files the plan does not name"
   );
   expect(submittedPrompts[0]).toContain(
     "a failing guard never sets a plan to blocked"
@@ -577,6 +577,26 @@ test("/small-plans build commits and pushes leftover uncommitted and unpushed wo
     "including ones from before this build, into logical commits, one per concern"
   );
   expect(submittedPrompts[0]).toContain("so no commit is left unpushed");
+});
+
+test("/small-plans build builds each plan in its own worktree on a branch named by the repository's rules", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(submittedPrompts[0]).toContain(
+    "Each plan is built in its own git worktree, on its own branch"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "as a work repository does, follow it exactly"
+  );
+  expect(submittedPrompts[0]).toContain("name the branch `<type>/<plan slug>`");
+  expect(submittedPrompts[0]).toContain(
+    "put the worktree beside the main worktree, as a sibling folder"
+  );
+  expect(submittedPrompts[0]).toContain("Never put it inside the repository");
+  expect(submittedPrompts[0]).toContain("then a line `Worktree: <path>`");
+  expect(submittedPrompts[0]).toContain("git push -u origin <branch>");
 });
 
 const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;

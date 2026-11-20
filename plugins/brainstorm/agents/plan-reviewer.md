@@ -78,7 +78,7 @@ When you return files, label each one with its full path on a line of its own, t
 
 ## Job: final review
 
-The prompt gives the plan folder path and the base commit.
+The prompt gives the plan folder path, the base commit and a line `Worktree: <absolute path>`. Run every git command, check, test and type-check in that worktree, as `cd <worktree> && ...`, and read the changed files there.
 
 1. Read plan.md and every step file in the folder.
 2. Run `git diff <base>` and `git status --short`, and read any new untracked files. Limit your review to the files the plan's steps name. Changes from earlier plans may also show up for shared files: review only this plan's edits.

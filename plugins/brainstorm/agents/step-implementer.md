@@ -11,7 +11,9 @@ You implement the steps of one plan, one at a time. Do exactly what each step sa
 
 Your prompt is the absolute path of a plan folder. Read its plan.md first. Under `## Steps`, each checkbox line links one step file. The unticked lines, `- [ ]`, are your work. Leave the ticked lines alone: they are already built.
 
-Your prompt may also contain an earlier BLOCKED reply after the path. Read it, read the step it names again, and try that step once more under the same rules. Then go on with the lines after it.
+After the path comes a line `Worktree: <absolute path>`: the git worktree this plan is built in. Do all the work there. The file paths in the step files are relative to the repository: read and edit them under the worktree, and an absolute path into another checkout of the same repository means the same file under the worktree. Start every command with `cd <worktree> && `.
+
+Your prompt may also contain an earlier BLOCKED reply after the `Worktree:` line. Read it, read the step it names again, and try that step once more under the same rules. Then go on with the lines after it.
 
 ## One step at a time
 

@@ -6,18 +6,18 @@ This is the default look for mod UI. Every recipe here was rendered in a real Cl
 
 ```
 ╭──────────────────────────────────────────────────────────────────────╳╮
-│ CI · main                                                ✗ Failing │
+│ CI · main · ✗ Failing                                               │
 │ ──────────────────────────────────────────────────────────────────── │
 │  FAIL   unit-tests (node 22)                                 3m 08s │
 │  RUN    e2e-browser                              ▰▰▰▰▱▱▱▱    5m 05s │
 │  PASS   lint                                                    42s │
 │  PASS   build-docs-and-publish-preview-site-for-the-pu…      1m 35s │
 │ ──────────────────────────────────────────────────────────────────── │
-│ ✗ 1  ● 1  ✓ 3                                        updated 2m ago │
+│ ✗ 1  ● 1  ✓ 3                        updated 2m ago     Esc  Close │
 ╰──────────────────────────────────────────────────────────────────────╯
 ```
 
-Here FAIL, RUN and PASS are pills: dark text on a red, amber or green background.
+Here FAIL, RUN and PASS are pills: dark text on a red, amber or green background, and `Esc` is an inverse keycap.
 
 ## Contents
 
@@ -65,12 +65,11 @@ function statusPill({ Box, Text }, state) {
 
 ```js
 function header({ Box, Text }, title, context, state) {
-  return Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
-    Box({ flexDirection: 'row', columnGap: 1, children: [
-      Text({ weight: 'semibold', children: [title] }),
-      Text({ dimColor: true, children: ['·'] }),
-      Text({ dimColor: true, children: [context] }),
-    ]}),
+  return Box({ flexDirection: 'row', columnGap: 1, children: [
+    Text({ weight: 'semibold', children: [title] }),
+    Text({ dimColor: true, children: ['·'] }),
+    Text({ dimColor: true, children: [context] }),
+    Text({ dimColor: true, children: ['·'] }),
     Text({ color: LOOK[state].color, weight: 'semibold', children: [LOOK[state].glyph + ' ' + LOOK[state].word] }),
   ]})
 }
@@ -80,7 +79,8 @@ function divider({ Text }, width) {
 }
 ```
 
-- **Leave the top-right corner alone.** The engine draws the pane's close ✕ there: on the frame corner for an inline pane, or on the row above your tree for a docked pane. A pill under it looks crowded, so the header status is plain coloured text.
+- **The ✕ is the engine's close control, and you can't change it.** Claude Code draws it on every Pane: on the frame corner for an inline pane, or on a reserved row above your tree for a docked pane. `$.ui.open` has no option to hide, move, relabel or style it, and the `title` you pass is drawn only as a tab label when two or more panes are open. [Types: `PaneOpenArgs`, Pane `title`]
+- **Keep the top-right of your header empty,** so the ✕ stands alone in its corner and reads as frame chrome. Put the status inline after the title (`CI · main · ✗ Failing`), never right-aligned under the ✕.
 - **No inner border.** A Pane already has its own frame or edge, so a `borderStyle` box inside it doubles the lines.
 - **Divider width:** draw the divider at exactly `innerWidth`, with `wrap: 'clip'` (v2.1.326+) so it can never wrap.
 
@@ -124,7 +124,24 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 
 - **Counts:** coloured glyph-and-number pairs (`✗ 1  ● 1  ✓ 3`) on the left, and metadata (`dimColor`) on the right.
 - **Actions** go in the footer row as `Button({ label, hotkey, plain: true })`, which draws as `r: Refresh`. Use one action style throughout. Don't mix bracketed and plain buttons.
-- **No Close button of your own.** The engine already draws a ✕. Open the pane with `closeOnEscape: true` and show a dim `Esc to close` at the right of the footer. A second Close button reads as a misplaced, duplicate ✕.
+- **A labelled close action, bottom-right.** The engine's ✕ is small and easy to miss, so every pane ends its footer with `Esc  Close`: an inverse `Esc` keycap plus a plain `Close` button that calls `$.ui.close`. Open the pane with `closeOnEscape: true` so the key does what the label says. Build the button inside the `ui.render` hook, because it needs `$` (see the `$` rule in SKILL.md), and pass the element down:
+
+  ```js
+  on('ui.render', { component: 'Pane', requestId: 'ci' }, async ($, e) => {
+    const elements = $.ui.resolve(e)
+    const closeButton = elements.Button({ key: 'close', label: 'Close', plain: true, role: 'dismiss',
+      onPress: () => $.ui.close({ id: 'ci' }) })
+    return ciPane(elements, e.props.bodyColumns, closeButton)
+  })
+
+  function closeAction({ Box, Text }, closeButton) {
+    return Box({ flexDirection: 'row', columnGap: 1, flexShrink: 0, children: [
+      Text({ inverse: true, children: [' Esc '] }),
+      closeButton,
+    ]})
+  }
+  ```
+- **Footer order:** other actions on the left (`r: Refresh`), counts or metadata next, and `Esc  Close` always last on the right. The close action is never dropped at narrow widths.
 
 ## The band (AbovePrompt)
 
@@ -166,7 +183,7 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 | `innerWidth` | What to drop |
 | :- | :- |
 | 60 and up | Nothing |
-| 40–59 | The progress column and footer metadata |
+| 40–59 | The progress column and footer metadata. `Esc  Close` stays |
 | Under 40 | The duration column. Show the pill and the truncated name only |
 
 ## Mistakes seen in renders
@@ -175,7 +192,8 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 | :- | :- | :- |
 | Pill split across two lines | Pill shrank beside a long name | `Box({ width: 6, flexShrink: 0 })` around it |
 | Columns not lining up | One row had an extra cell | Reserve the cell on every row |
-| Close ✕ looked misplaced | Own Close button, or a pill under the engine ✕ | No Close button; plain status text at top right |
+| Close ✕ not obvious or oddly placed | The engine ✕ can't be moved; a pill or status sat under it | Status inline after the title; `Esc  Close` at the footer's right |
+| Duration wrapped to `1m` / `35s` | A fixed-width cell without `flexShrink: 0` shrank beside a long name | `flexShrink: 0` on every fixed cell |
 | Panel looked patchy, lines missing | Blank spacer rows, no dividers | `─` dividers at `innerWidth` |
 | Band felt stretched | Bar with `flexGrow` across the whole row | Cap the bar at ~24 segments, spacer before the hint |
 | Grid lost its low values | Low ramp colour near the panel background | Brighter low end |

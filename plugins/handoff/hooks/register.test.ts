@@ -1984,7 +1984,7 @@ testWithSession(
 );
 
 testWithSession(
-  "the notes box keeps two columns and a bottom row clear of the band edge",
+  "the notes box keeps two columns at the sides and one row above it, none below",
   CONVERSATION,
   async ($, on) => {
     ignoreToasts(on);
@@ -1994,7 +1994,8 @@ testWithSession(
     const box = await $.ui.mount(BOX_BAND);
 
     const root = await box.find({ key: "handoff-box" });
-    expect(root?.props).toMatchObject({ paddingX: 2, paddingBottom: 1 });
+    expect(root?.props).toMatchObject({ paddingX: 2, marginTop: 1 });
+    expect(root?.props).not.toHaveProperty("paddingBottom");
     expect(root?.props).not.toHaveProperty("paddingTop");
     expect(root?.props).not.toHaveProperty("paddingY");
   }

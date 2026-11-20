@@ -1639,3 +1639,24 @@ testWithEmptySession(
   undefined,
   false
 );
+
+testWithEmptySession(
+  "the optimizing row keeps one row above it and none below, so stacked band rows space evenly",
+  async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000 });
+    const release = holdModelReply(on);
+    const band = await mountOptimizerBand($);
+
+    const running = $.command.run(optimize("fix bug"));
+    await clock.settle();
+
+    const row = await band.find({ key: "prompt-optimizer-band" });
+    expect(row?.props).toMatchObject({ marginTop: 1 });
+    expect(row?.props).not.toHaveProperty("paddingBottom");
+
+    release();
+    await running;
+  },
+  undefined,
+  false
+);

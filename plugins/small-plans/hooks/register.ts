@@ -888,7 +888,7 @@ const renderBoard = (
       key: "small-plans-board",
       flexDirection: "column",
       paddingX: 2,
-      paddingBottom: 1,
+      marginTop: 1,
     },
     h(
       Box,

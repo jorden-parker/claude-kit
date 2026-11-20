@@ -1,6 +1,6 @@
 {
   "name": "handoff",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "/handoff summarizes the session into a prompt a fresh session can pick up and saves it as a Markdown file under ~/.claude/handoffs/<project>/; new continues it in a fresh session; save only saves it; each saves one per suggested plan; list and resume [id] [extra context] revisit this project's handoffs; before a recap is saved its open questions are asked and the answers kept as decisions; resume fills the handoff into the composer of a fresh session and sends nothing; new, save and resume with nothing after them open a box for notes: for new and save the recap writer takes them as guidance and words them itself, for resume they are added under the handoff, and resume's box lists the handoffs to pick from",
   "userConfig": {
     "writer": {

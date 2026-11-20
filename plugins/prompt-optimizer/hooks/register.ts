@@ -539,10 +539,11 @@ export const register: Register = (on, options) => {
     const { Box, Text } = $.ui.resolve(e);
     const hasBar = e.props.bodyColumns >= MINIMUM_BAR_COLUMNS;
     return Box({
+      key: "prompt-optimizer-band",
       flexDirection: "row",
       columnGap: 2,
       paddingX: 2,
-      paddingBottom: 1,
+      marginTop: 1,
       children: [
         Text({
           weight: "semibold",

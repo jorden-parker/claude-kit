@@ -1143,7 +1143,7 @@ const drawBox = (
       key: "handoff-box",
       flexDirection: "column",
       paddingX: BOX_SIDE_PADDING,
-      paddingBottom: 1,
+      marginTop: 1,
     },
     h(
       Box,
@@ -1235,7 +1235,7 @@ const drawProgress = (
       key: "handoff-progress",
       flexDirection: "column",
       paddingX: BOX_SIDE_PADDING,
-      paddingBottom: 1,
+      marginTop: 1,
     },
     h(
       Box,

@@ -1028,3 +1028,12 @@ test("a narrow build board drops the elapsed time under 40 columns", async ($, o
     await (await mountBand($, 40)).find({ type: "Text", text: "0s" })
   ).toBeUndefined();
 });
+
+test("the build board keeps one row above it and none below, so stacked band rows space evenly", async ($, on) => {
+  await startBoardedBuild($, on);
+  const drawing = await mountBand($);
+
+  const board = await drawing.find({ key: "small-plans-board" });
+  expect(board?.props).toMatchObject({ marginTop: 1 });
+  expect(board?.props).not.toHaveProperty("paddingBottom");
+});

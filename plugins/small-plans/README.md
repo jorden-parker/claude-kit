@@ -10,6 +10,7 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 | `/small-plans`                              | Plans the work this conversation still leaves to do                                        |
 | `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`  |
 | `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, the session reviews and sends back fixes |
+| `/small-plans board`                        | Shows the build board again after you hide it                                              |
 
 Typing `/small-plans ` suggests the actions.
 
@@ -17,7 +18,7 @@ Each planning command has Claude list the work that is left, check it against th
 
 No handoff is needed. `handoff` is one source of work among three, and it needs the handoff plugin only to have saved a handoff under `~/.claude/handoffs` (`/handoff save`). Run again on a handoff that already has plans, it keeps them and adds plans only for work they do not cover.
 
-While `build` runs, a build board above the prompt shows each plan as a WAIT, RUN, PASS or FAIL pill with its elapsed time, and stays until you press `h` to hide it or the next build starts.
+While `build` runs, a build board above the prompt shows each plan as a WAIT, RUN, PASS or FAIL pill with its elapsed time, and stays until you press `h` to hide it or the next build starts. `/small-plans board` shows a hidden board again.
 
 `build` is a command only when it stands as shown: `/small-plans build a login page with tests` plans that work.
 

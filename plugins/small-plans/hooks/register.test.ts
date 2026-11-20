@@ -781,7 +781,7 @@ test("typing the first word after /small-plans suggests every action", async ($,
 
   const reply = await autocomplete($, "/small-plans ");
 
-  expect(suggestedTexts(reply)).toEqual(["handoff", "build"]);
+  expect(suggestedTexts(reply)).toEqual(["handoff", "build", "board"]);
   expect(reply.suggestions[0]!.description).toContain("saved handoff");
 });
 
@@ -1004,6 +1004,49 @@ test("the build board hides on h and stays hidden", async ($, on) => {
   const drawing = await mountBand($);
   await drawing.press({ key: "hide" });
 
+  expect(
+    await (await mountBand($)).find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeUndefined();
+});
+
+test("hiding the build board says how to show it again", async ($, on) => {
+  const toasts: string[] = [];
+  on("ui.toast", (_, e) => {
+    toasts.push(e.text);
+    return { value: undefined };
+  });
+  await startBoardedBuild($, on);
+  await (await mountBand($)).press({ key: "hide" });
+
+  expect(toasts).toEqual([expect.stringContaining("/small-plans board")]);
+});
+
+test("/small-plans board shows a hidden build board again", async ($, on) => {
+  await startBoardedBuild($, on);
+  await (await mountBand($)).press({ key: "hide" });
+
+  const reply = await $.command.run({
+    command: "small-plans",
+    args: "board",
+  } as never);
+
+  expect(reply).toEqual({});
+  expect(
+    await (await mountBand($)).find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeDefined();
+});
+
+test("/small-plans board before any build says there is no board to show", async ($, on) => {
+  mockEngine(on, THREE_PLAN_SET);
+
+  const reply = await $.command.run({
+    command: "small-plans",
+    args: "board",
+  } as never);
+
+  expect(reply).toMatchObject({
+    text: expect.stringContaining("No build board"),
+  });
   expect(
     await (await mountBand($)).find({ type: "Text", text: "🧩 Small plans" })
   ).toBeUndefined();

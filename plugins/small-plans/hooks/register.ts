@@ -48,6 +48,10 @@ const SUBCOMMAND_SUGGESTIONS = [
     description:
       "Have small-model agents implement a whole set or one plan of it, and review their work",
   },
+  {
+    text: "board",
+    description: "Show the build board again after hiding it",
+  },
 ];
 const WRITE_TOOL_NAME = "write_small_plan";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
@@ -806,6 +810,20 @@ const hideBoard = async (engine: EngineInterface) => {
   board.isShown = false;
   syncBoardTicker(engine);
   await engine.ui.invalidate("ui.render");
+  await engine.ui.toast(
+    `Build board hidden. /${COMMAND_NAME} board shows it again.`
+  );
+};
+
+const showBoard = async (engine: EngineInterface) => {
+  if (board.plans.length === 0)
+    return {
+      text: `No build board to show yet. Run /${COMMAND_NAME} build first.`,
+    };
+  board.isShown = true;
+  syncBoardTicker(engine);
+  await engine.ui.invalidate("ui.render");
+  return {};
 };
 
 const formatElapsed = (milliseconds: number) => {
@@ -1004,6 +1022,7 @@ export const register: Register = (on) => {
       (laterWords.length <= 1 || isBuildOfOnePlan)
     )
       return buildPlans($, laterWords[0] ?? "", laterWords[1] ?? "");
+    if (/^board$/i.test(requestedWork)) return showBoard($);
     if (!/^handoff$/i.test(firstWord)) return planWork($, requestedWork);
     return /^\d+$/.test(laterWords[0] ?? "")
       ? splitHandoff($, laterWords[0] ?? "", laterWords.slice(1).join(" "))

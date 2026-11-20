@@ -1,6 +1,6 @@
 ---
 name: mod-components
-description: Best practices for building custom UI components in Claude Code mods, the plugin hooks modules that draw through `ui.render` and `$.ui` (Box, Text, Button, Raster, Client). Covers choosing a function component or a custom `Client` region, structure, reuse and state, animation, mouse and keyboard, theme-key colouring, spacing, borders and typography, theming, fallbacks for surfaces and narrow terminals that can't draw something, testing, and limits. Use this whenever you write, restyle, review or debug a mod's pane, band (AbovePrompt), placed row, spinner, toast or Client widget, or the user asks how to make mod UI look good, what mod components can do, or how to make their own component, even if they don't say "mod".
+description: Best practices for building custom UI components in Claude Code mods, the plugin hooks modules that draw through `ui.render` and `$.ui` (Box, Text, Button, Raster, Client). Covers choosing a function component or a custom `Client` region, structure, reuse and state, animation, mouse and keyboard, theme-key colouring, spacing, borders and typography, theming, fallbacks for surfaces and narrow terminals that can't draw something, a house "status pill" visual style, rendering the mod in a real terminal to look at it, testing, and limits. Use this whenever you write, restyle, review or debug a mod's pane, band (AbovePrompt), placed row, spinner, toast or Client widget, or the user asks how to make mod UI look good, what mod components can do, or how to make their own component, even if they don't say "mod".
 ---
 
 # Custom components for Claude Code mods
@@ -45,17 +45,19 @@ Start with a function component. Reach for a `Client` only when you need what on
 Every element is a plain function that takes props, with nested elements and strings in `children`. So a component is just a function you write. The docs' own pane example uses a `tabButton` helper this way. [Docs]
 
 ```js
-const statusChip = ({ Box, Text }, label, isOk) =>
-  Box({ borderStyle: 'round', paddingX: 1, children: [
-    Text({ color: isOk ? 'success' : 'error', children: [isOk ? '✓ ' : '✗ ', label] }),
+function statusRow({ Box, Text }, label, isOk) {
+  return Box({ key: label, flexDirection: 'row', gap: 'sm', children: [
+    Text({ backgroundColor: isOk ? 'success' : 'error', color: 'inverseText', weight: 'semibold',
+      children: [isOk ? ' PASS ' : ' FAIL '] }),
+    Text({ children: [label] }),
   ]})
+}
 
-on('ui.render', { component: 'Pane' }, async ($, e, next) => {
-  if (e.requestId !== 'build') return next(e)
+on('ui.render', { component: 'Pane', requestId: 'build' }, async ($, e) => {
   const elements = $.ui.resolve(e)
-  return elements.Box({ flexDirection: 'column', gap: 'xs', children: [
-    statusChip(elements, 'Tests', true),
-    statusChip(elements, 'Lint', false),
+  return elements.Box({ flexDirection: 'column', paddingX: 'sm', children: [
+    statusRow(elements, 'Tests', true),
+    statusRow(elements, 'Lint', false),
   ]})
 })
 ```
@@ -83,7 +85,8 @@ Read `references/client-regions.md` before writing one. It covers the full surfa
   - `$.state` survives a reload but resets on `/clear`, `/resume` and `/branch`, so reload it at session start.
   - `$.store` (4 MiB of JSON) persists and is shared across sessions, and concurrent sessions can overwrite each other.
 - **Keep `$` at the edge.** Put layout, logic and drawing helpers in files that never touch `$`, and only `register` calls the engine. That makes them testable in plain Node. [Community: OneWave code-pet, ruvnet]
-- **Leave other mods alone.** Return `next(e)` for every site or `requestId` that isn't yours, or you blank other mods' panes. Give every `Button`, `Input` and `Select` a unique, non-empty `key`. [Docs]
+- **Leave other mods alone.** Filter on your own pane with `on('ui.render', { component: 'Pane', requestId: 'my-pane' }, …)`, or check `e.requestId` and `return next(e)` for everything else. Without one of these you blank other mods' panes. Give every `Button`, `Input` and `Select` a unique, non-empty `key`. [Docs, Types]
+- **Pass `$` only to top-level functions.** The mod compiler refuses a module where `$` goes to anything other than a function declared at the top level of the file (a `function` declaration, or a `const` bound to one) or one imported from the mod's own files. So `onPress: () => refresh($)`, where `refresh` is a closure inside `register`, makes the whole module fail to load. Declare such helpers at the top level, or call `$.noun.method(...)` directly in the handler. Run `claude plugin validate <mod dir>` to catch this before you finish. [Engine error text, seen in testing]
 - **Don't style shared wrappers.** Don't put `width`, `height` or `position` on a Box that wraps other mods' band rows. Before v2.1.323 it clobbers their rows. [Docs]
 
 ## Animation and performance
@@ -108,7 +111,7 @@ Read `references/client-regions.md` before writing one. It covers the full surfa
 
 ## Making it look good
 
-The official docs have no visual design guide. These come from the types, the gallery and community practice.
+**Read `references/visual-style.md` before drawing anything a person will look at.** It is the house style: coloured status pills, a header bar with an accent mark, fixed columns, segmented progress bars, band and empty/loading/error recipes, and what to drop at narrow widths. In testing, UI built only from the rules below came out correct but plain, and the user rejected it. The official docs have no visual design guide, so the points below (from the types, the gallery and community practice) are the building blocks that style uses.
 
 **Colour**
 - **Use theme keys for colour** so it follows the user's theme, including the colour-blind (`daltonized`) themes. [Types: `ThemeKey`]
@@ -124,7 +127,7 @@ The official docs have no visual design guide. These come from the types, the ga
 
 **Layout and spacing**
 - **Flexbox:** `flexDirection` (`row`, `column`, and the `-reverse` forms only, anything else gets the tree skipped), `flexWrap`, `alignItems`, `justifyContent` (`space-between` and so on), `gap`, `columnGap`, `rowGap`. [Types, Docs]
-- **Spacing scale:** use the named steps for a consistent rhythm instead of raw numbers. In the terminal, `xs` and `sm` are 1 across and 0 down, `md` is 2 and 1, `lg` is 3 and 1, `xl` is 4 and 2. They need v2.1.299+. [Types: `Space`, Docs]
+- **Spacing scale:** use the named steps for a consistent rhythm instead of raw numbers. In the terminal, `xs` and `sm` are 1 across and **0 down**, `md` is 2 and 1, `lg` is 3 and 1, `xl` is 4 and 2. So a vertical `gap: 'xs'` adds no blank row, and you need `'md'` or `1` for that. The steps need v2.1.299+. [Types: `Space`, Docs]
 - **Size to the room you have:** lay out to `e.props.bodyColumns`, not the terminal width. Truncate long text with `wrap: 'truncate-end'` (`maxLines` and `clip` need v2.1.326+). [Types, Docs]
 - **Inline panes** get a third of the screen by default and can cut off a bottom button row. Request `rows` for the view you need. [Docs, Community: ruvnet]
 
@@ -173,6 +176,25 @@ const chart = e.surface === 'terminal'
 - **Collapsed band:** a collapsed band draws no buttons. Read `e.props.isCollapsed` and offer the action elsewhere.
 - **Last resort:** `$.ui.log` (a dim transcript line Claude doesn't read) or a command's text reply works on every drawing surface.
 
+## Render it and look
+
+Code review alone isn't enough. In testing, a module that read correctly failed to load, and a band that looked fine in code drew as a truncated `| [=====  35% (click for`. Before you call a component done, load the mod in a real Claude Code terminal and look at what it draws:
+
+```bash
+claude plugin validate ./my-mod
+bash <this skill>/scripts/render-mod.sh ./my-mod ./out/pane /my-command 160 45 /path/to/a/trusted/folder
+bash <this skill>/scripts/render-mod.sh ./my-mod ./out/pane-narrow /my-command 90 40 /path/to/a/trusted/folder
+```
+
+- **What it does:** starts `claude --plugin-dir` in a hidden tmux terminal of the given size, types the slash command (pass `null` for UI that draws at session start), and saves the screen as `.txt`, `.ansi` and, with `uvx`, `.html`.
+- **What to check:** read the `.txt`. Look for "hook skipped" lines, cut-off text, and ragged columns, and compare against the target in `references/visual-style.md`. Open the `.html` to see the colours, or show it to the user. Fix the code and render again until it matches.
+- **Requirements:**
+  - `tmux`, and a **folder Claude Code already trusts** as the last argument. An untrusted folder makes Claude Code exit at the trust prompt.
+  - Run it outside the Bash sandbox, because the sandbox kills the tmux server. Ask the user for that permission.
+  - The script clears this session's `CLAUDE*` environment variables, so the inner `claude` starts as a normal interactive session, and it launches through bash, so a fish login shell doesn't break it.
+- **Noise:** the user's other plugins also draw on screen, so tell their lines apart from yours.
+- **HTML artifacts:** in the `.html`, a wide glyph such as `⏺` on the left of a row can shift that row by a column, and full-block Raster rows show thin gaps. The `.txt` grid is the truth for alignment; check it there before changing code.
+
 ## Testing and previewing
 
 - **Live preview:** run `claude --plugin-dir ./my-mod`. The module reloads on save. Editing an installed copy has no effect. [Docs]
@@ -213,9 +235,11 @@ const chart = e.surface === 'terminal'
 
 ## Before you finish a component
 
-1. Does every site that isn't yours return `next(e)`, and does every control have a unique `key`?
-2. Are colours theme keys, with a glyph alongside colour for status?
-3. Does the layout fit `bodyColumns`, with truncation on long text?
-4. Is there a fallback for each surface that can't draw an element you used, and for `isPlaced: false`?
-5. Are timers stopped on close and session end, and redraws under the rate cap?
-6. Has a `$.ui.mount` test run on both `terminal` and `desktop`, and have you looked at it in a real session?
+1. Does every site that isn't yours return `next(e)` (or does the hook filter on its own `requestId`), and does every control have a unique `key`?
+2. Does it follow `references/visual-style.md`: pills for status, theme-key colours, fixed columns and breathing room?
+3. Does `claude plugin validate` pass, with `$` only ever passed to top-level functions?
+4. Have you rendered it with `scripts/render-mod.sh` at 160 and 90 columns, and does the capture match the target?
+5. Does the layout fit `bodyColumns`, with truncation on long text?
+6. Is there a fallback for each surface that can't draw an element you used, and for `isPlaced: false`?
+7. Are timers stopped on close and session end, and redraws under the rate cap?
+8. Has a `$.ui.mount` test run on both `terminal` and `desktop`?

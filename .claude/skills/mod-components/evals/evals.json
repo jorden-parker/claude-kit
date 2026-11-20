@@ -1,0 +1,56 @@
+{
+  "skill_name": "mod-components",
+  "evals": [
+    {
+      "id": 1,
+      "name": "ci-status-pane",
+      "prompt": "I'm writing a Claude Code mod (plugin hooks module, register.tsx) that shows CI build status (a list of jobs: name, state passing/failing/running, duration) in a pane opened by a /ci command. Write register.tsx with a reusable component for one job row. Make it look polished, work in light and dark themes, and behave sensibly in VS Code and narrow terminals.",
+      "expected_output": "A register.tsx with a job-row function component, theme-key colours with glyphs, requestId/next(e) guard, truncation to the available width, and fallbacks for placement and surfaces.",
+      "files": [],
+      "expectations": [
+        "State colours use theme keys (success/error/warning) and the code has no hex colours",
+        "A reusable job-row function component is defined and used for each job",
+        "The Pane render hook returns next(e) for panes that are not its own",
+        "Handles narrow terminals or non-drawing surfaces (checks isPlaced, e.surface or bodyColumns)",
+        "Long text is truncated (wrap truncate-*) or sized to bodyColumns",
+        "Uses weight 'semibold' rather than the deprecated bold: true",
+        "Each status colour is paired with a glyph so it reads without colour",
+        "Any borderStyle used is a valid name (not 'rounded')"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "clickable-meter-client",
+      "prompt": "For my Claude Code mod I want a small animated progress meter in the band above the prompt that the user can click; a click should tell my hooks module so it can open a details pane. Write the code (all files needed).",
+      "expected_output": "A hooks module drawing a Client in AbovePrompt plus a surface module using onPointer and post, ui.message opening a pane, ui.fault and VS Code fallbacks.",
+      "files": [],
+      "expectations": [
+        "Draws a Client element whose module prop is a string literal path",
+        "A separate surface module default-exports a function taking (props, surface)",
+        "The surface module uses surface.onPointer to detect the click",
+        "The surface module calls surface.post to notify the hooks module",
+        "The hooks module handles ui.message and opens a details pane with $.ui.open",
+        "The hooks module handles ui.fault and falls back to drawing without the Client",
+        "Provides a fallback for surfaces that cannot draw a Client (VS Code)",
+        "Draws the meter in the AbovePrompt band render site"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "fix-buggy-pane",
+      "prompt": "Here's the hooks module of my Claude Code mod. The pane sometimes doesn't show, looks off, and seems to break other mods. Review it and give me a fixed version with a list of what you changed and why.",
+      "expected_output": "A fixed module and change list covering every planted bug.",
+      "files": ["evals/files/buggy.tsx"],
+      "expectations": [
+        "Removes focus: false (false throws; leave the field out)",
+        "Changes borderStyle 'rounded' to a valid name such as 'round'",
+        "Adds a requestId check that returns next(e) for other mods' panes",
+        "Gives the two buttons unique keys",
+        "Replaces hard-coded hex colours/background with theme keys or removes them",
+        "Replaces bold: true with weight 'semibold'",
+        "Guards the Raster with an e.surface check and a fallback for non-terminal surfaces",
+        "Handles the auto-open not being placed in narrow terminals (isPlaced check or opening from a command)"
+      ]
+    }
+  ]
+}

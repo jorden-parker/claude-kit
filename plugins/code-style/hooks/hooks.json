@@ -34,6 +34,16 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/naming-review-gate.sh\""
+          }
+        ]
+      }
     ]
   }
 }

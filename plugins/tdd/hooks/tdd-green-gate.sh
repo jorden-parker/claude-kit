@@ -5,10 +5,9 @@ source "$(dirname "$0")/tdd-lib.sh"
 source "$(dirname "$0")/turn-edits-lib.sh"
 
 payload="$(cat)" || exit 0
-[ "$(printf '%s' "$payload" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ] && exit 0
 session_id="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)" || exit 0
 project_directory="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)" || exit 0
-transcript_path="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)" || exit 0
+transcript_path="$(printf '%s' "$payload" | jq -r '(.agent_transcript_path // "") as $agent | if $agent != "" then $agent else (.transcript_path // empty) end' 2>/dev/null)" || exit 0
 [ -n "$transcript_path" ] || exit 0
 [ -n "$project_directory" ] && [ -d "$project_directory" ] || exit 0
 
@@ -40,12 +39,24 @@ else
 fi
 test_status=$?
 
+block_count_file="$(tdd_state_directory "$session_id")/green-gate-blocks-$(printf '%s' "$transcript_path" | shasum | cut -c1-16)"
+
 if [ "$test_status" -eq 0 ]; then
   [ -n "$session_id" ] && tdd_record_result "$session_id" "pass"
+  rm -f "$block_count_file"
   exit 0
 fi
 
 [ -n "$session_id" ] && tdd_record_result "$session_id" "fail"
+maximum_blocks_in_a_row=5
+blocks_so_far="$(cat "$block_count_file" 2>/dev/null || echo 0)"
+if [ "$blocks_so_far" -ge "$maximum_blocks_in_a_row" ]; then
+  rm -f "$block_count_file"
+  echo "Tests are still failing after $maximum_blocks_in_a_row blocks in a row. Stopping is allowed so the loop ends, but this work is not finished: report it as failing, not done." >&2
+  exit 0
+fi
+mkdir -p "$(dirname "$block_count_file")" 2>/dev/null
+echo $((blocks_so_far + 1)) > "$block_count_file"
 {
   echo "Tests are failing. Fix them before finishing:"
   printf '%s\n' "$test_output" | tail -n 40

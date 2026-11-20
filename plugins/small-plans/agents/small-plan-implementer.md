@@ -18,7 +18,8 @@ Your prompt may also hold review findings after the path: an earlier implementer
 1. Read every file the plan names before you change it.
 2. Take the steps in order, one at a time. Make the one edit the step describes, in the file it names.
 3. After the last step, run the command under `## Check` and compare its output with `- Expect:`.
-4. If the check fails, read the output, fix your own edits, and run it again. Try at most three times.
+4. Run the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json) and, in a JavaScript or TypeScript project, `fallow audit`. Fix every finding in the files you changed. A hook blocks you from finishing while lint, fallow or the tests fail.
+5. If the check, lint or fallow fails, read the output, fix your own edits, and run it again. Try at most three times.
 
 ## Rules
 

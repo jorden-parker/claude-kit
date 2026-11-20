@@ -529,6 +529,18 @@ test("/small-plans build has the session review each plan and send fixes to a ne
   expect(submittedPrompts[0]).not.toContain("small-plan-reviewer");
 });
 
+test("/small-plans build fails the review of a plan while lint or fallow fails", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(submittedPrompts[0]).toContain("project's lint command");
+  expect(submittedPrompts[0]).toContain("fallow audit");
+  expect(submittedPrompts[0]).toContain(
+    "A lint error or a failing fallow verdict fails the review"
+  );
+});
+
 const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;
 const THREE_PLAN_SET = {
   [`${SET_FOLDER}/01-add-the-toggle.md`]: "status: done",
@@ -592,6 +604,17 @@ test("/small-plans build says so when every plan of the set is done", async ($, 
 
   expect(reply.text).toContain("Every plan");
   expect(submittedPrompts).toHaveLength(0);
+});
+
+test("/small-plans build writes the index of a set that has none", async ($, on) => {
+  const { files } = await runCommand($, on, `build ${HANDOFF_SET}`, {
+    [HANDOFF_SET_PLAN]:
+      "---\ntitle: Clear the cached token\norder: 1\nkind: fix\nstatus: pending\n---\n\nbody\n",
+  });
+
+  expect(files.get(HANDOFF_SET_INDEX)).toContain(
+    "| 1 | [Clear the cached token](01-clear-the-cached-token.md) | fix | pending | none |"
+  );
 });
 
 test("/small-plans build lists no set whose plans are all done", async ($, on) => {

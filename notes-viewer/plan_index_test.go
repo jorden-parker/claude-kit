@@ -14,8 +14,11 @@ func readPlanIndex(t *testing.T, setPath string) string {
 	return text
 }
 
-func TestSavingAPlanRewritesItsSetIndex(t *testing.T) {
+func TestSavingAPlanCreatesTheMissingSetIndex(t *testing.T) {
 	seedNotes(t)
+	if _, hasIndex := readNoteFile(t, fixLoginSet+"/index.md"); hasIndex {
+		t.Fatal("the seeded set already has an index")
+	}
 
 	donePlan := strings.Replace(buildSmallPlan(2, "Logout clears the token."), "status: pending", "status: done", 1)
 	response := sendNoteRequest(http.MethodPut, "/api/notes/"+fixLoginSet+"/02-clear-the-cached-token.md", donePlan, "")

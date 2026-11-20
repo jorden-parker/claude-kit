@@ -9,7 +9,7 @@ stop_hook_active=$(printf '%s' "$payload" | /usr/bin/jq -r '.stop_hook_active //
 
 session_id=$(printf '%s' "$payload" | /usr/bin/jq -r '.session_id // empty' 2>/dev/null) || exit 0
 working_directory=$(printf '%s' "$payload" | /usr/bin/jq -r '.cwd // empty' 2>/dev/null) || exit 0
-transcript_path=$(printf '%s' "$payload" | /usr/bin/jq -r '.transcript_path // empty' 2>/dev/null) || exit 0
+transcript_path=$(printf '%s' "$payload" | /usr/bin/jq -r '(.agent_transcript_path // "") as $agent | if $agent != "" then $agent else (.transcript_path // empty) end' 2>/dev/null) || exit 0
 [ -z "$session_id" ] && exit 0
 [ -z "$working_directory" ] && exit 0
 [ -z "$transcript_path" ] && exit 0

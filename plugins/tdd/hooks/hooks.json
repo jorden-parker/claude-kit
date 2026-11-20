@@ -41,7 +41,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-green-gate.sh\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-green-gate.sh\"",
+            "timeout": 360
           }
         ]
       }
@@ -53,6 +54,17 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-record-test-run.sh\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/tdd-green-gate.sh\"",
+            "timeout": 360
           }
         ]
       }

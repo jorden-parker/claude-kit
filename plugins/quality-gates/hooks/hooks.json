@@ -27,6 +27,11 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/verify-before-finish-gate.sh\""
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/lint-fallow-gate.sh\"",
+            "timeout": 660
           }
         ]
       }
@@ -37,6 +42,11 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/verify-before-finish-gate.sh\""
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/lint-fallow-gate.sh\"",
+            "timeout": 660
           }
         ]
       }

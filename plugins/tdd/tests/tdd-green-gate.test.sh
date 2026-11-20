@@ -145,6 +145,27 @@ expect_exit "green gate ignores Qwen Code edits from earlier turns" 0 "$status"
 run_hook tdd-green-gate.sh "$qwen_edit_transcript" tdd-qwen-edit; status=$?
 expect_exit "green gate runs failing tests after a Qwen Code edit" 2 "$status"
 
+
+run_subagent_hook() {
+  local hook_name="$1" parent_transcript_path="$2" agent_transcript_path="$3" session_id="$4" stop_hook_active="${5:-false}"
+  printf '{"session_id":"%s","transcript_path":"%s","agent_transcript_path":"%s","cwd":"%s","stop_hook_active":%s}' \
+    "$session_id" "$parent_transcript_path" "$agent_transcript_path" "$repository" "$stop_hook_active" \
+    | "$hook_directory/$hook_name" 2>"$fixture_directory/stderr"
+}
+
+coordinator_transcript="$fixture_directory/coordinator.jsonl"
+write_transcript "$coordinator_transcript" "$(user_prompt_line c1 'build the plans')"
+implementer_transcript="$fixture_directory/implementer.jsonl"
+write_transcript "$implementer_transcript" \
+  "$(user_prompt_line s1 'implement the plan')" \
+  "$(edit_line s2 "$repository/app.py")"
+
+run_subagent_hook tdd-green-gate.sh "$coordinator_transcript" "$implementer_transcript" tdd-subagent; status=$?
+expect_exit "green gate checks the edits in a subagent's own transcript" 2 "$status"
+
+run_subagent_hook tdd-green-gate.sh "$coordinator_transcript" "$implementer_transcript" tdd-subagent true; status=$?
+expect_exit "green gate still blocks a second stop attempt while tests fail" 2 "$status"
+
 rm -rf "$fixture_directory"
 if [ "$failures" -gt 0 ]; then
   echo "$failures failure(s)"

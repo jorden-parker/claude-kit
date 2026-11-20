@@ -31,6 +31,11 @@ for manifest in plugins/*/package.json; do
   (cd "$plugin_folder" && pnpm run test)
 done
 
+if should_check notes-viewer; then
+  echo "check: notes-viewer"
+  (cd notes-viewer && go test ./...)
+fi
+
 for bun_folder in plugin-host design-studio; do
   should_check "$bun_folder" || continue
   echo "check: $bun_folder"

@@ -1,5 +1,5 @@
 {
   "name": "project-notes",
-  "version": "0.3.0",
-  "description": "Claude writes categorised project notes (fact, finding, decision, reference, debugging) as Markdown files under ~/.claude/project-notes/<project>/<category>/; debugging notes must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; /project-notes opens the shared notes viewer, one local web page with handoffs, project notes, small plans and brainstorm plans in its sidebar; /project-notes organise files existing session notes into the same structure"
+  "version": "0.4.0",
+  "description": "Claude writes categorised project notes (fact, finding, decision, reference, debugging) as Markdown files under ~/.claude/project-notes/<project>/<category>/; debugging notes must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; /project-notes organise files existing session notes into the same structure"
 }

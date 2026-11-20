@@ -44,7 +44,7 @@ All text from the model is HTML-escaped before it is written to the page.
 
 ### The plan files
 
-Each `/brainstorm plan` writes a run folder, `~/.claude/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/`. `BRAINSTORM_DIR` replaces `~/.claude/brainstorm`. The plugin lets Claude read and write files in that folder without a permission prompt, and nowhere else. `/handoff open`, `/project-notes` and `/small-plans open` show the plans in the browser, under Brainstorm plans. Every plan gets a folder and a file of its own:
+Each `/brainstorm plan` writes a run folder, `~/.claude/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/`. `BRAINSTORM_DIR` replaces `~/.claude/brainstorm`. The plugin lets Claude read and write files in that folder without a permission prompt, and nowhere else. `claude-notes`, run in a terminal, shows the plans in the browser, under Brainstorm plans. Every plan gets a folder and a file of its own:
 
 ```
 plan-2026-11-11-1200/

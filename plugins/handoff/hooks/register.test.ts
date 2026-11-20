@@ -1344,7 +1344,7 @@ testWithSession(
 );
 
 const RESUME_HINT =
-  "Run /handoff resume <id> to continue one in a new session, or /handoff open to browse them all.";
+  "Run /handoff resume <id> to continue one in a new session, or claude-notes in a terminal to browse them all.";
 
 testWithSession(
   "list shows the project's handoffs, newest first, with their first line",
@@ -1662,16 +1662,6 @@ test(
   }
 );
 
-testWithSession("open starts the viewer", [], async ($) => {
-  ranCommands.length = 0;
-
-  const reply = await $.command.run(handoff("open"));
-
-  expect(ranCommands).toHaveLength(1);
-  expect(ranCommands[0]!.join(" ")).toMatch(/bin\/handoffs --background$/);
-  expect(reply.text).toBe("Handoffs are opening in the browser.");
-});
-
 const PLAN_SEPARATOR = "---handoff---";
 
 testWithSession(
@@ -1787,7 +1777,6 @@ test("typing the first word after /handoff suggests every action", async ($, on)
     "each",
     "list",
     "resume",
-    "open",
   ]);
   expect(reply.suggestions[0]!.description).toContain("fresh session");
 });

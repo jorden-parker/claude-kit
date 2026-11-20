@@ -333,15 +333,6 @@ test("/small-plans handoff says so when the project has no handoff", async ($, o
   expect(submittedPrompts).toHaveLength(0);
 });
 
-test("/small-plans open starts the viewer", async ($, on) => {
-  const { reply, commands, submittedPrompts } = await runCommand($, on, "open");
-
-  expect(commands).toHaveLength(1);
-  expect(commands[0]!.join(" ")).toMatch(/bin\/small-plans --background$/);
-  expect(reply.text).toContain("browser");
-  expect(submittedPrompts).toHaveLength(0);
-});
-
 test("/small-plans build runs the newest set, which needs no handoff", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "build", {
     [HANDOFF_SET_PLAN]: "older, from a handoff",
@@ -395,7 +386,7 @@ test("typing the first word after /small-plans suggests every action", async ($,
 
   const reply = await autocomplete($, "/small-plans ");
 
-  expect(suggestedTexts(reply)).toEqual(["handoff", "build", "open"]);
+  expect(suggestedTexts(reply)).toEqual(["handoff", "build"]);
   expect(reply.suggestions[0]!.description).toContain("saved handoff");
 });
 

@@ -19,7 +19,6 @@ const MAX_STEPS = 6;
 const MAX_ORDER = 99;
 const ORDER_WIDTH = 2;
 const MAX_SLUG_LENGTH = 60;
-const VIEWER_BUILD_TIMEOUT_MS = 180_000;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
 const HANDOFF_FILE_NAME = /^\d+-.*\.md$/;
 const SET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -39,7 +38,6 @@ const SUBCOMMAND_SUGGESTIONS = [
     text: "build",
     description: "Have small-model agents implement and review a set",
   },
-  { text: "open", description: "Browse every plan in the browser" },
 ];
 const WRITE_TOOL_NAME = "write_small_plan";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
@@ -321,7 +319,7 @@ const composePlanInstruction = (
 4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set "${setName}", its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs, and its body.`,
     PLAN_SHAPE,
     ...laterNotes,
-    `When every plan is saved, reply with one line per plan (order, kind, title), then the work you left out and why. End by naming /${COMMAND_NAME} open to read the plans and /${COMMAND_NAME} build to have small models build them.`,
+    `When every plan is saved, reply with one line per plan (order, kind, title), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them.`,
   ].join("\n\n");
 
 const composeBuildInstruction = (
@@ -421,27 +419,14 @@ const buildPlans = async (engine: EngineInterface, requestedName: string) => {
   return { text: `Building the plans of set ${setName}…` };
 };
 
-const openViewer = async (engine: EngineInterface) => {
-  const launch = await engine.process
-    .run(["bash", `${engine.plugin.root}/bin/small-plans`, "--background"], {
-      timeoutMs: VIEWER_BUILD_TIMEOUT_MS,
-    })
-    .catch(() => undefined);
-  if (launch?.exitCode === 0)
-    return { text: "Small plans are opening in the browser." };
-  return {
-    text: launch?.stderr.trim() || "Could not start the small plans viewer.",
-  };
-};
-
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     await $.command.register({
       name: COMMAND_NAME,
       description:
-        "Plan work as small plans a weaker model can implement and review: name the work, or leave it out to plan what this conversation leaves; handoff [id] plans what a saved handoff leaves; build [set] has small-model agents implement and review a set; open shows every plan in the browser",
+        "Plan work as small plans a weaker model can implement and review: name the work, or leave it out to plan what this conversation leaves; handoff [id] plans what a saved handoff leaves; build [set] has small-model agents implement and review a set",
       argumentHint:
-        "[work to plan] | handoff [id] [extra context] | build [set] | open",
+        "[work to plan] | handoff [id] [extra context] | build [set]",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
@@ -461,7 +446,6 @@ export const register: Register = (on) => {
   on("command.run", { command: COMMAND_NAME }, async ($, e) => {
     const requestedWork = e.args.trim();
     const [firstWord = "", ...laterWords] = requestedWork.split(/\s+/);
-    if (/^open$/i.test(requestedWork)) return openViewer($);
     if (/^build$/i.test(firstWord) && laterWords.length <= 1)
       return buildPlans($, laterWords[0] ?? "");
     if (!/^handoff$/i.test(firstWord)) return planWork($, requestedWork);

@@ -387,7 +387,7 @@ test("/project-note asks Claude to write a note on the topic", async ($, on) => 
   expect(submittedPrompts[0]).toContain("why the cache is stale");
 });
 
-test("/project-notes starts the viewer", async ($, on) => {
+test("/project-notes without organise points to the claude-notes terminal command", async ($, on) => {
   const { reply, commands, submittedPrompts } = await runCommand(
     $,
     on,
@@ -395,9 +395,8 @@ test("/project-notes starts the viewer", async ($, on) => {
     ""
   );
 
-  expect(commands).toHaveLength(1);
-  expect(commands[0]!.join(" ")).toMatch(/bin\/project-notes --background$/);
-  expect(reply.text).toContain("browser");
+  expect(commands).toHaveLength(0);
+  expect(reply.text).toContain("claude-notes");
   expect(submittedPrompts).toHaveLength(0);
 });
 

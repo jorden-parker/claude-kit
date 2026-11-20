@@ -1,5 +1,5 @@
 ---
-description: "Hand the work off to a fresh session: save a recap, list this project's handoffs, resume one, or open them all in the browser"
+description: "Hand the work off to a fresh session: save a recap, list this project's handoffs, or resume one"
 ---
 
 This command runs through the `mcp__handoff__run_handoff` tool. The user's arguments are inside the <arguments> tags.
@@ -10,7 +10,7 @@ This command runs through the `mcp__handoff__run_handoff` tool. The user's argum
 
 The first word of the arguments picks the case. Call the tool once.
 
-**Case 1: the first word is `list`, `open` or `resume`** (`resume [id] [extra context]`). Call `mcp__handoff__run_handoff` with `args` set to the arguments exactly as written. Do not set `modelReply`. Show the tool's reply to the user, word for word.
+**Case 1: the first word is `list` or `resume`** (`resume [id] [extra context]`). Call `mcp__handoff__run_handoff` with `args` set to the arguments exactly as written. Do not set `modelReply`. Show the tool's reply to the user, word for word.
 
 **Case 2: anything else** (no arguments, a focus, or a first word of `save`, `new` or `each`).
 

@@ -28,7 +28,6 @@ const SOURCE_FIELD = "source: ";
 const SOURCE_LINE_PATTERN = `^${SOURCE_FIELD}`;
 const LEGACY_BATCH_SIZE = 10;
 const MAX_SLUG_LENGTH = 60;
-const VIEWER_BUILD_TIMEOUT_MS = 180_000;
 const NOTES_COMMAND_PREFIX = "/project-notes ";
 const SUBCOMMAND_SUGGESTIONS = [
   {
@@ -281,18 +280,8 @@ const askClaude = (engine: EngineInterface, instruction: string) => {
   engine.clock.after(0, () => void engine.prompt.submit({ text: instruction }));
 };
 
-const openViewer = async (engine: EngineInterface) => {
-  const launch = await engine.process
-    .run(["bash", `${engine.plugin.root}/bin/project-notes`, "--background"], {
-      timeoutMs: VIEWER_BUILD_TIMEOUT_MS,
-    })
-    .catch(() => undefined);
-  if (launch?.exitCode === 0)
-    return { text: "Project notes are opening in the browser." };
-  return {
-    text: launch?.stderr.trim() || "Could not start the project notes viewer.",
-  };
-};
+const VIEWER_HINT =
+  "Run claude-notes in a terminal to browse every project note. /project-notes organise files existing session notes as project notes.";
 
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
@@ -305,8 +294,8 @@ export const register: Register = (on) => {
     await $.command.register({
       name: "project-notes",
       description:
-        "Open every project note in the browser; /project-notes organise files existing session notes as project notes",
-      argumentHint: "[organise]",
+        "/project-notes organise files existing session notes as project notes",
+      argumentHint: "organise",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
@@ -336,7 +325,7 @@ export const register: Register = (on) => {
   });
 
   on("command.run", { command: "project-notes" }, async ($, e) => {
-    if (!/^organi[sz]e$/i.test(e.args.trim())) return openViewer($);
+    if (!/^organi[sz]e$/i.test(e.args.trim())) return { text: VIEWER_HINT };
     askClaude($, ORGANISE_INSTRUCTION);
     return { text: "Filing the existing session notes as project notes…" };
   });

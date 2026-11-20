@@ -1,8 +1,8 @@
 {
   "name": "project-notes",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "scripts": {
-    "test": "claude plugin test . && (cd web && go test ./...)",
+    "test": "claude plugin test .",
     "typecheck": "tsc -p ."
   },
   "packageManager": "pnpm@10.15.0",

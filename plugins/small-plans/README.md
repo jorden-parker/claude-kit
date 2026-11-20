@@ -10,7 +10,6 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 | `/small-plans`                              | Plans the work this conversation still leaves to do                  |
 | `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: the newest, or handoff `<id>` |
 | `/small-plans build [set]`                  | Has small-model agents implement and review each plan of a set       |
-| `/small-plans open`                         | Opens every plan in the browser                                      |
 
 Typing `/small-plans ` suggests the actions.
 
@@ -18,7 +17,7 @@ Each planning command has Claude list the work that is left, check it against th
 
 No handoff is needed. `handoff` is one source of work among three, and it needs the handoff plugin only to have saved a handoff under `~/.claude/handoffs` (`/handoff save`). Run again on a handoff that already has plans, it keeps them and adds plans only for work they do not cover.
 
-`open` and `build` are commands only when they stand as shown: `/small-plans build a login page with tests` plans that work.
+`build` is a command only when it stands as shown: `/small-plans build a login page with tests` plans that work.
 
 You can also ask in your own words ("break this into small plans"); Claude calls the same tool.
 
@@ -69,18 +68,7 @@ Nothing is committed: the changes stay in your working tree.
 
 ## Viewer
 
-`/small-plans open` opens every plan in your browser. It starts a small local web server (a Go program, built on first run, so it needs Go once: `brew install go`) and opens the page.
-
-- The sidebar is grouped by project, then by set with the newest first, then lists the plans in build order
-- Each set shows how many of its plans are done; each plan shows its kind and status
-- The plan shows rendered Markdown. Raw HTML in a plan is not rendered
-- The page reloads the plans when you come back to its tab
-- The same page serves all four kinds of saved notes: Handoffs, Project notes, Small plans and Brainstorm plans. Pick one at the top of the sidebar. `/small-plans open` opens it on Small plans
-- The server only reads the notes. It listens on `127.0.0.1`, port `47618`; set `CLAUDE_NOTES_PORT` to pick another, or `CLAUDE_NOTES_NO_OPEN=1` to skip opening the browser
-- The handoff, project-notes and small-plans plugins each ship the same viewer, so any one of them is enough to run it
-- It keeps running after the session ends. Running `/small-plans open` again reopens the same page
-
-From a terminal: `bash ~/src/claude-kit/plugins/small-plans/bin/small-plans` runs it in the foreground; `Ctrl+C` stops it.
+Run `claude-notes` in a terminal to browse every saved note in the browser. See [Notes viewer](../../README.md#notes-viewer).
 
 ## Install
 

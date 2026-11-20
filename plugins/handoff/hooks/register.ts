@@ -49,7 +49,6 @@ const SUBCOMMAND_SUGGESTIONS = [
     description:
       "Continue the latest handoff, or one by id, plus optional extra context",
   },
-  { text: "open", description: "Browse every handoff in the browser" },
 ];
 const PENDING_HANDOFF_KEY = "pendingHandoff";
 const LEGACY_HANDOFFS_KEY = "handoffs";
@@ -57,7 +56,6 @@ const LISTED_HANDOFF_LIMIT = 10;
 const SUMMARY_MAX_LENGTH = 80;
 const MAX_SLUG_LENGTH = 60;
 const HANDOFF_ID_WIDTH = 3;
-const VIEWER_BUILD_TIMEOUT_MS = 180_000;
 const HANDOFF_FILE_NAME = /^(\d+)-.*\.md$/;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
 const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n+/;
@@ -66,7 +64,7 @@ const CREATED_FIELD = /^created: (.+)$/m;
 const describeNoHandoffs = (projectName: string) =>
   `No handoffs for ${projectName} yet. Run /handoff to create one.`;
 const RESUME_HINT =
-  "Run /handoff resume <id> to continue one in a new session, or /handoff open to browse them all.";
+  "Run /handoff resume <id> to continue one in a new session, or claude-notes in a terminal to browse them all.";
 const NO_PLANS_MESSAGE = "No suggested plans found to hand off.";
 const describeSavedPlanCount = (planCount: number) =>
   planCount === 1
@@ -181,7 +179,6 @@ The conversation above is what the rules below call "the conversation below".`;
 
 type HandoffArguments =
   | { action: "list" }
-  | { action: "open" }
   | { action: "resume"; handoffId: number | undefined; extraContext: string }
   | { action: "each"; focus: string }
   | {
@@ -196,7 +193,7 @@ const parseHandoffArguments = (args: string): HandoffArguments => {
   const [, firstWord = "", laterWords = ""] =
     FIRST_WORD_AND_REST.exec(args.trim()) ?? [];
   const subcommand = firstWord.replace(/^--/, "");
-  if (subcommand === "list" || subcommand === "open") {
+  if (subcommand === "list") {
     return { action: subcommand };
   }
   if (subcommand === "resume") {
@@ -947,19 +944,6 @@ const resumeSavedHandoff = async (
   );
 };
 
-const openViewer = async (engine: EngineInterface) => {
-  const launch = await engine.process
-    .run(["bash", `${engine.plugin.root}/bin/handoffs`, "--background"], {
-      timeoutMs: VIEWER_BUILD_TIMEOUT_MS,
-    })
-    .catch(() => undefined);
-  if (launch?.exitCode === 0)
-    return { text: "Handoffs are opening in the browser." };
-  return {
-    text: launch?.stderr.trim() || "Could not start the handoffs viewer.",
-  };
-};
-
 const readPendingHandoff = async (engine: EngineInterface) => {
   const storedHandoff = await engine.store.get(PENDING_HANDOFF_KEY);
   return typeof storedHandoff === "string" && storedHandoff
@@ -1048,9 +1032,9 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: "handoff",
       description:
-        "Summarize the session into a prompt that resumes the work. new: continue it in a fresh session; save: only save it; each: one handoff per suggested plan; list: this project's handoffs; resume [id] [extra context]: continue the latest or a chosen one; open: browse every handoff in the browser",
+        "Summarize the session into a prompt that resumes the work. new: continue it in a fresh session; save: only save it; each: one handoff per suggested plan; list: this project's handoffs; resume [id] [extra context]: continue the latest or a chosen one",
       argumentHint:
-        "[new | save | each] [focus] | list | resume [id] [extra context] | open",
+        "[new | save | each] [focus] | list | resume [id] [extra context]",
     });
     await resumePendingHandoff($);
 
@@ -1059,7 +1043,6 @@ export const register: Register = (on, options) => {
 
   on("command.run", { command: "handoff" }, async ($, e) => {
     const handoffArguments = parseHandoffArguments(e.args);
-    if (handoffArguments.action === "open") return openViewer($);
     await fileLegacyHandoffs($);
     if (handoffArguments.action === "list") return listProjectHandoffs($);
     if (handoffArguments.action === "resume") {

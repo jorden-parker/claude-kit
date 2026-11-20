@@ -14,7 +14,6 @@ The first word picks the action. Anything else is the focus, which centers the r
 | `/handoff each [focus]`                | Save one handoff per plan suggested in the conversation                            |
 | `/handoff list`                        | Show this project's handoffs, newest first                                         |
 | `/handoff resume [id] [extra context]` | Put a saved handoff into the composer of a fresh session: the latest, or one by id |
-| `/handoff open`                        | Browse every handoff in the browser                                                |
 
 Typing `/handoff ` suggests the actions.
 
@@ -63,17 +62,7 @@ Each handoff is one file:
 
 ## Viewer
 
-`/handoff open` opens every handoff in your browser. It starts a small local web server (a Go program, built on first run, so it needs Go once: `brew install go`) and opens the page.
-
-- The sidebar lists every handoff, grouped by project, newest first
-- The handoff shows rendered Markdown, with the command that resumes it. Raw HTML in a handoff is not rendered
-- The page reloads the handoffs when you come back to its tab
-- The same page serves all four kinds of saved notes: Handoffs, Project notes, Small plans and Brainstorm plans. Pick one at the top of the sidebar. `/handoff open` opens it on Handoffs
-- The server only reads the notes. It listens on `127.0.0.1`, port `47618`; set `CLAUDE_NOTES_PORT` to pick another, or `CLAUDE_NOTES_NO_OPEN=1` to skip opening the browser
-- The handoff, project-notes and small-plans plugins each ship the same viewer, so any one of them is enough to run it
-- It keeps running after the session ends. Running `/handoff open` again reopens the same page
-
-From a terminal: `bash ~/src/claude-kit/plugins/handoff/bin/handoffs` runs it in the foreground; `Ctrl+C` stops it.
+Run `claude-notes` in a terminal to browse every saved note in the browser. See [Notes viewer](../../README.md#notes-viewer).
 
 ## How the recap is written
 

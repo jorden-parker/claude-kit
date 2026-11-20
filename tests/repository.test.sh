@@ -43,12 +43,4 @@ expect "turn-edits-lib.sh is the same in code-style and tdd" \
   cmp -s "$repository_root/plugins/code-style/hooks/turn-edits-lib.sh" \
   "$repository_root/plugins/tdd/hooks/turn-edits-lib.sh"
 
-has_same_viewer() {
-  diff -rq "$repository_root/plugins/handoff/web" "$repository_root/plugins/$1/web" >/dev/null &&
-    cmp -s "$repository_root/plugins/handoff/bin/handoffs" "$repository_root/plugins/$1/bin/$2"
-}
-
-expect "the notes viewer is the same in handoff and project-notes" has_same_viewer project-notes project-notes
-expect "the notes viewer is the same in handoff and small-plans" has_same_viewer small-plans small-plans
-
 [ "$failures" -eq 0 ] || exit 1

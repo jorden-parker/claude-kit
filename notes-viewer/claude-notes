@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+viewer_directory="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+source_checksum="$(cat "$viewer_directory"/*.go "$viewer_directory"/go.* "$viewer_directory"/index.html | cksum | cut -d ' ' -f 1)"
+viewer_path="${XDG_CACHE_HOME:-$HOME/.cache}/claude-notes/viewer-$source_checksum"
+
+if [ ! -x "$viewer_path" ]; then
+  command -v go >/dev/null || fail "claude-notes is built with Go on first run: brew install go"
+  mkdir -p "$(dirname "$viewer_path")"
+  (cd "$viewer_directory" && go build -o "$viewer_path" .) || fail "Could not build claude-notes."
+fi
+
+exec "$viewer_path" "$@"

@@ -1,8 +1,8 @@
 {
   "name": "handoff",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "scripts": {
-    "test": "claude plugin test . && (cd web && go test ./...)",
+    "test": "claude plugin test .",
     "typecheck": "tsc -p ."
   },
   "packageManager": "pnpm@10.15.0",

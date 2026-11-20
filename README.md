@@ -18,8 +18,8 @@ install any of them on its own. Sync scripts install the same plugins into
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
 | [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
-| [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes` opens them in the notes viewer shared with handoff, small-plans and brainstorm; `/project-notes organise` files existing session notes the same way |
-| [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.claude/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement and review each one; `open` shows them in the notes viewer shared with handoff, project-notes and brainstorm, sorted by project, set and build order. |
+| [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
+| [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.claude/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement and review each one. |
 
 ## Saved notes
 
@@ -36,7 +36,23 @@ Four plugins save Markdown, and they follow one layout:
 - A slug is the title in lowercase letters, digits and hyphens, 60 characters at most
 - Handoffs, project notes and small plans start with front matter: `title`, `project`, `created` (UTC), then the fields of their kind. The title is a short name of the work
 - Brainstorm plans keep their own format, a `# Plan:` heading with `- Status:` lines, an `index.md` per run and step files, because `check_brainstorm_plan` checks it
-- One local web page shows all four, picked from its sidebar: `/handoff open`, `/project-notes` or `/small-plans open`
+- One local web page shows all four, picked from its sidebar: run `claude-notes` in a terminal (see [Notes viewer](#notes-viewer))
+
+## Notes viewer
+
+`claude-notes` serves one local web page with every handoff, project note, small plan and brainstorm plan, picked from its sidebar. It runs from a terminal, not inside a session.
+
+```
+ln -s ~/src/claude-kit/notes-viewer/claude-notes ~/.local/bin/claude-notes
+claude-notes                  # opens http://127.0.0.1:47618
+claude-notes small-plans      # opens on one section: handoffs, project-notes, small-plans or brainstorm
+```
+
+- It is a Go program, built on first run and again after the viewer changes, so it needs Go: `brew install go`
+- On a machine with only the marketplace, link `~/.claude/plugins/marketplaces/claude-kit/notes-viewer/claude-notes` instead
+- The server only reads the notes. It listens on `127.0.0.1`, port `47618`; `CLAUDE_NOTES_PORT` picks another, `CLAUDE_NOTES_NO_OPEN=1` skips opening the browser
+- If it is already running, `claude-notes` opens the same page again. `Ctrl+C` stops it
+- The page reloads the notes when you come back to its tab. Raw HTML in a note is not rendered
 
 ## Install
 
@@ -278,6 +294,7 @@ design-studio/cli.ts "Onboarding screen for a recipe app" --variants 2 --size 9b
 .claude-plugin/marketplace.json   lists every plugin and its folder
 plugins/<name>/                   one plugin: its own plugin.json, README, package.json and tests
 plugin-host/                      runs register.ts plugins and command hooks outside Claude Code (engine, MCP server, hook bridges, build)
+notes-viewer/                     claude-notes: the local web page for saved notes (Go)
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
 check                             runs every test suite; --staged runs only staged ones (the pre-commit hook)

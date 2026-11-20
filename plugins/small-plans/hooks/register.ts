@@ -29,6 +29,9 @@ const SET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const CODE_FENCE = /```[\s\S]*?```/g;
 const NUMBERED_STEP = /^\d+\.\s/gm;
 const BACKTICKED_TEXT = /`[^`\n]+`/;
+const EXPECT_LINE = /^-\s*Expect:\s*\S/m;
+const BUILD_OR_LINT_ONLY_COMMAND =
+  /^`\s*(?:(?:npm|pnpm|yarn|bun|npx)\s+(?:run\s+)?)?(?:lint|build|typecheck|type-check|tsc|eslint|prettier|format|fallow|cargo\s+(?:build|check|clippy)|go\s+(?:build|vet)|ruff)\b[^`&;|]*`$/;
 const STATUS_LINE = /^status: .*$/m;
 const INDEX_FILE_NAME = "index.md";
 const FILE_EDITING_TOOLS = ["Edit", "Write", "MultiEdit"];
@@ -55,7 +58,7 @@ const PLAN_SHAPE = `The body holds these "## " headings, in this order: ${PLAN_S
 - Goal: one sentence on what is true when the plan is done.
 - Context: all that the implementer must know and cannot guess: each file by its path, the exact names of the functions, types and commands involved, and the decisions already made. The implementer sees this plan only, never this conversation or another plan.
 - Steps: a numbered list of at most ${MAX_STEPS} steps. Each step is one edit: the file path, the place in it, and what to write there. Quote the exact code where the wording matters.
-- Check: "- Run:" with one command in backticks, and "- Expect:" with what its output shows when the plan worked.
+- Check: proves the behaviour the plan delivers works, not only that the code builds: "- Run:" with one command in backticks that exercises it, such as the test the plan adds or changes, or a command that runs the feature, and "- Expect:" with the exact output that counts as passing, such as the test name reported as passed or the value the command prints. A build, type-check, lint or format command alone is refused.
 - Review: a list of what a reviewer confirms by reading the diff, each line a fact that is true or false.
 Vague wording is refused outside code fences: ${BANNED_PHRASES.join(", ")}. Say the exact thing instead.`;
 const WRITE_TOOL_SCHEMA = {
@@ -186,6 +189,24 @@ const findBannedPhrases = (body: string) => {
   );
 };
 
+const listCheckProblems = (checkSection: string) => {
+  const checkCommand = checkSection.match(BACKTICKED_TEXT)?.[0];
+  if (checkCommand === undefined)
+    return ['"## Check" needs a command in backticks to run.'];
+  return [
+    ...(EXPECT_LINE.test(checkSection)
+      ? []
+      : [
+          '"## Check" needs "- Expect:" with the exact output that counts as passing.',
+        ]),
+    ...(BUILD_OR_LINT_ONLY_COMMAND.test(checkCommand)
+      ? [
+          '"## Check" must run what the plan delivers, such as its test, not only a build, type-check, lint or format command.',
+        ]
+      : []),
+  ];
+};
+
 const listBodyProblems = (body: string) => {
   const missingSections = PLAN_SECTIONS.filter(
     (section) => readSection(body, section) === undefined
@@ -205,9 +226,7 @@ const listBodyProblems = (body: string) => {
           `The plan has ${stepCount} steps; the most is ${MAX_STEPS}. Split it into two plans.`,
         ]
       : []),
-    ...(checkSection !== undefined && !BACKTICKED_TEXT.test(checkSection)
-      ? ['"## Check" needs a command in backticks to run.']
-      : []),
+    ...(checkSection === undefined ? [] : listCheckProblems(checkSection)),
     ...(bannedPhrases.length > 0
       ? [
           `Replace the vague wording with the exact thing: ${bannedPhrases

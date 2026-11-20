@@ -30,7 +30,7 @@ The profile request works after a token refresh.
 
 ## Check
 - Run: \`pnpm test auth\`
-- Expect: every test passes.
+- Expect: the test "a refresh clears the cached token" passes, and no test fails.
 
 ## Review
 - \`refreshToken\` clears \`cachedToken\` before it requests a new token.
@@ -170,6 +170,48 @@ test("a plan that a small model could not follow is refused with every problem",
   expect(reply.deny).toContain('"as needed"');
   expect(reply.deny).toContain("command in backticks");
   expect(files.size).toBe(0);
+});
+
+test("a check that only builds, type-checks or lints is refused", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  const reply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    body: PLAN_BODY.replace("pnpm test auth", "pnpm lint"),
+  });
+
+  expect(reply.deny).toContain("must run what the plan delivers");
+  expect(files.size).toBe(0);
+});
+
+test("a check without an Expect line is refused", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  const reply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    body: PLAN_BODY.replace(/- Expect:[^\n]*/, ""),
+  });
+
+  expect(reply.deny).toContain('"- Expect:"');
+  expect(files.size).toBe(0);
+});
+
+test("/small-plans <work> asks for a check that proves the plan's behaviour works", async ($, on) => {
+  const { submittedPrompts } = await runCommand(
+    $,
+    on,
+    "Add a dark mode toggle!"
+  );
+
+  expect(submittedPrompts[0]).toContain(
+    "proves the behaviour the plan delivers works"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "A build, type-check, lint or format command alone is refused"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "the exact output that counts as passing"
+  );
 });
 
 test("a banned phrase inside a code fence is allowed", async ($, on) => {

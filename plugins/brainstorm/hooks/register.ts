@@ -841,7 +841,7 @@ const PLAN_TEMPLATE = `# Plan: <title>
 
 ## Done criteria
 
-- \`<command>\`: expect <exact result>
+- \`<command that runs what the plan delivers: its tests, or the feature itself>\`: expect <exact result, such as the test names reported as passed or the output the feature prints>
 
 ## Out of scope
 
@@ -939,6 +939,8 @@ step-NN.md:
 ${OUTER_FENCE}
 ${STEP_TEMPLATE}
 ${OUTER_FENCE}
+
+Rules for plan.md: its ## Done criteria prove the behaviour the plan delivers works, not only that the code builds. Each line is a backticked command, then ": expect" and the exact result that counts as passing. A build, type-check, lint or format command alone is refused. A spike plan's Done criteria run test -s on its findings.md path.
 
 Rules for every step file:
 - One small change per step: one file, or one test with the code it tests. Its Replace and Contents blocks hold at most ${MAX_CHANGED_LINES_PER_STEP} changed lines in total; aim under 40.

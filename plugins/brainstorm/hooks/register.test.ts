@@ -692,6 +692,17 @@ test("the planning prompt carries the index, plan and step templates", async ($,
   expect(instructions).toContain("## Done criteria");
 });
 
+test("the planning prompt asks for Done criteria that prove the plan's behaviour works", async ($, on) => {
+  const instructions = await planningInstructions($, on);
+
+  expect(instructions).toContain(
+    "prove the behaviour the plan delivers works, not only that the code builds"
+  );
+  expect(instructions).toContain(
+    "A build, type-check, lint or format command alone is refused"
+  );
+});
+
 test("the planning prompt gives every plan a pending status in its own file and in the index", async ($, on) => {
   const instructions = await planningInstructions($, on);
 

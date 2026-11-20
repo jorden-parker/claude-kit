@@ -210,7 +210,29 @@ const readSimulatedContents = async (
   return session.simulatedContents.get(projectFile);
 };
 
-const REQUIRED_PLAN_SECTIONS = ["Context", "Steps"];
+const REQUIRED_PLAN_SECTIONS = ["Context", "Steps", "Done criteria"];
+const DONE_CRITERION_LINE = /^-\s*`([^`\n]+)`.*\bexpect\b/gim;
+const BUILD_OR_LINT_ONLY_COMMAND =
+  /^\s*(?:(?:npm|pnpm|yarn|bun|npx)\s+(?:run\s+)?)?(?:lint|build|typecheck|type-check|tsc|eslint|prettier|format|fallow|cargo\s+(?:build|check|clippy)|go\s+(?:build|vet)|ruff)\b[^&;|]*$/;
+
+const checkDoneCriteria = (planPath: string, planText: string) => {
+  const doneSection = findSection(planText, "Done criteria");
+  if (doneSection === undefined) return [];
+  const commands = [...doneSection.body.matchAll(DONE_CRITERION_LINE)].map(
+    (match) => match[1] ?? ""
+  );
+  if (commands.length === 0) {
+    return [
+      `${planPath}: ## Done criteria needs a line with a backticked command and what to expect from it`,
+    ];
+  }
+  if (commands.every((command) => BUILD_OR_LINT_ONLY_COMMAND.test(command))) {
+    return [
+      `${planPath}: ## Done criteria must run what the plan delivers, such as its tests, not only a build, type-check, lint or format command`,
+    ];
+  }
+  return [];
+};
 
 const checkPlanText = async (
   session: CheckSession,
@@ -226,6 +248,7 @@ const checkPlanText = async (
   if (!readIsKnownStatus(readPlanStatus(planText))) {
     problems.push(`${planPath}: Status must be ${PLAN_STATUSES_AS_TEXT}`);
   }
+  problems.push(...checkDoneCriteria(planPath, planText));
   problems.push(...checkBannedPhrases(planPath, planText));
   const stepFileNames = readStepLinkTargets(planText);
   const builtStepFileNames = readTickedStepLinkTargets(planText);

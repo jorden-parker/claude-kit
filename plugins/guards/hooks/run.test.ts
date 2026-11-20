@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { deny } from "./types.ts";
 import { hookLogPath, logLine } from "./run.ts";
 
@@ -106,4 +113,29 @@ test("bash-trim saves the full output where its marker says", () => {
     .hookSpecificOutput.updatedToolOutput.stdout;
   const savedPath = /full output in (\S+):/.exec(trimmedOutput)?.[1] ?? "";
   expect(readFileSync(savedPath, "utf8")).toBe(fullOutput);
+});
+
+test("bash-trim deletes saved outputs older than seven days", () => {
+  const temporaryFolder = mkdtempSync(join(tmpdir(), "spill-"));
+  const oldOutputPath = join(temporaryFolder, "guards-output", "old.txt");
+  mkdirSync(dirname(oldOutputPath), { recursive: true });
+  writeFileSync(oldOutputPath, "old");
+  const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  utimesSync(oldOutputPath, eightDaysAgo, eightDaysAgo);
+  const fullOutput = Array.from(
+    { length: 400 },
+    (_unused, i) => `line ${i}`
+  ).join("\n");
+  const event = {
+    hook_event_name: "PostToolUse",
+    tool_name: "Bash",
+    session_id: "session-1",
+    tool_use_id: "toolu_2",
+    tool_response: { stdout: fullOutput, stderr: "" },
+  };
+  Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), "bash-trim"], {
+    stdin: Buffer.from(JSON.stringify(event)),
+    env: { ...process.env, HOME: temporaryFolder, TMPDIR: temporaryFolder },
+  });
+  expect(existsSync(oldOutputPath)).toBe(false);
 });

@@ -1,3 +1,4 @@
+import { readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -91,6 +92,26 @@ function limitsFor(toolName: string): TrimLimits | null {
   const isTrimmedMcpTool =
     MCP_TOOL.test(toolName) && process.env.GUARDS_MCP_TRIM !== "0";
   return isTrimmedMcpTool ? MCP_LIMITS : null;
+}
+
+const SAVED_OUTPUT_MAX_AGE_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
+
+export function pruneSavedOutputs(folder: string, now = Date.now()): void {
+  let fileNames: string[];
+  try {
+    fileNames = readdirSync(folder);
+  } catch {
+    return;
+  }
+  for (const fileName of fileNames) {
+    const path = join(folder, fileName);
+    try {
+      const fileStats = statSync(path);
+      const isExpired =
+        now - fileStats.mtimeMs > SAVED_OUTPUT_MAX_AGE_MILLISECONDS;
+      if (fileStats.isFile() && isExpired) rmSync(path, { force: true });
+    } catch {}
+  }
 }
 
 export function decide(

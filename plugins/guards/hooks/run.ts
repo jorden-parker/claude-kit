@@ -12,7 +12,7 @@ import { decideFromTranscript as browserCheck } from "./browser-check.ts";
 import { decide as commitGuard } from "./commit-guard.ts";
 import { decideDelegationFromTranscript as delegateGuard } from "./delegate-guard.ts";
 import { decide as delegationRules } from "./delegation-rules.ts";
-import { decide as bashTrim } from "./bash-trim.ts";
+import { decide as bashTrim, pruneSavedOutputs } from "./bash-trim.ts";
 import { decide as readGuard } from "./read-guard.ts";
 import type { HookEvent, HookResult, SavedOutput } from "./types.ts";
 
@@ -85,6 +85,8 @@ function appendHookLog(line: string | null): void {
 
 function saveOutputs(savedOutputs: SavedOutput[] = []): void {
   try {
+    if (savedOutputs.length > 0)
+      pruneSavedOutputs(dirname(savedOutputs[0].path));
     for (const { path, text } of savedOutputs) {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
       writeFileSync(path, text, { mode: 0o600 });

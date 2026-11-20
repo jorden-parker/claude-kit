@@ -1,5 +1,28 @@
 import { expect, test } from "bun:test";
-import { decide } from "./bash-trim.ts";
+import { existsSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { decide, pruneSavedOutputs } from "./bash-trim.ts";
+
+const EIGHT_DAYS_MILLISECONDS = 8 * 24 * 60 * 60 * 1000;
+
+test("pruneSavedOutputs deletes saved outputs older than seven days", () => {
+  const folder = mkdtempSync(join(tmpdir(), "guards-prune-"));
+  const oldOutputPath = join(folder, "old-output.txt");
+  const freshOutputPath = join(folder, "fresh-output.txt");
+  writeFileSync(oldOutputPath, "old");
+  writeFileSync(freshOutputPath, "fresh");
+  const eightDaysAgo = new Date(Date.now() - EIGHT_DAYS_MILLISECONDS);
+  utimesSync(oldOutputPath, eightDaysAgo, eightDaysAgo);
+  pruneSavedOutputs(folder);
+  expect(existsSync(oldOutputPath)).toBe(false);
+  expect(existsSync(freshOutputPath)).toBe(true);
+});
+
+test("pruneSavedOutputs ignores a missing folder", () => {
+  const missingFolder = join(tmpdir(), "guards-prune-missing-folder");
+  expect(() => pruneSavedOutputs(missingFolder)).not.toThrow();
+});
 
 const run = (stdout: string) =>
   decide({

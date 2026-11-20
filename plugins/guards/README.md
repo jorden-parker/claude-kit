@@ -51,7 +51,8 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   and the error lines of Bash output over 150 lines, and the head and tail of
   an MCP text result over 300 lines. The full text is saved under
   `$TMPDIR/guards-output/` and the marker line names the file, so Claude greps
-  that file and does not run the command again. Leave MCP results alone with
+  that file and does not run the command again. Each time it saves a file it
+  first deletes saved files older than seven days. Leave MCP results alone with
   `GUARDS_MCP_TRIM=0`.
 - **browser-check** (Stop, off by default): blocks once when a UI file was
   edited after the last browser console read (`agent-browser console`,

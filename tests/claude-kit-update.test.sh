@@ -21,6 +21,12 @@ exit 0
 STUB
 chmod +x "$sandbox/bin/claude"
 
+cat > "$sandbox/bin/git" <<'STUB'
+echo "git $*" >> "$CLAUDE_CALLS"
+[ -z "${GIT_PULL_FAILS:-}" ]
+STUB
+chmod +x "$sandbox/bin/git"
+
 cat > "$sandbox/plugins.json" <<'JSON'
 {
   "installed": [
@@ -65,6 +71,9 @@ echo '[]' > "$sandbox/marketplaces.json"
 output="$(run_update)"
 status=$?
 expect "a fresh machine exits 0" [ "$status" -eq 0 ]
+expect "this checkout is pulled" called "git -C $repository_root pull --ff-only"
+expect "the checkout is pulled before the marketplaces are updated" \
+  calls_in_order "git -C $repository_root pull --ff-only" "plugin marketplace update"
 expect "a missing claude-kit marketplace is added from this checkout" called "plugin marketplace add $repository_root"
 expect "every marketplace is updated after the add" \
   calls_in_order "plugin marketplace add $repository_root" "plugin marketplace update"
@@ -93,5 +102,12 @@ status=$?
 expect "a failed plugin update exits 1" [ "$status" -eq 1 ]
 expect "the other plugins are still updated after a failure" called "plugin update ponytail@ponytail --scope user"
 expect "the failed plugin is named" grep -qF "broken@claude-kit" <<<"$output"
+
+sed -i.bak 's/"broken@claude-kit"/"handoff@claude-kit"/' "$sandbox/plugins.json"
+output="$(GIT_PULL_FAILS=1 run_update)"
+status=$?
+expect "a failed pull exits 1" [ "$status" -eq 1 ]
+expect "the plugins are still updated after a failed pull" called "plugin update handoff@claude-kit --scope user"
+expect "the failed pull is named" grep -qF "Failed: pull $repository_root" <<<"$output"
 
 [ "$failures" -eq 0 ] || exit 1

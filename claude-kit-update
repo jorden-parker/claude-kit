@@ -27,6 +27,9 @@ link_command() {
   ln -sfn "$command_path" "$link_path"
 }
 
+echo "Pulling $repository_root"
+git -C "$repository_root" pull --ff-only || failed_steps+=("pull $repository_root")
+
 if ! has_claude_kit_marketplace; then
   echo "Adding the claude-kit marketplace from $repository_root"
   claude plugin marketplace add "$repository_root"

@@ -16,10 +16,11 @@ install any of them on its own. Sync scripts install the same plugins into
 | [code-style](plugins/code-style/) | Writes the comment and naming rules into each session and blocks edits that break them. |
 | [tdd](plugins/tdd/) | Enforces red, green, refactor: blocks implementation edits until a failing test run and finishing while tests fail. |
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
-| [guards](plugins/guards/) | Command guards: denies unbounded git log, diff and find, trims long Bash output, limits Reads of large files, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and, opted in, asks for a browser check after UI edits. |
+| [guards](plugins/guards/) | Command guards: caps unbounded git log, diff and find at 150 lines, trims long Bash and MCP output and saves the full text to a file, caps Reads of large files at 300 lines, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and, opted in, asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
 | [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
 | [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.claude/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement a whole set or one plan while the session reviews and sends back fixes. |
+| [token-ledger](plugins/token-ledger/) | Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool), prints a report of recent sessions, and suggests `/handoff` then `/clear` when the context grows large. |
 
 ## Saved notes
 
@@ -80,6 +81,20 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 5. Links `claude-notes` and `claude-kit-update` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 
 It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not stop the others; the run ends by naming each failure and exits 1. Start a new Claude Code session afterwards to load the updated plugins.
+
+### Plugin profiles
+
+Every enabled plugin puts its rules, skills and tool names into each session, whether the project uses them or not. `claude-kit-update profile` turns plugins on and off for one project, so a session loads only what fits it. Run it in the project's folder:
+
+```
+claude-kit-update profile web     # code-style, tdd, quality-gates, ui-design, vercel and frontend-design on
+claude-kit-update profile code    # code-style, tdd and quality-gates on; ui-design, vercel and frontend-design off
+claude-kit-update profile notes   # all six off, for folders of notes and documents
+```
+
+- It writes `enabledPlugins` in the project's `.claude/settings.local.json`, which is yours alone, and keeps every other setting in that file
+- Plugins it does not name, such as guards and handoff, keep their user-level setting
+- It pulls and updates nothing. Start a new Claude Code session in the project to load the profile
 
 ## Install
 
@@ -325,6 +340,7 @@ notes-viewer/                     claude-notes: the local web page for saved not
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
 claude-kit-update                 sets up the marketplace, updates every installed plugin
+claude-kit-update profile <name>  turns plugins on or off for the project in the current folder
 check                             runs every test suite; --staged runs only staged ones (the pre-commit hook)
 ```
 

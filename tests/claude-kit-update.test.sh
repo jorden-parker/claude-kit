@@ -110,4 +110,44 @@ expect "a failed pull exits 1" [ "$status" -eq 1 ]
 expect "the plugins are still updated after a failed pull" called "plugin update handoff@claude-kit --scope user"
 expect "the failed pull is named" grep -qF "Failed: pull $repository_root" <<<"$output"
 
+run_profile() {
+  local project_folder="$1" profile_name="$2"
+  : > "$claude_calls"
+  (cd "$project_folder" && PATH="$sandbox/bin:$PATH" CLAUDE_CALLS="$claude_calls" \
+    bash "$update_script" profile "$profile_name" 2>&1)
+}
+plugin_setting() {
+  jq -r --arg plugin "$2" '.enabledPlugins[$plugin]' "$1/.claude/settings.local.json"
+}
+
+project="$sandbox/project"
+mkdir -p "$project/.claude"
+echo '{"permissions": {"allow": ["Bash(ls:*)"]}, "enabledPlugins": {"handoff@claude-kit": true}}' \
+  > "$project/.claude/settings.local.json"
+
+output="$(run_profile "$project" notes)"
+status=$?
+expect "the notes profile exits 0" [ "$status" -eq 0 ]
+expect "notes turns the code plugins off" [ "$(plugin_setting "$project" tdd@claude-kit)" = false ]
+expect "notes turns the web plugins off" [ "$(plugin_setting "$project" vercel@claude-plugins-official)" = false ]
+expect "a profile keeps the other plugin settings" [ "$(plugin_setting "$project" handoff@claude-kit)" = true ]
+expect "a profile keeps the other settings" [ "$(jq -r '.permissions.allow[0]' "$project/.claude/settings.local.json")" = "Bash(ls:*)" ]
+expect "a profile pulls and updates nothing" [ ! -s "$claude_calls" ]
+expect "a profile says where it wrote" grep -qF "$project/.claude/settings.local.json" <<<"$output"
+
+run_profile "$project" code >/dev/null
+expect "code turns the code plugins on" [ "$(plugin_setting "$project" code-style@claude-kit)" = true ]
+expect "code turns the web plugins off" [ "$(plugin_setting "$project" ui-design@claude-kit)" = false ]
+
+fresh_project="$sandbox/fresh-project"
+mkdir -p "$fresh_project"
+run_profile "$fresh_project" web >/dev/null
+expect "web turns the code plugins on in a project with no settings" [ "$(plugin_setting "$fresh_project" quality-gates@claude-kit)" = true ]
+expect "web turns the web plugins on" [ "$(plugin_setting "$fresh_project" vercel@claude-plugins-official)" = true ]
+
+output="$(run_profile "$fresh_project" games)"
+status=$?
+expect "an unknown profile exits 2" [ "$status" -eq 2 ]
+expect "an unknown profile names the three profiles" grep -qF "web|code|notes" <<<"$output"
+
 [ "$failures" -eq 0 ] || exit 1

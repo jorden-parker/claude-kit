@@ -27,6 +27,39 @@ link_command() {
   ln -sfn "$command_path" "$link_path"
 }
 
+write_profile() {
+  local profile_name="$1" are_code_plugins_on are_web_plugins_on
+  local settings_path=".claude/settings.local.json"
+  case "$profile_name" in
+    web) are_code_plugins_on=true; are_web_plugins_on=true ;;
+    code) are_code_plugins_on=true; are_web_plugins_on=false ;;
+    notes) are_code_plugins_on=false; are_web_plugins_on=false ;;
+    *)
+      echo "Usage: claude-kit-update profile web|code|notes" >&2
+      exit 2
+      ;;
+  esac
+  mkdir -p .claude
+  [ -f "$settings_path" ] || echo '{}' > "$settings_path"
+  jq --argjson code "$are_code_plugins_on" --argjson web "$are_web_plugins_on" '
+    .enabledPlugins = ((.enabledPlugins // {}) + {
+      "code-style@claude-kit": $code,
+      "tdd@claude-kit": $code,
+      "quality-gates@claude-kit": $code,
+      "ui-design@claude-kit": $web,
+      "vercel@claude-plugins-official": $web,
+      "frontend-design@claude-plugins-official": $web
+    })' "$settings_path" > "$settings_path.new" \
+    || { rm -f "$settings_path.new"; fail "$PWD/$settings_path is not valid JSON; nothing was changed."; }
+  mv "$settings_path.new" "$settings_path"
+  echo "Wrote the $profile_name profile to $PWD/$settings_path. Start a new Claude Code session here to load it."
+}
+
+if [ "${1:-}" = "profile" ]; then
+  write_profile "${2:-}"
+  exit 0
+fi
+
 echo "Pulling $repository_root"
 git -C "$repository_root" pull --ff-only || failed_steps+=("pull $repository_root")
 

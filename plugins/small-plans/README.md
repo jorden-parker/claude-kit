@@ -4,12 +4,12 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 
 ## Usage
 
-| Command                                     | What it does                                                                              |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `/small-plans <work to plan>`               | Plans the work you name                                                                   |
-| `/small-plans`                              | Plans the work this conversation still leaves to do                                       |
-| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>` |
-| `/small-plans build [set]`                  | Has small-model agents implement and review each plan of a set                            |
+| Command                                     | What it does                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `/small-plans <work to plan>`               | Plans the work you name                                                                    |
+| `/small-plans`                              | Plans the work this conversation still leaves to do                                        |
+| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`  |
+| `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, the session reviews and sends back fixes |
 
 Typing `/small-plans ` suggests the actions.
 
@@ -57,11 +57,16 @@ The files are plain Markdown: edit, move or delete them with any tool. A set you
 
 ## Build
 
-`/small-plans build` lists this project's four newest sets and builds the one you pick (type a name under "Other" for an older set; with one set it builds that one without asking); `/small-plans build <text>` builds the newest set whose name holds that text (`build fix-login`, `build 007`). The session coordinates and edits nothing itself. For each plan that is not done, in order:
+`/small-plans build` lists this project's four newest sets and asks which to build (type a name under "Other" for an older set; with one set it skips the question). It then asks whether to build the whole set or one plan of it, listing the plans that are not done (type an order under "Other" for one not listed; with one plan left it skips the question).
+
+- `/small-plans build <text>` picks the newest set whose name holds that text (`build fix-login`, `build 007`)
+- `/small-plans build <text> <order>` builds that one plan without asking (`build fix-login 2`)
+
+The session coordinates and reviews; it edits no project file itself. For each plan, in order, the way shadcn's [improve](https://github.com/shadcn/improve) `execute` works:
 
 1. The `small-plan-implementer` agent (Haiku) gets the plan's path, makes the edits and runs the check. It answers `DONE` or `BLOCKED`
-2. The `small-plan-reviewer` agent (Haiku) gets the same path, reads the diff, runs the check and confirms each `## Review` line. It answers `PASS` or `FAIL` with findings
-3. On `FAIL` the implementer gets the findings once, then the reviewer looks once more
+2. The session reviews the work like a pull request: it runs the check, confirms with `git diff --stat` that only files the plan names changed, reads the diff against each step and `## Review` line, and reads what new tests assert
+3. On a failed review it writes numbered findings and starts a new implementer with them, then reviews again, up to 3 fix rounds
 4. The plan ends `done` or `blocked`. A plan that depends on one that is not done waits
 
 Nothing is committed: the changes stay in your working tree.

@@ -366,13 +366,15 @@ test("/small-plans handoff says so when the project has no handoff", async ($, o
 
 type AskedQuestion = { questions: { options: { label: string }[] }[] };
 
-const answerAskUserQuestion = (on: On, chosenLabel?: string) => {
+const answerAskUserQuestion = (on: On, ...chosenLabels: string[]) => {
   const askedQuestions: AskedQuestion[] = [];
+  const remainingLabels = [...chosenLabels];
   on("tool.call", { tool: "AskUserQuestion" }, (_, e) => {
     const askedQuestion = e as unknown as AskedQuestion & {
       questions: { question: string }[];
     };
     askedQuestions.push(askedQuestion);
+    const chosenLabel = remainingLabels.shift();
     if (chosenLabel === undefined) return { deny: "dismissed" };
     const question = askedQuestion.questions[0]?.question ?? "";
     return {
@@ -420,8 +422,86 @@ test("/small-plans build runs the only set without asking", async ($, on) => {
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${STANDALONE_SET}`);
   expect(submittedPrompts[0]).toContain("small-plans:small-plan-implementer");
-  expect(submittedPrompts[0]).toContain("small-plans:small-plan-reviewer");
   expect(submittedPrompts[0]).toContain(STATUS_TOOL);
+});
+
+test("/small-plans build has the session review each plan and send fixes to a new implementer", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(submittedPrompts[0]).toContain("review the work yourself");
+  expect(submittedPrompts[0]).toContain("git diff");
+  expect(submittedPrompts[0]).toContain(
+    "new small-plans:small-plan-implementer"
+  );
+  expect(submittedPrompts[0]).toContain("3 fix rounds");
+  expect(submittedPrompts[0]).not.toContain("small-plan-reviewer");
+});
+
+const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;
+const THREE_PLAN_SET = {
+  [`${SET_FOLDER}/01-add-the-toggle.md`]: "status: done",
+  [`${SET_FOLDER}/02-store-the-choice.md`]: "status: pending",
+  [`${SET_FOLDER}/03-test-the-toggle.md`]: "status: blocked",
+};
+
+test("/small-plans build asks for the whole set or one plan that is not done", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, "Whole set");
+  const { submittedPrompts } = await runCommand($, on, "build", THREE_PLAN_SET);
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "Whole set",
+    "02-store-the-choice",
+    "03-test-the-toggle",
+  ]);
+  expect(submittedPrompts[0]).toContain(`Build the plans in ${SET_FOLDER}.`);
+});
+
+test("/small-plans build builds only the plan picked", async ($, on) => {
+  answerAskUserQuestion(on, "03-test-the-toggle");
+  const { submittedPrompts } = await runCommand($, on, "build", THREE_PLAN_SET);
+
+  expect(submittedPrompts[0]).toContain(
+    `Build only the plan at ${SET_FOLDER}/03-test-the-toggle.md.`
+  );
+  expect(submittedPrompts[0]).not.toContain("02-store-the-choice");
+});
+
+test("/small-plans build builds nothing when the plan list is dismissed", async ($, on) => {
+  const { reply, submittedPrompts } = await runCommand(
+    $,
+    on,
+    "build",
+    THREE_PLAN_SET
+  );
+
+  expect(submittedPrompts).toHaveLength(0);
+  expect(reply.text).toContain("02-store-the-choice");
+});
+
+test("/small-plans build <set> <order> builds that plan without asking", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  const { submittedPrompts } = await runCommand(
+    $,
+    on,
+    "build dark-mode 2",
+    THREE_PLAN_SET
+  );
+
+  expect(askedQuestions).toHaveLength(0);
+  expect(submittedPrompts[0]).toContain(
+    `Build only the plan at ${SET_FOLDER}/02-store-the-choice.md.`
+  );
+});
+
+test("/small-plans build says so when every plan of the set is done", async ($, on) => {
+  const { reply, submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: done",
+  });
+
+  expect(reply.text).toContain("Every plan");
+  expect(submittedPrompts).toHaveLength(0);
 });
 
 test("/small-plans build <name> runs the set whose name holds it", async ($, on) => {

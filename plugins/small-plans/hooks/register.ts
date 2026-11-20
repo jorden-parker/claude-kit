@@ -22,7 +22,9 @@ const MAX_SLUG_LENGTH = 60;
 const MAX_ASKED_OPTIONS = 4;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
 const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
-const HANDOFF_FILE_NAME = /^\d+-.*\.md$/;
+const NUMBERED_MARKDOWN_FILE = /^\d+-.*\.md$/;
+const WHOLE_SET_OPTION = "Whole set";
+const MAX_FIX_ROUNDS = 3;
 const SET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const CODE_FENCE = /```[\s\S]*?```/g;
 const NUMBERED_STEP = /^\d+\.\s/gm;
@@ -38,7 +40,8 @@ const SUBCOMMAND_SUGGESTIONS = [
   },
   {
     text: "build",
-    description: "Have small-model agents implement and review a set",
+    description:
+      "Have small-model agents implement a whole set or one plan of it, and review their work",
   },
 ];
 const WRITE_TOOL_NAME = "write_small_plan";
@@ -46,7 +49,6 @@ const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
 const STATUS_TOOL_NAME = "set_small_plan_status";
 const QUALIFIED_STATUS_TOOL_NAME = `mcp__small-plans__${STATUS_TOOL_NAME}`;
 const IMPLEMENTER_AGENT = "small-plans:small-plan-implementer";
-const REVIEWER_AGENT = "small-plans:small-plan-reviewer";
 const PLAN_SHAPE = `The body holds these "## " headings, in this order: ${PLAN_SECTIONS.join(", ")}.
 - Goal: one sentence on what is true when the plan is done.
 - Context: all that the implementer must know and cannot guess: each file by its path, the exact names of the functions, types and commands involved, and the decisions already made. The implementer sees this plan only, never this conversation or another plan.
@@ -326,20 +328,29 @@ const composePlanInstruction = (
     `When every plan is saved, reply with one line per plan (order, kind, title), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them.`,
   ].join("\n\n");
 
-const composeBuildInstruction = (
-  setFolder: string
-) => `Build the plans in ${setFolder}. You coordinate: never edit project files yourself.
+const composeBuildInstruction = (setFolder: string, planName: string) => `${
+  planName
+    ? `Build only the plan at ${setFolder}/${planName}.md. If its depends_on names a plan in ${setFolder} that is not done, stop and say which.`
+    : `Build the plans in ${setFolder}.`
+} You coordinate and review: never edit project files yourself.
 
-Read each plan file's front matter and take the plans in file-name order. Skip a plan whose status is done. A plan whose depends_on names a plan that is not done waits until that plan is done.
+${
+  planName
+    ? ""
+    : "Read each plan file's front matter and take the plans in file-name order. Skip a plan whose status is done. A plan whose depends_on names a plan that is not done waits until that plan is done.\n\n"
+}For each plan:
+1. Set its status to in-progress with ${QUALIFIED_STATUS_TOOL_NAME}. Run \`git status --short\` and note the files already changed, so the review can tell this plan's changes from earlier ones.
+2. Start the ${IMPLEMENTER_AGENT} agent with the plan file's absolute path as its prompt. It answers DONE or BLOCKED.
+3. On DONE, review the work yourself, like a tech lead reviewing a pull request against the plan. Trust nothing in the agent's report until a tool result shows it:
+   a. Run the command under "## Check" and compare its output with "- Expect:".
+   b. Run \`git diff --stat\`. Every file this plan changed is named in the plan; a change to any other file fails the review.
+   c. Read the full \`git diff\` of those files. Every hunk traces to a step, the code the plan quotes is there as quoted, and each "## Review" line holds.
+   d. Read what each new or changed test asserts. A test that would pass without the change fails the review.
+4. When the review passes, set the status to done.
+5. When it fails, write numbered findings, each naming the step or "## Review" line, the file and line, and what the plan asks for that the work does not do. Start a new ${IMPLEMENTER_AGENT} agent with the plan file's absolute path, a blank line, then the findings. Review its work again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
+6. When the implementer answers BLOCKED, or the work still fails review after ${MAX_FIX_ROUNDS} fix rounds, set the status to blocked with the reason and go on with the next plan that does not depend on it.
 
-For each plan:
-1. Set its status to in-progress with ${QUALIFIED_STATUS_TOOL_NAME}.
-2. Start the ${IMPLEMENTER_AGENT} agent with the plan file's absolute path as its prompt.
-3. When it answers DONE, start the ${REVIEWER_AGENT} agent with the same path.
-4. On PASS, set the status to done. On FAIL, start the implementer once more with the path followed by the reviewer's findings, then the reviewer once more.
-5. When the implementer answers BLOCKED, or the second review fails, set the status to blocked and go on with the next plan that does not depend on it.
-
-Finish with one line per plan: order, title and status, with the reason for each plan that is blocked or still waiting.`;
+Finish with one line per plan: order, title, status and the fix rounds it took, with the reason for each plan that is blocked or still waiting.`;
 
 const planWork = (engine: EngineInterface, requestedWork: string) => {
   const setName = composeNewSetName(toSlug(requestedWork) || "plans");
@@ -361,7 +372,7 @@ const listHandoffNamesNewestFirst = async (
   handoffFolder: string
 ) =>
   (await listNames(engine, handoffFolder))
-    .filter((name) => HANDOFF_FILE_NAME.test(name))
+    .filter((name) => NUMBERED_MARKDOWN_FILE.test(name))
     .sort((first, second) => parseInt(second, 10) - parseInt(first, 10))
     .map((name) => name.replace(/\.md$/, ""));
 
@@ -438,7 +449,55 @@ const splitHandoff = async (
   return { text: `Splitting the handoff into small plans in set ${setName}…` };
 };
 
-const buildPlans = async (engine: EngineInterface, requestedName: string) => {
+const listPlanNamesNotDone = async (
+  engine: EngineInterface,
+  setFolder: string
+) => {
+  const planNames = (await listNames(engine, setFolder))
+    .filter((name) => NUMBERED_MARKDOWN_FILE.test(name))
+    .sort();
+  const planTexts = await Promise.all(
+    planNames.map(async (name) =>
+      String(await engine.fs.read(`${setFolder}/${name}`).catch(() => ""))
+    )
+  );
+  return planNames
+    .filter((_, i) => planTexts[i]?.match(STATUS_LINE)?.[0] !== "status: done")
+    .map((name) => name.replace(/\.md$/, ""));
+};
+
+const findPlanName = (planNames: string[], requestedPlan: string) => {
+  const wantedText = requestedPlan.trim();
+  return /^\d+$/.test(wantedText)
+    ? planNames.find((name) => parseInt(name, 10) === Number(wantedText))
+    : (planNames.find((name) => name === wantedText) ??
+        planNames.find((name) => name.includes(wantedText)));
+};
+
+const pickPlanName = async (
+  engine: EngineInterface,
+  planNames: string[],
+  requestedPlan: string
+) => {
+  if (requestedPlan) return findPlanName(planNames, requestedPlan);
+  if (planNames.length === 1) return "";
+  const pickedOption = await pickFromList(
+    engine,
+    "Build the whole set, or one plan of it?",
+    "Plans",
+    [WHOLE_SET_OPTION, ...planNames]
+  );
+  if (pickedOption === WHOLE_SET_OPTION) return "";
+  return pickedOption === undefined
+    ? undefined
+    : findPlanName(planNames, pickedOption);
+};
+
+const buildPlans = async (
+  engine: EngineInterface,
+  requestedName: string,
+  requestedPlan: string
+) => {
   const setNames = await listSetsNewestFirst(engine);
   const shouldAsk = !requestedName && setNames.length > 1;
   const pickedName = shouldAsk
@@ -460,11 +519,21 @@ const buildPlans = async (engine: EngineInterface, requestedName: string) => {
     return {
       text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
     };
-  askClaude(
-    engine,
-    composeBuildInstruction(`${await resolveProjectFolder(engine)}/${setName}`)
-  );
-  return { text: `Building the plans of set ${setName}…` };
+  const setFolder = `${await resolveProjectFolder(engine)}/${setName}`;
+  const planNames = await listPlanNamesNotDone(engine, setFolder);
+  if (planNames.length === 0)
+    return { text: `Every plan in set ${setName} is done.` };
+  const planName = await pickPlanName(engine, planNames, requestedPlan);
+  if (planName === undefined)
+    return {
+      text: `No plan was picked. Run /${COMMAND_NAME} build ${setName} <order> with one of the plans not done: ${planNames.join(", ")}.`,
+    };
+  askClaude(engine, composeBuildInstruction(setFolder, planName));
+  return {
+    text: planName
+      ? `Building plan ${planName} of set ${setName}…`
+      : `Building the plans of set ${setName}…`,
+  };
 };
 
 export const register: Register = (on) => {
@@ -472,9 +541,9 @@ export const register: Register = (on) => {
     await $.command.register({
       name: COMMAND_NAME,
       description:
-        "Plan work as small plans a weaker model can implement and review: name the work, or leave it out to plan what this conversation leaves; handoff [id] plans what a saved handoff leaves; build [set] has small-model agents implement and review a set",
+        "Plan work as small plans a weaker model can implement and review: name the work, or leave it out to plan what this conversation leaves; handoff [id] plans what a saved handoff leaves; build [set] [plan order] has small-model agents implement a whole set or one plan of it while this session reviews and sends back fixes",
       argumentHint:
-        "[work to plan] | handoff [id] [extra context] | build [set]",
+        "[work to plan] | handoff [id] [extra context] | build [set] [plan order]",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
@@ -494,8 +563,13 @@ export const register: Register = (on) => {
   on("command.run", { command: COMMAND_NAME }, async ($, e) => {
     const requestedWork = e.args.trim();
     const [firstWord = "", ...laterWords] = requestedWork.split(/\s+/);
-    if (/^build$/i.test(firstWord) && laterWords.length <= 1)
-      return buildPlans($, laterWords[0] ?? "");
+    const isBuildOfOnePlan =
+      laterWords.length === 2 && /^\d+$/.test(laterWords[1] ?? "");
+    if (
+      /^build$/i.test(firstWord) &&
+      (laterWords.length <= 1 || isBuildOfOnePlan)
+    )
+      return buildPlans($, laterWords[0] ?? "", laterWords[1] ?? "");
     if (!/^handoff$/i.test(firstWord)) return planWork($, requestedWork);
     return /^\d+$/.test(laterWords[0] ?? "")
       ? splitHandoff($, laterWords[0] ?? "", laterWords.slice(1).join(" "))

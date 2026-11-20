@@ -5,11 +5,17 @@ shopt -s nullglob
 cd "$(dirname "$0")"
 
 is_staged_only=false
-if [ "${1:-}" = "--staged" ]; then
-  is_staged_only=true
-fi
+changed_since=""
+case "${1:-}" in
+  --staged) is_staged_only=true ;;
+  --changed-since) changed_since="${2:?check --changed-since needs a git revision}" ;;
+esac
 
 should_check() {
+  if [ -n "$changed_since" ]; then
+    ! git diff --quiet "$changed_since" HEAD -- "$@"
+    return
+  fi
   [ "$is_staged_only" = false ] || ! git diff --cached --quiet -- "$@"
 }
 

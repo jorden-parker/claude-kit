@@ -62,4 +62,30 @@ git -C "$release_copy" add -A
 "$release_copy/check" --staged >/dev/null 2>&1
 expect "check passes once the plugin's version is bumped" [ $? -eq 0 ]
 
+not_contains() { ! grep -qF -- "$1" <<<"$2"; }
+changed_repository="$sandbox/changed"
+mkdir -p "$changed_repository/tests"
+cp "$repository_root/check" "$changed_repository/check"
+echo 'exit 0' > "$changed_repository/tests/repository.test.sh"
+echo 'exit 0' > "$changed_repository/tests/sync-demo.test.sh"
+echo "first" > "$changed_repository/sync-demo"
+echo "first" > "$changed_repository/README.md"
+git -C "$changed_repository" init -q -b main
+git -C "$changed_repository" add -A
+git -C "$changed_repository" -c user.name=check -c user.email=check@example.com commit -qm first
+first_revision="$(git -C "$changed_repository" rev-parse HEAD)"
+
+echo "second" > "$changed_repository/README.md"
+git -C "$changed_repository" -c user.name=check -c user.email=check@example.com commit -qam readme
+changed_output="$("$changed_repository/check" --changed-since "$first_revision" 2>&1)"
+expect "check --changed-since passes" [ $? -eq 0 ]
+expect "check --changed-since skips a suite whose files did not change" \
+  not_contains "check: tests/sync-demo.test.sh" "$changed_output"
+
+echo "second" > "$changed_repository/sync-demo"
+git -C "$changed_repository" -c user.name=check -c user.email=check@example.com commit -qam sync
+changed_output="$("$changed_repository/check" --changed-since "$first_revision" 2>&1)"
+expect "check --changed-since runs a suite whose files changed" \
+  grep -qF "check: tests/sync-demo.test.sh" <<<"$changed_output"
+
 [ "$failures" -eq 0 ] || exit 1

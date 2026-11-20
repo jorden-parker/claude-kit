@@ -341,7 +341,7 @@ design-studio/                    standalone tool: fresh mockups from a local Qw
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
 claude-kit-update                 sets up the marketplace, updates every installed plugin
 claude-kit-update profile <name>  turns plugins on or off for the project in the current folder
-check                             runs every test suite; --staged runs only staged ones (the pre-commit hook); fails when a plugin changed since origin/main without a version bump
+check                             runs every test suite; --staged runs only staged ones (the pre-commit hook); --changed-since <rev> runs only the ones changed since that commit (CI); fails when a plugin changed since origin/main without a version bump
 ```
 
 ## Rules for plugins

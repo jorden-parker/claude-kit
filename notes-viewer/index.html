@@ -160,10 +160,14 @@
         grid-area: sidebar;
         overflow-y: auto;
         overscroll-behavior: contain;
+        scrollbar-width: none;
         padding: 0 12px calc(24px + env(safe-area-inset-bottom));
         padding-left: max(12px, env(safe-area-inset-left));
         background: var(--sidebar);
         border-right: 1px solid var(--border);
+      }
+      nav::-webkit-scrollbar {
+        display: none;
       }
       .sidebar-header {
         position: sticky;

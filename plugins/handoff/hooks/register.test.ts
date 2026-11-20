@@ -1910,6 +1910,23 @@ testWithSession(
 );
 
 testWithSession(
+  "the notes box opens under the shared heading with a pride stripe",
+  CONVERSATION,
+  async ($, on) => {
+    ignoreToasts(on);
+    placeBoxPane(on);
+
+    await $.command.run(handoff("new"));
+    const box = await $.ui.mount(BOX_PANE);
+
+    expect(
+      await box.find({ type: "Text", text: "📜 Notes for the next session" })
+    ).toBeDefined();
+    expect(await box.findAll({ type: "Text", text: /^━━$/ })).toHaveLength(6);
+  }
+);
+
+testWithSession(
   "pressing Enter on an empty notes box hands off without notes",
   CONVERSATION,
   async ($, on) => {

@@ -865,19 +865,20 @@ test("the small-plans pickers ask in a friendly voice", async ($, on) => {
   ).toEqual([SET_QUESTION]);
 });
 
-test("a small-plans picker is drawn inside a padded, rounded frame", async ($) => {
+test("a small-plans picker opens under the shared heading with a pride stripe and no side frame", async ($) => {
   const drawing = await mountQuestion($, SET_QUESTION);
-  const frame = await drawing.find({ key: "small-plans-frame" });
 
-  expect(frame?.props).toMatchObject({
-    borderStyle: "round",
-    paddingX: 2,
-    marginX: 1,
-  });
+  expect(
+    await drawing.find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeDefined();
+  expect(await drawing.findAll({ type: "Text", text: /^━━$/ })).toHaveLength(6);
+  expect(await drawing.find({ key: "small-plans-frame" })).toBeUndefined();
 });
 
-test("another plugin's question gets no small-plans frame", async ($) => {
+test("another plugin's question gets no small-plans heading", async ($) => {
   const drawing = await mountQuestion($, "Which database should we use?");
 
-  expect(await drawing.find({ key: "small-plans-frame" })).toBeUndefined();
+  expect(
+    await drawing.find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeUndefined();
 });

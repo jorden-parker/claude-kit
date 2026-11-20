@@ -79,6 +79,14 @@ const describeResumeCommand = (handoffId: number) =>
 type HandoffFile = { handoffId: number; path: string };
 
 const HANDOFF_GLYPH = "📜";
+const PRIDE_STRIPE_COLORS = [
+  "error",
+  "claude",
+  "warning",
+  "success",
+  "suggestion",
+  "autoAccept",
+] as const;
 const BOX_PANE_ID = "handoff";
 const BOX_ROWS = 9;
 const NOTES_INPUT_ROWS = 3;
@@ -1133,9 +1141,14 @@ export const register: Register = (on, options) => {
       Box,
       { flexDirection: "column", gap: 1 },
       h(
-        Text,
-        { bold: true, color: "claude" },
-        `${HANDOFF_GLYPH} ${wording.heading}`
+        Box,
+        { flexDirection: "row", gap: 1 },
+        h(Text, { bold: true }, `${HANDOFF_GLYPH} ${wording.heading}`),
+        h(
+          Text,
+          {},
+          ...PRIDE_STRIPE_COLORS.map((color) => h(Text, { color }, "━━"))
+        )
       ),
       h(Input, {
         key: "notes",

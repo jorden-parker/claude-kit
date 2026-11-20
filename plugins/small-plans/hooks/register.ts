@@ -479,6 +479,15 @@ const listHandoffNamesNewestFirst = async (
 const SET_QUESTION = "🧺 Which plan set shall we build?";
 const PLAN_QUESTION = "🧩 The whole set, or just one plan?";
 const HANDOFF_QUESTION = "📜 Which handoff should become small plans?";
+const PICKER_HEADING = "🧩 Small plans";
+const PRIDE_STRIPE_COLORS = [
+  "error",
+  "claude",
+  "warning",
+  "success",
+  "suggestion",
+  "autoAccept",
+] as const;
 const PICKER_QUESTIONS = [SET_QUESTION, PLAN_QUESTION, HANDOFF_QUESTION];
 
 const isPickerQuestion = (questions: unknown[]) =>
@@ -698,16 +707,20 @@ export const register: Register = (on) => {
   on("ui.render", { component: "AskUserQuestion" }, async ($, e, next) => {
     const dialog = await next(e);
     if (!isPickerQuestion(e.props.questions)) return dialog;
-    const { Box } = $.ui.resolve(e);
+    const { Box, Text } = $.ui.resolve(e);
     return h(
       Box,
-      {
-        key: "small-plans-frame",
-        borderStyle: "round",
-        borderColor: "claude",
-        paddingX: 2,
-        marginX: 1,
-      },
+      { flexDirection: "column" },
+      h(
+        Box,
+        { flexDirection: "row", gap: 1, paddingX: 1 },
+        h(Text, { bold: true }, PICKER_HEADING),
+        h(
+          Text,
+          {},
+          ...PRIDE_STRIPE_COLORS.map((color) => h(Text, { color }, "━━"))
+        )
+      ),
       dialog
     ) as RenderElement;
   });

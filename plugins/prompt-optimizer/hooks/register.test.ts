@@ -345,7 +345,7 @@ testWithEmptySession(
 
     const reply = await $.command.run(optimize("fix bug"));
 
-    expect(callOrder).toEqual(["toast:Optimizing prompt…", "model"]);
+    expect(callOrder).toEqual(["toast:✨ Optimizing prompt…", "model"]);
     expect(reply.context).toEqual(["Better prompt"]);
   }
 );
@@ -1011,10 +1011,10 @@ testLocalRewrite(
     await $.command.run(optimize("fix bug"));
 
     expect(record.statuses).toEqual([
-      "/optimize: checking Ollama…",
-      "/optimize: waiting for granite4.2:3b…",
-      "/optimize: writing on granite4.2:3b, 1 token",
-      "/optimize: writing on granite4.2:3b, 2 tokens",
+      "✨ /optimize: checking Ollama…",
+      "✨ /optimize: waiting for granite4.2:3b…",
+      "✨ /optimize: writing on granite4.2:3b, 1 token",
+      "✨ /optimize: writing on granite4.2:3b, 2 tokens",
       undefined,
     ]);
   }
@@ -1031,7 +1031,7 @@ testLocalRewrite(
 
     expect(JSON.parse(record.spawns[0]?.input ?? "{}").model).toBe(OWN_MODEL);
     expect(record.statuses).toContain(
-      `/optimize: loading ${OWN_MODEL} (the first load can take a minute)…`
+      `✨ /optimize: loading ${OWN_MODEL} (the first load can take a minute)…`
     );
   }
 );
@@ -1279,7 +1279,9 @@ testBehindProxy(
     );
     expect(spawnedAgents[0]?.prompt).toContain("Working directory: /repo");
     expect(spawnedAgents[0]?.prompt).toContain("<draft>\nfix bug\n</draft>");
-    expect(statuses).toEqual(["/optimize: a subagent is rewriting on sonnet…"]);
+    expect(statuses).toEqual([
+      "✨ /optimize: a subagent is rewriting on sonnet…",
+    ]);
   }
 );
 

@@ -704,7 +704,7 @@ export const register: Register = (on) => {
       {
         key: "small-plans-frame",
         borderStyle: "round",
-        borderColor: "magenta",
+        borderColor: "claude",
         paddingX: 2,
         marginX: 1,
       },

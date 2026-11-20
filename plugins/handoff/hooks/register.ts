@@ -78,6 +78,7 @@ const describeResumeCommand = (handoffId: number) =>
 
 type HandoffFile = { handoffId: number; path: string };
 
+const HANDOFF_GLYPH = "📜";
 const BOX_PANE_ID = "handoff";
 const BOX_ROWS = 9;
 const NOTES_INPUT_ROWS = 3;
@@ -89,6 +90,15 @@ const RESUME_BOX_MESSAGE =
   "Pick a handoff in the box and add notes if you like. Esc cancels.";
 const CANCELLED_MESSAGE = "Handoff cancelled.";
 const CLOSED_BOX_HINT = "Run /handoff new, save or resume to use this box.";
+
+const showToast = (
+  engine: EngineInterface,
+  text: string,
+  options?: Parameters<EngineInterface["ui"]["toast"]>[1]
+) => engine.ui.toast(`${HANDOFF_GLYPH} ${text}`, options);
+
+const showStatus = (engine: EngineInterface, text: string | undefined) =>
+  engine.ui.status(text === undefined ? undefined : `${HANDOFF_GLYPH} ${text}`);
 
 type SingleRecapRequest = Extract<HandoffArguments, { action: "recap" }>;
 
@@ -603,7 +613,7 @@ const buildRecap = async (
   );
   if (!isHaikuWriter) return { delegationPrefix: "", digest };
 
-  engine.ui.toast("Building recap…");
+  showToast(engine, "Building recap…");
   const reply = await completeWithBackoff(engine, () =>
     engine.model.complete({
       model: RECAP_MODEL,
@@ -705,7 +715,7 @@ const offerRecapInThisSession = async (
 
 const showRecapInComposer = async (engine: EngineInterface, recap: string) => {
   const { text } = await offerRecapInThisSession(engine, recap);
-  engine.ui.toast(text, { timeoutMs: OUTCOME_TOAST_MS });
+  showToast(engine, text, { timeoutMs: OUTCOME_TOAST_MS });
 };
 
 const clearSessionAndPassRecap = async (
@@ -729,7 +739,7 @@ const handOffToNewSession = async (
   try {
     await clearSessionAndPassRecap(engine, recap, shouldSubmitRecap);
   } catch {
-    engine.ui.toast("Could not start a new session.");
+    showToast(engine, "Could not start a new session.");
     await offerRecapInThisSession(engine, recap);
   }
   await engine.store.delete(PENDING_HANDOFF_KEY);
@@ -892,7 +902,7 @@ const deliverRecap = async (
           : `Saved as handoff #${saveOutcome.handoffId} in ${saveOutcome.path}. ${describeResumeCommand(saveOutcome.handoffId)}`,
     };
   }
-  if (saveFailure) engine.ui.toast(saveFailure);
+  if (saveFailure) showToast(engine, saveFailure);
   if (!request.isNewSession) {
     return offerRecapInThisSession(engine, recapText, isRecapOnScreen);
   }
@@ -998,7 +1008,7 @@ const cancelBox = async (
 ) => {
   progress.openBox = undefined;
   await engine.ui.close({ id: BOX_PANE_ID });
-  engine.ui.toast(CANCELLED_MESSAGE);
+  showToast(engine, CANCELLED_MESSAGE);
 };
 
 type HandoffProgress = {
@@ -1018,7 +1028,7 @@ const runRecap = async (
     const { delegation, delegationPrefix } = recapStart;
     progress.awaitedRecap = delegation.awaitedRecap;
     progress.recapAgentId = delegation.awaitedRecap.agentId;
-    engine.ui.status(delegation.routeNotice);
+    showStatus(engine, delegation.routeNotice);
     return { text: `${delegationPrefix}${delegation.routeNotice}` };
   }
   if (recapStart.failure !== undefined) return { text: recapStart.failure };
@@ -1050,7 +1060,7 @@ const finishBox = async (
     box.kind === "resume"
       ? await resumeSavedHandoff(engine, box.chosenHandoffId, notes)
       : await runRecap(engine, progress, { ...box.request, notes });
-  engine.ui.toast(outcome.text, { timeoutMs: OUTCOME_TOAST_MS });
+  showToast(engine, outcome.text, { timeoutMs: OUTCOME_TOAST_MS });
 };
 
 export const register: Register = (on, options) => {
@@ -1122,7 +1132,11 @@ export const register: Register = (on, options) => {
     return h(
       Box,
       { flexDirection: "column", gap: 1 },
-      h(Text, { bold: true }, wording.heading),
+      h(
+        Text,
+        { bold: true, color: "claude" },
+        `${HANDOFF_GLYPH} ${wording.heading}`
+      ),
       h(Input, {
         key: "notes",
         placeholder: wording.placeholder,
@@ -1193,7 +1207,7 @@ export const register: Register = (on, options) => {
       progress.awaitedRecap = { ...progress.awaitedRecap, turnId: e.turnId };
     }
     if (hasPinnedOutcome && e.agentId === undefined) {
-      $.ui.status(undefined);
+      showStatus($, undefined);
       hasPinnedOutcome = false;
     }
     return next(e);
@@ -1212,18 +1226,18 @@ export const register: Register = (on, options) => {
     if (!recap && !isConversationTurn) {
       const delegation = askConversationForRecap($, request);
       progress.awaitedRecap = delegation.awaitedRecap;
-      $.ui.status(delegation.routeNotice);
+      showStatus($, delegation.routeNotice);
       return turnResult;
     }
     const outcome = recap
       ? (await deliverRecap($, request, recap, isConversationTurn)).text
       : EMPTY_REPLY_MESSAGE;
     if (isConversationTurn) {
-      $.ui.status(undefined);
+      showStatus($, undefined);
       return { ...turnResult, text: outcome };
     }
-    $.ui.toast(outcome, { timeoutMs: OUTCOME_TOAST_MS });
-    $.ui.status(outcome);
+    showToast($, outcome, { timeoutMs: OUTCOME_TOAST_MS });
+    showStatus($, outcome);
     hasPinnedOutcome = true;
     return turnResult;
   });

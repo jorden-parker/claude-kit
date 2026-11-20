@@ -202,7 +202,7 @@ const OWN_OLLAMA_MODEL = "qwen3:4b-instruct-2507-q4_K_M";
 const OLLAMA_STATUS_TIMEOUT_MS = 3000;
 const OLLAMA_REWRITE_TIMEOUT_SECONDS = 180;
 const CURL_TIMED_OUT_EXIT_CODE = 28;
-const STATUS_PREFIX = "/optimize:";
+const STATUS_PREFIX = "✨ /optimize:";
 const OLLAMA_MAX_REPLY_TOKENS = 1024;
 const TIMED_OUT = Symbol("timed out");
 
@@ -505,7 +505,7 @@ export const register: Register = (on, options) => {
     pendingAttachedImageList = undefined;
     if (!draft) return buildFailureResult(USAGE_MESSAGE);
 
-    $.ui.toast("Optimizing prompt…");
+    $.ui.toast("✨ Optimizing prompt…");
     const optimizerPrompt = await buildOptimizerPrompt(
       $,
       draft,

@@ -421,10 +421,17 @@ const collectSpawnedAgents = (on: On) => {
   return spawnedAgents;
 };
 
+const HANDOFF_GLYPH = "📜 ";
+
+const withoutHandoffGlyph = (shownText: string) => {
+  expect(shownText.startsWith(HANDOFF_GLYPH)).toBe(true);
+  return shownText.slice(HANDOFF_GLYPH.length);
+};
+
 const collectToasts = (on: On) => {
   const toasts: string[] = [];
   on("ui.toast", (_, e) => {
-    toasts.push(e.text);
+    toasts.push(withoutHandoffGlyph(e.text));
     return { value: undefined };
   });
   return toasts;
@@ -640,7 +647,9 @@ testWithSubagentWriter(
 const collectStatuses = (on: On) => {
   const statuses: (string | undefined)[] = [];
   on("ui.status", (_, e) => {
-    statuses.push(e.text);
+    statuses.push(
+      e.text === undefined ? undefined : withoutHandoffGlyph(e.text)
+    );
     return { value: undefined };
   });
   return statuses;

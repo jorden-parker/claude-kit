@@ -1839,12 +1839,27 @@ const BOX_PANE = {
   },
 } as const;
 
-const NOTES_BOX_MESSAGE =
-  "Add notes for the next session in the box, then press Enter. Esc cancels.";
-const RESUME_BOX_MESSAGE =
-  "Pick a handoff in the box and add notes if you like. Esc cancels.";
+const BOX_BAND = {
+  plugin: "handoff",
+  component: "AbovePrompt",
+  surface: "terminal",
+  props: {
+    hasSurvey: false,
+    isCollapsed: false,
+    isWorking: false,
+    maxRows: 20,
+    bodyColumns: 90,
+    scroll: { offset: 0, bodyRows: 20 },
+    view: {},
+  },
+} as const;
 
-const placeBoxPane = (on: On, isPlaced = true) => {
+const NOTES_BOX_MESSAGE =
+  "Add notes for the next session in the box, then press Enter. Cancel drops it.";
+const RESUME_BOX_MESSAGE =
+  "Pick a handoff in the box and add notes if you like. Cancel drops it.";
+
+const trackPane = (on: On, isPlaced: boolean) => {
   const paneCalls: string[] = [];
   on("ui.open", (_, e) => {
     paneCalls.push(`open:${e.title}`);
@@ -1861,13 +1876,23 @@ const placeBoxPane = (on: On, isPlaced = true) => {
   return paneCalls;
 };
 
+const useBand = (on: On) => {
+  on("session.surfaces", () => ({ value: ["terminal" as const] }));
+  return trackPane(on, true);
+};
+
+const placeBoxPane = (on: On, isPlaced = true) => {
+  on("session.surfaces", () => ({ value: ["vscode" as const] }));
+  return trackPane(on, isPlaced);
+};
+
 testWithSession(
   "new with no focus opens the notes box, then gives the notes to the recap writer as guidance",
   CONVERSATION,
   async ($, on, handoffFiles) => {
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
     const toasts = collectToasts(on);
-    const paneCalls = placeBoxPane(on);
+    const paneCalls = useBand(on);
     const recapPrompts: string[] = [];
     on("model.complete", (_, e) => {
       recapPrompts.push(e.prompt);
@@ -1880,14 +1905,14 @@ testWithSession(
     const reply = await $.command.run(handoff("new"));
 
     expect(reply.text).toBe(NOTES_BOX_MESSAGE);
-    expect(paneCalls).toEqual(["open:Handoff notes"]);
+    expect(paneCalls).toEqual([]);
     expect(recapPrompts).toEqual([]);
 
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     await box.input({ key: "notes", text: " start with the failing test \n" });
     await clock.settle();
 
-    expect(paneCalls).toEqual(["open:Handoff notes", "close"]);
+    expect(paneCalls).toEqual([]);
     expect(recapPrompts[0]).toContain(
       "<guidance>\nstart with the failing test\n</guidance>"
     );
@@ -1904,10 +1929,10 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
 
     await $.command.run(handoff("new"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
 
     expect(
       await box.find({ type: "Text", text: "📜 Notes for the next session" })
@@ -1921,10 +1946,10 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
 
     await $.command.run(handoff("new"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
 
     const heading = await box.find({
       type: "Text",
@@ -1933,7 +1958,7 @@ testWithSession(
     expect(heading?.props).toMatchObject({ weight: "semibold" });
     expect(heading?.props).not.toHaveProperty("bold");
     const divider = await box.find({ type: "Text", text: /^─+$/ });
-    expect(divider?.text).toBe("─".repeat(56));
+    expect(divider?.text).toBe("─".repeat(86));
     expect(divider?.props).toMatchObject({ color: "subtle", wrap: "clip" });
   }
 );
@@ -1943,35 +1968,35 @@ testWithSession(
   CONVERSATION,
   async ($, on) => {
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
 
     await $.command.run(handoff("new"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
 
     expect((await box.find({ key: "handoff-footer" }))?.props).toMatchObject({
       flexDirection: "row",
       justifyContent: "space-between",
     });
     expect(
-      (await box.find({ type: "Text", text: /Esc cancels$/ }))?.props
+      (await box.find({ type: "Text", text: /Cancel to drop$/ }))?.props
     ).toMatchObject({ dimColor: true, wrap: "truncate-end" });
   }
 );
 
 testWithSession(
-  "the notes box keeps two columns and a blank row clear of the pane edge",
+  "the notes box keeps two columns and a bottom row clear of the band edge",
   CONVERSATION,
   async ($, on) => {
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
 
     await $.command.run(handoff("new"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
 
-    expect((await box.find({ key: "handoff-box" }))?.props).toMatchObject({
-      paddingX: 2,
-      paddingY: 1,
-    });
+    const root = await box.find({ key: "handoff-box" });
+    expect(root?.props).toMatchObject({ paddingX: 2, paddingBottom: 1 });
+    expect(root?.props).not.toHaveProperty("paddingTop");
+    expect(root?.props).not.toHaveProperty("paddingY");
   }
 );
 
@@ -1981,12 +2006,12 @@ testWithSession(
   async ($, on) => {
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
     answerRecap(on);
     const handoffSteps = collectHandoffSteps(on);
 
     await $.command.run(handoff("new"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     await box.input({ key: "notes", text: "" });
     await clock.settle();
 
@@ -2000,12 +2025,12 @@ testWithSession(
   async ($, on) => {
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
     const recapPrompts = collectRecapPrompts(on);
     const handoffSteps = collectHandoffSteps(on);
 
     await $.command.run(handoff("new"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     await box.input({ key: "notes", text: "ship it", kind: "change" });
     await box.press({ key: "continue" });
     await clock.settle();
@@ -2021,12 +2046,12 @@ testWithSession(
   async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     const toasts = collectToasts(on);
-    placeBoxPane(on);
+    useBand(on);
     const recapPrompts = collectRecapPrompts(on);
 
     const reply = await $.command.run(handoff("save"));
     expect(reply.text).toBe(NOTES_BOX_MESSAGE);
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     await box.input({ key: "notes", text: "the deploy is on Monday" });
 
     expect(recapPrompts[0]).toContain(
@@ -2048,7 +2073,7 @@ testWithSession(
   async ($, on) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const paneCalls = placeBoxPane(on);
+    const paneCalls = useBand(on);
     answerRecap(on);
 
     const reply = await $.command.run(handoff("save the auth change"));
@@ -2064,20 +2089,21 @@ testWithSession(
   async ($, on, handoffFiles) => {
     mock.clock(on, { now: NOVEMBER_NINTH });
     const toasts = collectToasts(on);
-    const paneCalls = placeBoxPane(on);
+    const paneCalls = useBand(on);
 
     await $.command.run(handoff("save"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     await box.press({ key: "cancel" });
 
-    expect(paneCalls).toEqual(["open:Handoff notes", "close"]);
+    expect(paneCalls).toEqual([]);
     expect(toasts).toEqual(["Handoff cancelled."]);
+    expect(await box.find({ type: "Input" })).toBeUndefined();
     expect(handoffFiles.size).toBe(0);
   }
 );
 
 testWithSession(
-  "a box that cannot be placed is closed and the handoff runs at once",
+  "on vscode a pane that cannot be placed is closed and the handoff runs at once",
   CONVERSATION,
   async ($, on) => {
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
@@ -2101,17 +2127,17 @@ testWithSession(
   async ($, on, handoffFiles) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    const paneCalls = placeBoxPane(on);
+    const paneCalls = useBand(on);
     seedHandoff(handoffFiles, 1, "First recap");
     seedHandoff(handoffFiles, 2, "Second recap");
     const handoffSteps = collectHandoffSteps(on);
 
     const reply = await $.command.run(handoff("resume"));
     expect(reply.text).toBe(RESUME_BOX_MESSAGE);
-    expect(paneCalls).toEqual(["open:Resume a handoff"]);
+    expect(paneCalls).toEqual([]);
     expect(handoffSteps).toEqual([]);
 
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     const picker = await box.find({ type: "Select" });
     expect(picker?.props.options).toEqual([
       { value: "2", label: "#2  2026-11-09 14:32  Second recap" },
@@ -2134,13 +2160,13 @@ testWithSession(
   async ($, on, handoffFiles) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
     seedHandoff(handoffFiles, 1, "First recap");
     seedHandoff(handoffFiles, 2, "Second recap");
     const handoffSteps = collectHandoffSteps(on);
 
     await $.command.run(handoff("resume"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     await box.input({ key: "notes", text: "" });
     await clock.settle();
 
@@ -2152,7 +2178,7 @@ testWithSession(
   "resume with nothing saved says so without opening the picker",
   [],
   async ($, on) => {
-    const paneCalls = placeBoxPane(on);
+    const paneCalls = useBand(on);
 
     const reply = await $.command.run(handoff("resume"));
 
@@ -2167,17 +2193,12 @@ testWithSession(
   "the box draws its field, picker and buttons on every surface",
   [],
   async ($, on, handoffFiles) => {
-    placeBoxPane(on);
+    useBand(on);
     seedHandoff(handoffFiles, 1, "First recap");
     await $.command.run(handoff("resume"));
 
-    for (const surface of [
-      "terminal",
-      "desktop",
-      "vscode",
-      "mobile",
-    ] as const) {
-      const box = await $.ui.mount({ ...BOX_PANE, surface });
+    for (const surface of ["terminal", "desktop"] as const) {
+      const box = await $.ui.mount({ ...BOX_BAND, surface });
 
       expect(await box.find({ type: "Input" })).toBeDefined();
       expect(await box.find({ type: "Select" })).toBeDefined();
@@ -2188,15 +2209,55 @@ testWithSession(
 );
 
 testWithSession(
-  "the box drawn with nothing pending shows a hint instead of a field",
-  [],
-  async ($) => {
-    const box = await $.ui.mount(BOX_PANE);
+  "the band draws nothing with no box open, and yields to a survey",
+  CONVERSATION,
+  async ($, on) => {
+    useBand(on);
+    const idleBand = await $.ui.mount(BOX_BAND);
+    expect(await idleBand.find({ type: "Input" })).toBeUndefined();
+    expect(await idleBand.find({ type: "Text" })).toBeUndefined();
 
-    expect(await box.find({ type: "Input" })).toBeUndefined();
+    await $.command.run(handoff("new"));
+    const surveyBand = await $.ui.mount({
+      ...BOX_BAND,
+      props: { ...BOX_BAND.props, hasSurvey: true },
+    });
+    expect(await surveyBand.find({ type: "Input" })).toBeUndefined();
+  }
+);
+
+testWithSession(
+  "the notes box focuses its field and hints at Cancel instead of Esc",
+  CONVERSATION,
+  async ($, on) => {
+    ignoreToasts(on);
+    useBand(on);
+
+    await $.command.run(handoff("new"));
+    const box = await $.ui.mount(BOX_BAND);
+
+    expect((await box.find({ type: "Input" }))?.props).toMatchObject({
+      autoFocus: true,
+    });
     expect(
-      (await box.find({ type: "Text", text: /\/handoff new/ }))?.text
-    ).toBe("Run /handoff new, save or resume to use this box.");
+      (await box.find({ type: "Text", text: /Cancel to drop$/ }))?.text
+    ).toBe("Enter hands off · Tab moves · Cancel to drop");
+  }
+);
+
+testWithSession(
+  "on vscode, which draws no band, the box opens in a pane instead",
+  CONVERSATION,
+  async ($, on) => {
+    ignoreToasts(on);
+    const paneCalls = placeBoxPane(on);
+
+    const reply = await $.command.run(handoff("new"));
+
+    expect(reply.text).toBe(NOTES_BOX_MESSAGE);
+    expect(paneCalls).toEqual(["open:Handoff notes"]);
+    const box = await $.ui.mount({ ...BOX_PANE, surface: "vscode" });
+    expect(await box.find({ type: "Input" })).toBeDefined();
   }
 );
 
@@ -2205,12 +2266,12 @@ testWithConversationWriter(
   async ($, on) => {
     const clock = mock.clock(on);
     ignoreToasts(on);
-    placeBoxPane(on);
+    useBand(on);
     collectStatuses(on);
     const submittedPrompts = collectSubmittedPrompts(on);
 
     await $.command.run(handoff("save"));
-    const box = await $.ui.mount(BOX_PANE);
+    const box = await $.ui.mount(BOX_BAND);
     await box.input({ key: "notes", text: "ship it" });
     await clock.settle();
 
@@ -2515,3 +2576,84 @@ for (const [repositoryLine, answers, projectName] of [
     }
   );
 }
+
+const SPINNER_FRAME = /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]$/;
+
+testWithSubagentWriter(
+  "while a subagent writes the recap, the band shows a spinner header and the step list",
+  async ($, on) => {
+    const clock = mock.clock(on);
+    useBand(on);
+    answerTurns(on);
+    ignoreToasts(on);
+    collectStatuses(on);
+    const spawnedAgents = collectSpawnedAgents(on);
+
+    await $.command.run(handoff("save the auth change"));
+    const band = await $.ui.mount(BOX_BAND);
+
+    const header = await band.find({
+      type: "Text",
+      text: "📜 Handoff · Writing",
+    });
+    expect(header?.props).toMatchObject({ weight: "semibold" });
+    const spinners = await band.findAll({ type: "Text", text: SPINNER_FRAME });
+    expect(spinners[0]?.text).toBe("⠋");
+    expect(spinners[0]?.props).toMatchObject({ color: "claude" });
+    const done = await band.find({ type: "Text", text: "✓" });
+    expect(done?.props).toMatchObject({ color: "success" });
+    const pending = await band.find({ type: "Text", text: "○" });
+    expect(pending?.props).toMatchObject({ dimColor: true });
+    expect(
+      (await band.find({ type: "Text", text: /^─+$/ }))?.props
+    ).toMatchObject({ color: "subtle", wrap: "clip" });
+
+    await clock.advance(100);
+    await band.unmount();
+    const nextBand = await $.ui.mount(BOX_BAND);
+    expect(
+      (await nextBand.find({ type: "Text", text: SPINNER_FRAME }))?.text
+    ).toBe("⠙");
+
+    await endAgentTurn(
+      $,
+      RECAP_AGENT_ID,
+      spawnedAgents[0]?.prompt ?? "",
+      "Resume prompt"
+    );
+    await nextBand.unmount();
+    const finishedBand = await $.ui.mount(BOX_BAND);
+    expect(await finishedBand.find({ type: "Text" })).toBeUndefined();
+  }
+);
+
+testWithQuestionTurn(
+  "the band names the open questions step first, and ends when the question turn is aborted",
+  { writer: "haiku" },
+  async ($, on) => {
+    const clock = mock.clock(on);
+    useBand(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("save the auth change"));
+    await clock.settle();
+    const band = await $.ui.mount(BOX_BAND);
+    expect(
+      await band.find({ type: "Text", text: "📜 Handoff · Asking" })
+    ).toBeDefined();
+    expect(await band.find({ type: "Text", text: "✓" })).toBeUndefined();
+
+    const turnId = "turn-question";
+    await $.turn.start({ text: submittedPrompts[0] ?? "", turnId });
+    await $.turn.complete({
+      answer: "",
+      durationMs: 1,
+      isAborted: true,
+      turnId,
+      reason: "aborted",
+    });
+    await band.unmount();
+    const abortedBand = await $.ui.mount(BOX_BAND);
+    expect(await abortedBand.find({ type: "Text" })).toBeUndefined();
+  }
+);

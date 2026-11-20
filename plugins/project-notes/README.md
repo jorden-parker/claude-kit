@@ -31,6 +31,10 @@ The ticket is a draft inside the note. The plugin never talks to Shortcut, and t
 
 Claude is told to load the `humanizer` skill before writing a debugging note and to write the prose by its rules. If Claude has not loaded that skill in the session, the first debugging note is refused once with that reminder; the next call saves. Where no `humanizer` skill is installed, Claude calls again unchanged.
 
+## Transcript card
+
+Saving a note places a small NOTE card in the transcript with the title, category and short path.
+
 ## Storage
 
 ```

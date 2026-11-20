@@ -28,13 +28,15 @@ The old dashed forms (`--new`, `--save`, `--each`, `--list`, `--resume`) still w
 
 ## Boxes
 
-`/handoff new`, `/handoff save` and `/handoff resume` with nothing after them open a small box above the prompt instead of running at once. The box takes the keyboard, so you can type straight away.
+`/handoff new`, `/handoff save` and `/handoff resume` with nothing after them open a small box in the band above the prompt instead of running at once. The box takes the keyboard, so you can type straight away.
 
 - **Notes box** (`new`, `save`): a three-line field for notes to the next session. Enter hands off; an empty field means no notes. The notes are guidance for whoever writes the recap, not text to include: a direction to take, or extra requests. The writer works out what they mean and writes that into the recap in its own words, so the notes do not appear word for word in the prompt or in the saved file. The recap is only written after you press Enter
 - **Resume box** (`resume`): the same notes field, then a list of this project's ten newest handoffs. Enter in the field resumes the latest. Tab to the list, pick another with the arrows, and Enter resumes that one. The recap is already written, so here the notes are added under it as `Extra context from the user: …`, in the composer where you can edit them
-- Each box has a button for the same action and a Cancel button. Esc closes the box. Either way nothing is written and the session is left alone
+- Each box has a button for the same action and a Cancel button. Esc only hands the keys back to the prompt; Cancel closes the box. Either way nothing is written and the session is left alone
 - Typing anything after the action skips the box: `/handoff new the auth change`, `/handoff save the parser`, `/handoff resume 3`, `/handoff resume start with the tests`
-- Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), the command runs at once: `new` and `save` without notes, `resume` on the latest handoff
+- VS Code draws no band, so there the box opens in a side pane. Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), the command runs at once: `new` and `save` without notes, `resume` on the latest handoff
+
+While a handoff runs, the band shows a small progress panel: a spinner, the current step (asking, writing, saving) and the steps done and still to come. It goes away when the handoff ends or is cancelled.
 
 ## Open questions
 

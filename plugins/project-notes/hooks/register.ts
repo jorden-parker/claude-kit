@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from "claude-code";
+import type { EngineInterface, Register, RenderElement } from "claude-code";
 import {
   auditNoteFolders,
   listStoreRoots,
@@ -170,6 +170,22 @@ const refuseDebuggingNote = (body: string) => {
   return 'Load the humanizer skill first (Skill tool, skill "humanizer"), rewrite the note\'s prose by its rules, then call this tool again. If no humanizer skill is installed, call this tool again unchanged.';
 };
 
+type NoteCard = { title: string; category: string; shortPath: string };
+
+const noteCards = new Map<string, NoteCard>();
+const NOTE_CARD_CONTEXT_MINIMUM_COLUMNS = 60;
+
+const placeNoteCard = async (
+  engine: EngineInterface,
+  card: NoteCard,
+  notePath: string
+) => {
+  const id = `note-${hashText(notePath)}`;
+  noteCards.set(id, card);
+  const placed = await engine.ui.place({ id }).catch(() => undefined);
+  if (!placed?.isPlaced) noteCards.delete(id);
+};
+
 const writeProjectNote = async (
   engine: EngineInterface,
   toolInput: Record<string, unknown>
@@ -208,6 +224,15 @@ const writeProjectNote = async (
     ...(source ? [`${SOURCE_FIELD}${source}`] : []),
   ].join("\n");
   await engine.fs.write(notePath, `---\n${frontMatter}\n---\n\n${body}\n`);
+  await placeNoteCard(
+    engine,
+    {
+      title,
+      category,
+      shortPath: `~/…/${notePath.slice(notePath.lastIndexOf("/") + 1)}`,
+    },
+    notePath
+  );
   return { result: `Note saved to ${notePath}` };
 };
 
@@ -395,6 +420,50 @@ export const register: Register = (on) => {
     if (!/^organi[sz]e$/i.test(e.args.trim())) return { text: VIEWER_HINT };
     askClaude($, ORGANISE_INSTRUCTION);
     return { text: "Filing the existing session notes as project notes…" };
+  });
+
+  on("ui.render", { component: "Placed" }, ($, e, next) => {
+    const card =
+      e.props.plugin === "project-notes"
+        ? noteCards.get(e.props.id)
+        : undefined;
+    if (!card) return next(e);
+    const { Box, Text } = $.ui.resolve(e);
+    const bodyColumns = (e.props as { bodyColumns?: number }).bodyColumns;
+    const isContextShown =
+      bodyColumns === undefined ||
+      bodyColumns >= NOTE_CARD_CONTEXT_MINIMUM_COLUMNS;
+    return h(
+      Box,
+      { flexDirection: "row", gap: "sm" },
+      h(
+        Box,
+        { width: 7, flexShrink: 0 },
+        h(
+          Text,
+          {
+            backgroundColor: "remember",
+            color: "inverseText",
+            weight: "semibold",
+          },
+          " NOTE "
+        )
+      ),
+      h(
+        Box,
+        { flexGrow: 1, flexShrink: 1 },
+        h(Text, { weight: "semibold", wrap: "truncate-end" }, card.title)
+      ),
+      ...(isContextShown
+        ? [
+            h(
+              Box,
+              { flexShrink: 0 },
+              h(Text, { dimColor: true }, `${card.category}  ${card.shortPath}`)
+            ),
+          ]
+        : [])
+    ) as RenderElement;
   });
 
   on("tool.call", async ($, e, next) => {

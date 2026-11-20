@@ -393,6 +393,7 @@ const setPlanStatus = async (
   );
   const setFolder = findPlanSetFolder(plansRoot, planPath);
   if (setFolder) await writeSetIndex(engine, setFolder);
+  await recordPlanStatus(engine, planPath, status);
   return {
     result: `Plan marked ${status}: ${planPath}${setFolder ? `. The set's index at ${setFolder}/${INDEX_FILE_NAME} is updated.` : ""}`,
   };
@@ -696,12 +697,232 @@ const buildPlans = async (
     return {
       text: `No plan was picked. Run /${COMMAND_NAME} build ${setName} <order> with one of the plans not done: ${planNames.join(", ")}.`,
     };
+  await startBoard(engine, setFolder, setName);
   askClaude(engine, composeBuildInstruction(setFolder, planName));
   return {
     text: planName
       ? `Building plan ${planName} of set ${setName}…`
       : `Building the plans of set ${setName}…`,
   };
+};
+
+type BoardPlan = {
+  name: string;
+  label: string;
+  status: string;
+  startedAt?: number;
+  endedAt?: number;
+};
+
+const BOARD_LOOKS = {
+  failing: { label: "FAIL", glyph: "✗", word: "Failing", color: "error" },
+  running: { label: "RUN", glyph: "●", word: "Building", color: "warning" },
+  passing: { label: "PASS", glyph: "✓", word: "Done", color: "success" },
+  waiting: { label: "WAIT", glyph: "○", word: "Waiting", color: "subtle" },
+} as const;
+type BoardState = keyof typeof BOARD_LOOKS;
+const BOARD_STATES = Object.keys(BOARD_LOOKS) as BoardState[];
+const STATE_OF_STATUS: Record<string, BoardState> = {
+  blocked: "failing",
+  "in-progress": "running",
+  done: "passing",
+  pending: "waiting",
+};
+
+const board = {
+  isShown: false,
+  setLabel: "",
+  setFolder: "",
+  plans: [] as BoardPlan[],
+  ticker: undefined as
+    ReturnType<EngineInterface["clock"]["every"]> | undefined,
+};
+
+const stateOf = (plan: BoardPlan): BoardState =>
+  STATE_OF_STATUS[plan.status] ?? "waiting";
+
+const syncBoardTicker = (engine: EngineInterface) => {
+  const shouldTick =
+    board.isShown && board.plans.some((plan) => stateOf(plan) === "running");
+  if (shouldTick && !board.ticker)
+    board.ticker = engine.clock.every(1000, () => {
+      void engine.ui.invalidate("ui.render");
+    });
+  if (!shouldTick && board.ticker) {
+    board.ticker.cancel();
+    board.ticker = undefined;
+  }
+};
+
+const startBoard = async (
+  engine: EngineInterface,
+  setFolder: string,
+  setName: string
+) => {
+  const { planNames, planTexts } = await readSetPlans(engine, setFolder);
+  const now = await engine.clock.now();
+  board.setFolder = setFolder;
+  board.setLabel = labelSet(setName);
+  board.plans = planNames.map((fileName, i) => {
+    const name = fileName.replace(/\.md$/, "");
+    const planText = planTexts[i] ?? "";
+    const title = readFrontMatterField(planText, "title");
+    const status = readFrontMatterField(planText, "status") || "pending";
+    return {
+      name,
+      label: title
+        ? `${parseInt(name, 10)} · ${title}`
+        : labelNumbered("")(name),
+      status,
+      startedAt: status === "in-progress" ? now : undefined,
+    };
+  });
+  board.isShown = true;
+  syncBoardTicker(engine);
+  await engine.ui.invalidate("ui.render");
+};
+
+const recordPlanStatus = async (
+  engine: EngineInterface,
+  planPath: string,
+  status: string
+) => {
+  const plan = board.plans.find(
+    (candidate) => `${board.setFolder}/${candidate.name}.md` === planPath
+  );
+  if (!plan) return;
+  const now = await engine.clock.now();
+  if (status === "in-progress" && plan.status !== status) {
+    plan.startedAt = now;
+    plan.endedAt = undefined;
+  }
+  if (status === "done" || status === "blocked") plan.endedAt = now;
+  plan.status = status;
+  syncBoardTicker(engine);
+  await engine.ui.invalidate("ui.render");
+};
+
+const hideBoard = async (engine: EngineInterface) => {
+  board.isShown = false;
+  syncBoardTicker(engine);
+  await engine.ui.invalidate("ui.render");
+};
+
+const formatElapsed = (milliseconds: number) => {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 0) return `${seconds}s`;
+  const pad = (count: number) => String(count).padStart(2, "0");
+  return minutes < 60
+    ? `${minutes}m ${pad(seconds % 60)}s`
+    : `${Math.floor(minutes / 60)}h ${pad(minutes % 60)}m`;
+};
+
+const renderBoard = (
+  elements: ReturnType<EngineInterface["ui"]["resolve"]>,
+  bodyColumns: number,
+  now: number,
+  hideButton: RenderElement
+) => {
+  const { Box, Text } = elements;
+  const innerWidth = bodyColumns - 4;
+  const countOf = (state: BoardState) =>
+    board.plans.filter((plan) => stateOf(plan) === state).length;
+  const headerState: BoardState =
+    countOf("failing") > 0
+      ? "failing"
+      : countOf("passing") === board.plans.length
+        ? "passing"
+        : "running";
+  const headerLook = BOARD_LOOKS[headerState];
+  const divider = h(
+    Text,
+    { color: "subtle", wrap: "clip" },
+    "─".repeat(Math.max(innerWidth, 0))
+  );
+  const rows = BOARD_STATES.flatMap((state) =>
+    board.plans
+      .filter((plan) => stateOf(plan) === state)
+      .map((plan) => {
+        const look = BOARD_LOOKS[stateOf(plan)];
+        const elapsed =
+          plan.startedAt === undefined
+            ? ""
+            : formatElapsed((plan.endedAt ?? now) - plan.startedAt);
+        return h(
+          Box,
+          { key: `plan-${plan.name}`, flexDirection: "row", columnGap: 2 },
+          h(
+            Box,
+            { width: 6, flexShrink: 0 },
+            h(
+              Text,
+              {
+                backgroundColor: look.color,
+                color: "inverseText",
+                weight: "semibold",
+                wrap: "clip",
+              },
+              ` ${look.label.padEnd(4)} `
+            )
+          ),
+          h(
+            Box,
+            { flexGrow: 1, flexShrink: 1 },
+            h(Text, { wrap: "truncate-end" }, plan.label)
+          ),
+          innerWidth >= 60 ? h(Box, { width: 10, flexShrink: 0 }) : null,
+          innerWidth >= 40
+            ? h(
+                Box,
+                { width: 7, flexShrink: 0, justifyContent: "flex-end" },
+                h(Text, { dimColor: true, tabular: true }, elapsed)
+              )
+            : null
+        );
+      })
+  );
+  return h(
+    Box,
+    {
+      key: "small-plans-board",
+      flexDirection: "column",
+      paddingX: 2,
+      paddingBottom: 1,
+    },
+    h(
+      Box,
+      { flexDirection: "row", columnGap: 1 },
+      h(Text, { weight: "semibold" }, PICKER_HEADING),
+      h(Text, { dimColor: true }, "·"),
+      h(Text, { dimColor: true }, board.setLabel),
+      h(Text, { dimColor: true }, "·"),
+      h(
+        Text,
+        { color: headerLook.color, weight: "semibold" },
+        `${headerLook.glyph} ${headerLook.word}`
+      )
+    ),
+    divider,
+    ...rows,
+    divider,
+    h(
+      Box,
+      { flexDirection: "row", justifyContent: "space-between" },
+      h(
+        Box,
+        { flexDirection: "row", columnGap: 2 },
+        ...(["failing", "running", "passing"] as const).map((state) =>
+          h(
+            Text,
+            { dimColor: true },
+            `${BOARD_LOOKS[state].glyph} ${countOf(state)}`
+          )
+        )
+      ),
+      hideButton
+    )
+  ) as RenderElement;
 };
 
 export const register: Register = (on) => {
@@ -724,6 +945,30 @@ export const register: Register = (on) => {
       ),
       dialog
     ) as RenderElement;
+  });
+
+  on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
+    if (!board.isShown || e.props.hasSurvey) return next(e);
+    const { Button } = $.ui.resolve(e);
+    const hideButton = h(Button, {
+      key: "hide",
+      label: "Hide",
+      hotkey: "h",
+      plain: true,
+      onPress: () => hideBoard($),
+    }) as RenderElement;
+    return renderBoard(
+      $.ui.resolve(e),
+      e.props.bodyColumns,
+      await $.clock.now(),
+      hideButton
+    );
+  });
+
+  on("session.end", async (_, e, next) => {
+    board.ticker?.cancel();
+    board.ticker = undefined;
+    return next(e);
   });
 
   on("session.start", async ($, e, next) => {

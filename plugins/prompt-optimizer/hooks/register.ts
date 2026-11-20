@@ -480,6 +480,39 @@ const deliverRewrite = async (
     : buildFailureResult(EMPTY_REPLY_MESSAGE);
 };
 
+const SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+const BAR_SEGMENTS = 16;
+const BAR_LIT_SEGMENTS = 4;
+const FRAME_MILLISECONDS = 100;
+const MINIMUM_BAR_COLUMNS = 50;
+
+let optimizeStartedAt: number | undefined;
+let progressTimer: { cancel: () => void } | undefined;
+
+const startProgressBand = async ($: EngineInterface) => {
+  optimizeStartedAt = await $.clock.now();
+  progressTimer?.cancel();
+  progressTimer = $.clock.every(FRAME_MILLISECONDS, () =>
+    $.ui.invalidate("ui.render")
+  );
+  $.ui.invalidate("ui.render");
+};
+
+const stopProgressBand = ($: EngineInterface) => {
+  progressTimer?.cancel();
+  progressTimer = undefined;
+  optimizeStartedAt = undefined;
+  $.ui.invalidate("ui.render");
+};
+
+const buildShimmerBar = (frame: number) => {
+  const head = frame % BAR_SEGMENTS;
+  return Array.from(
+    { length: BAR_SEGMENTS },
+    (_, i) => (i - head + BAR_SEGMENTS) % BAR_SEGMENTS < BAR_LIT_SEGMENTS
+  );
+};
+
 export const register: Register = (on, options) => {
   const optimizerModel = readStringOption(options, "model") || LOCAL_MODEL;
   const optimizerRules = buildOptimizerRules(
@@ -499,6 +532,59 @@ export const register: Register = (on, options) => {
     return next(e);
   });
 
+  on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
+    if (optimizeStartedAt === undefined || e.props.hasSurvey) return next(e);
+    const elapsed = Math.max((await $.clock.now()) - optimizeStartedAt, 0);
+    const frame = Math.floor(elapsed / FRAME_MILLISECONDS);
+    const { Box, Text } = $.ui.resolve(e);
+    const hasBar = e.props.bodyColumns >= MINIMUM_BAR_COLUMNS;
+    return Box({
+      flexDirection: "row",
+      columnGap: 2,
+      paddingX: 2,
+      paddingBottom: 1,
+      children: [
+        Text({
+          weight: "semibold",
+          children: ["✨ Optimizing prompt"],
+        }),
+        Text({
+          color: "claude",
+          children: [SPINNER_FRAMES[frame % SPINNER_FRAMES.length] ?? ""],
+        }),
+        ...(hasBar
+          ? [
+              Box({
+                flexDirection: "row",
+                flexShrink: 0,
+                children: [
+                  Text({
+                    children: buildShimmerBar(frame).map((isLit) =>
+                      Text({
+                        color: isLit ? "claude" : "subtle",
+                        children: [isLit ? "▰" : "▱"],
+                      })
+                    ),
+                  }),
+                ],
+              }),
+            ]
+          : []),
+        Box({ flexGrow: 1 }),
+        Text({
+          dimColor: true,
+          tabular: true,
+          children: [`${Math.floor(elapsed / 1000)}s`],
+        }),
+      ],
+    });
+  });
+
+  on("session.end", async ($, e, next) => {
+    stopProgressBand($);
+    return next(e);
+  });
+
   on("command.run", { command: "optimize" }, async ($, e) => {
     const draft = await readDraft($, e.args);
     const attachedImageList = pendingAttachedImageList;
@@ -506,52 +592,57 @@ export const register: Register = (on, options) => {
     if (!draft) return buildFailureResult(USAGE_MESSAGE);
 
     $.ui.toast("✨ Optimizing prompt…");
-    const optimizerPrompt = await buildOptimizerPrompt(
-      $,
-      draft,
-      attachedImageList
-    );
-    const isCloudModel = optimizerModel !== LOCAL_MODEL;
-    if (isCloudModel && (await isBehindApiProxy($))) {
-      const promptText = `${AGENT_PREAMBLE}\n\n${optimizerRules}\n\n${optimizerPrompt}`;
-      const spawnResult = await $.agent.spawn({
-        prompt: promptText,
-        description: REWRITE_AGENT_DESCRIPTION,
-        subagentType: REWRITE_AGENT_TYPE,
-        model: optimizerModel,
-      });
-      if (spawnResult.deny !== undefined) {
+    await startProgressBand($);
+    try {
+      const optimizerPrompt = await buildOptimizerPrompt(
+        $,
+        draft,
+        attachedImageList
+      );
+      const isCloudModel = optimizerModel !== LOCAL_MODEL;
+      if (isCloudModel && (await isBehindApiProxy($))) {
+        const promptText = `${AGENT_PREAMBLE}\n\n${optimizerRules}\n\n${optimizerPrompt}`;
+        const spawnResult = await $.agent.spawn({
+          prompt: promptText,
+          description: REWRITE_AGENT_DESCRIPTION,
+          subagentType: REWRITE_AGENT_TYPE,
+          model: optimizerModel,
+        });
+        if (spawnResult.deny !== undefined) {
+          return buildFailureResult(
+            `Could not optimize the prompt (${spawnResult.deny}).`
+          );
+        }
+        awaitedRewrite = { draft, promptText, agentId: spawnResult.agentId };
+        rewriteAgentId = spawnResult.agentId;
+        $.ui.log(
+          `/optimize subagent started on ${optimizerModel}, agent ${spawnResult.agentId ?? "with no id"}`,
+          { to: "debug" }
+        );
+        $.ui.status(
+          `${STATUS_PREFIX} a subagent is rewriting on ${optimizerModel}…`
+        );
+        return { text: SUBAGENT_REWRITING_MESSAGE };
+      }
+      const reply = isCloudModel
+        ? await rewriteInTheCloud(
+            $,
+            optimizerModel,
+            optimizerRules,
+            optimizerPrompt
+          )
+        : await rewriteLocally($, optimizerRules, optimizerPrompt);
+
+      if (!reply.isAnswered) {
         return buildFailureResult(
-          `Could not optimize the prompt (${spawnResult.deny}).`
+          `Could not optimize the prompt (${reply.failure}).`
         );
       }
-      awaitedRewrite = { draft, promptText, agentId: spawnResult.agentId };
-      rewriteAgentId = spawnResult.agentId;
-      $.ui.log(
-        `/optimize subagent started on ${optimizerModel}, agent ${spawnResult.agentId ?? "with no id"}`,
-        { to: "debug" }
-      );
-      $.ui.status(
-        `${STATUS_PREFIX} a subagent is rewriting on ${optimizerModel}…`
-      );
-      return { text: SUBAGENT_REWRITING_MESSAGE };
-    }
-    const reply = isCloudModel
-      ? await rewriteInTheCloud(
-          $,
-          optimizerModel,
-          optimizerRules,
-          optimizerPrompt
-        )
-      : await rewriteLocally($, optimizerRules, optimizerPrompt);
 
-    if (!reply.isAnswered) {
-      return buildFailureResult(
-        `Could not optimize the prompt (${reply.failure}).`
-      );
+      return await deliverRewrite($, reply.text, draft);
+    } finally {
+      if (!awaitedRewrite) stopProgressBand($);
     }
-
-    return deliverRewrite($, reply.text, draft);
   });
 
   on("turn.start", (_, e, next) => {
@@ -574,6 +665,7 @@ export const register: Register = (on, options) => {
     });
 
     const outcome = await deliverRewrite($, e.answer, draft);
+    stopProgressBand($);
     $.ui.status(undefined);
     $.ui.log(outcome.text);
     return turnResult;

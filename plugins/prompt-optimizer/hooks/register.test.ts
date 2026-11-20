@@ -19,7 +19,8 @@ const CLOUD_OPTIONS = { options: { model: "sonnet" } };
 const testWithEmptySession = (
   name: string,
   body: TestBody,
-  selectedText?: string
+  selectedText?: string,
+  shouldStubClock = true
 ) =>
   test(name, CLOUD_OPTIONS, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
@@ -28,6 +29,7 @@ const testWithEmptySession = (
     on("ui.selection", () => ({
       value: selectedText === undefined ? undefined : { text: selectedText },
     }));
+    if (shouldStubClock) on("clock.now", () => ({ value: 0 }));
     mock.env(on, {});
     return body($, on);
   });
@@ -234,6 +236,7 @@ test(
   "the model prompt carries the working directory, the last six non-blank messages and the delimited draft",
   CLOUD_OPTIONS,
   async ($, on) => {
+    on("clock.now", () => ({ value: 0 }));
     mock.env(on, {});
     const prompts: string[] = [];
     const longText = "x".repeat(600);
@@ -281,6 +284,7 @@ test(
   "a long message cut at an emoji keeps the prompt valid UTF-16",
   CLOUD_OPTIONS,
   async ($, on) => {
+    on("clock.now", () => ({ value: 0 }));
     mock.env(on, {});
     const prompts: string[] = [];
     on("session.cwd", () => ({ value: "/repo" }));
@@ -412,6 +416,7 @@ test(
   "an API error on the configured model retries once on the session's model",
   CLOUD_OPTIONS,
   async ($, on) => {
+    on("clock.now", () => ({ value: 0 }));
     mock.env(on, {});
     const models: string[] = [];
     on("session.cwd", () => ({ value: "/repo" }));
@@ -514,6 +519,7 @@ test(
   "a call rate-limited on every model waits less than the hook's 10 second budget",
   CLOUD_OPTIONS,
   async ($, on) => {
+    on("clock.now", () => ({ value: 0 }));
     mock.env(on, {});
     const models: string[] = [];
     const waits: number[] = [];
@@ -676,6 +682,7 @@ test(
   "the rewrite uses the configured model and appends the configured instructions to the rules",
   { options: { model: "sonnet", instructions: "Always mention TDD." } },
   async ($, on) => {
+    on("clock.now", () => ({ value: 0 }));
     mock.env(on, {});
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: [] }));
@@ -940,6 +947,7 @@ const testLocalRewrite = (
     on("session.messages", () => ({ value: [] }));
     on("session.model", () => ({ value: "sonnet" }));
     on("ui.selection", () => ({ value: undefined }));
+    on("clock.now", () => ({ value: 0 }));
     on("ui.toast", () => ({ value: undefined }));
     on("ui.status", (_, e) => {
       record.statuses.push(e.text);
@@ -1162,6 +1170,7 @@ const testBehindProxy = (name: string, body: TestBody) =>
   test(name, CLOUD_OPTIONS, ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: [] }));
+    on("clock.now", () => ({ value: 0 }));
     mock.env(on, { ANTHROPIC_BASE_URL: "https://proxy.example" });
     on("turn.start", (_, e) => ({ turnId: e.turnId }));
     on("turn.complete", (_, e) => ({ text: e.answer }));
@@ -1469,6 +1478,7 @@ test(
         toChatLine("Better prompt", true),
       ])
     );
+    on("clock.now", () => ({ value: 0 }));
     mock.env(on, { ANTHROPIC_BASE_URL: "https://proxy.example" });
     collectToasts(on);
     collectTranscriptRows(on);
@@ -1481,4 +1491,151 @@ test(
     expect(spawnedAgents).toEqual([]);
     expect(fills).toEqual([{ text: "Better prompt", mode: "replace" }]);
   }
+);
+
+const mountOptimizerBand = (
+  $: Engine,
+  overrides: { hasSurvey?: boolean; bodyColumns?: number } = {}
+) =>
+  $.ui.mount({
+    plugin: "prompt-optimizer",
+    component: "AbovePrompt",
+    surface: "terminal",
+    props: {
+      hasSurvey: overrides.hasSurvey ?? false,
+      isCollapsed: false,
+      isWorking: false,
+      maxRows: 20,
+      bodyColumns: overrides.bodyColumns ?? 90,
+      scroll: { offset: 0, bodyRows: 20 },
+      view: {},
+    },
+  });
+
+const holdModelReply = (on: On) => {
+  let release: () => void = () => undefined;
+  const isHeld = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  on("ui.toast", () => ({ value: undefined }));
+  on("model.complete", async () => {
+    await isHeld;
+    return { value: { isAnswered: true, text: "Better prompt", usage: USAGE } };
+  });
+  on("prompt.fill", () => ({ isFilled: true }));
+  return release;
+};
+
+testWithEmptySession(
+  "the band draws nothing when no optimize runs",
+  async ($) => {
+    const band = await mountOptimizerBand($);
+
+    expect(await findTitle(band)).toBeUndefined();
+  },
+  undefined,
+  false
+);
+
+const findTitle = (band: Awaited<ReturnType<typeof mountOptimizerBand>>) =>
+  band.find({ type: "Text", text: /Optimizing prompt/ });
+
+const readSpinner = async (
+  band: Awaited<ReturnType<typeof mountOptimizerBand>>
+) => (await band.find({ type: "Text", text: /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]$/ }))?.text;
+
+const readBar = async (band: Awaited<ReturnType<typeof mountOptimizerBand>>) =>
+  (await band.findAll({ type: "Text", text: /^[▰▱]$/ }))
+    .map((segment) => segment.text)
+    .join("");
+
+testWithEmptySession(
+  "while optimizing the band shows the title, spinner, elapsed seconds and a sweeping bar",
+  async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000 });
+    const release = holdModelReply(on);
+    const band = await mountOptimizerBand($);
+
+    const running = $.command.run(optimize("fix bug"));
+    await clock.settle();
+    const firstSpinner = await readSpinner(band);
+    const firstBar = await readBar(band);
+    await clock.advance(3_300);
+
+    expect(await findTitle(band)).toBeDefined();
+    expect(await band.find({ type: "Text", text: /^3s$/ })).toBeDefined();
+    expect(firstSpinner).toBeDefined();
+    expect(await readSpinner(band)).not.toBe(firstSpinner);
+    const laterBar = await readBar(band);
+    expect(firstBar).toHaveLength(16);
+    expect(laterBar).toHaveLength(16);
+    expect(laterBar).toContain("▰");
+    expect(laterBar).toContain("▱");
+    expect(laterBar).not.toBe(firstBar);
+
+    release();
+    await running;
+  },
+  undefined,
+  false
+);
+
+testWithEmptySession(
+  "the band drops the bar on a narrow terminal and yields to a survey",
+  async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000 });
+    const release = holdModelReply(on);
+    const narrowBand = await mountOptimizerBand($, { bodyColumns: 40 });
+    const surveyBand = await mountOptimizerBand($, { hasSurvey: true });
+
+    const running = $.command.run(optimize("fix bug"));
+    await clock.settle();
+
+    expect(await findTitle(narrowBand)).toBeDefined();
+    expect(await readBar(narrowBand)).toBe("");
+    expect(await findTitle(surveyBand)).toBeUndefined();
+
+    release();
+    await running;
+  },
+  undefined,
+  false
+);
+
+testWithEmptySession(
+  "the band disappears and stops redrawing once the rewrite finishes",
+  async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000 });
+    const release = holdModelReply(on);
+    const band = await mountOptimizerBand($);
+
+    const running = $.command.run(optimize("fix bug"));
+    await clock.settle();
+    release();
+    await running;
+    await clock.advance(500);
+
+    expect(await findTitle(band)).toBeUndefined();
+  },
+  undefined,
+  false
+);
+
+testWithEmptySession(
+  "the band disappears when the rewrite fails",
+  async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000 });
+    on("ui.toast", () => ({ value: undefined }));
+    on("model.complete", () => ({
+      value: API_ERROR_REPLY,
+    }));
+    const band = await mountOptimizerBand($);
+
+    await $.command.run(optimize("fix bug"));
+    await clock.advance(500);
+
+    expect(await findTitle(band)).toBeUndefined();
+  },
+  undefined,
+  false
 );

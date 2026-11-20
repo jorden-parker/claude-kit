@@ -4,6 +4,7 @@ import type {
   PluginOptions,
   Register,
   RenderElement,
+  RenderInput,
 } from "claude-code";
 
 const OPEN_QUESTIONS_HEADING = "Open questions for the user:";
@@ -90,14 +91,24 @@ const PRIDE_STRIPE_COLORS = [
 ] as const;
 const BOX_PANE_ID = "handoff";
 const BOX_ROWS = 11;
+const HANDOFF_STEPS = [
+  { word: "Asking", label: "Ask the open questions" },
+  { word: "Writing", label: "Write the recap" },
+  { word: "Saving", label: "Save the handoff" },
+];
+const ASKING_STEP = 0;
+const WRITING_STEP = 1;
+const SAVING_STEP = 2;
+const SPINNER_FRAMES = [..."⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"];
+const SPINNER_INTERVAL_MS = 100;
 const BOX_SIDE_PADDING = 2;
 const NOTES_INPUT_ROWS = 3;
 const NOTES_BOX_TITLE = "Handoff notes";
 const RESUME_BOX_TITLE = "Resume a handoff";
 const NOTES_BOX_MESSAGE =
-  "Add notes for the next session in the box, then press Enter. Esc cancels.";
+  "Add notes for the next session in the box, then press Enter. Cancel drops it.";
 const RESUME_BOX_MESSAGE =
-  "Pick a handoff in the box and add notes if you like. Esc cancels.";
+  "Pick a handoff in the box and add notes if you like. Cancel drops it.";
 const CANCELLED_MESSAGE = "Handoff cancelled.";
 const CLOSED_BOX_HINT = "Run /handoff new, save or resume to use this box.";
 
@@ -126,14 +137,14 @@ const BOX_WORDING = {
     heading: "Notes for the next session",
     placeholder: "Optional: anything the recap should carry along",
     submitLabel: "hand off",
-    keysHint: "Enter hands off · Tab moves · Esc cancels",
+    keysHint: "Enter hands off · Tab moves · Cancel to drop",
   },
   resume: {
     heading: "Resume a handoff",
     placeholder: "Optional: extra context for the new session",
     submitLabel: "resume",
     keysHint:
-      "Enter resumes the latest · Tab to the list to pick another · Esc cancels",
+      "Enter resumes the latest · Tab to the list to pick another · Cancel to drop",
   },
 };
 
@@ -901,6 +912,17 @@ const placeBoxPane = async (engine: EngineInterface, title: string) => {
   }
 };
 
+const isBandDrawn = async (engine: EngineInterface) => {
+  try {
+    const surfaces = await engine.session.surfaces();
+    return surfaces.some(
+      (surface) => surface === "terminal" || surface === "desktop"
+    );
+  } catch {
+    return false;
+  }
+};
+
 const appendExtraContext = (recap: string, extraContext: string) =>
   extraContext
     ? `${recap}\n\nExtra context from the user: ${extraContext}`
@@ -950,12 +972,19 @@ const resumePendingHandoff = async (engine: EngineInterface) => {
   if (fillResult.isFilled) await engine.store.delete(PENDING_HANDOFF_KEY);
 };
 
+const closeBox = async (engine: EngineInterface, progress: HandoffProgress) => {
+  progress.openBox = undefined;
+  engine.ui.invalidate("ui.render");
+  if (!progress.isBoxInPane) return;
+  progress.isBoxInPane = false;
+  await engine.ui.close({ id: BOX_PANE_ID });
+};
+
 const cancelBox = async (
   engine: EngineInterface,
   progress: HandoffProgress
 ) => {
-  progress.openBox = undefined;
-  await engine.ui.close({ id: BOX_PANE_ID });
+  await closeBox(engine, progress);
   showToast(engine, CANCELLED_MESSAGE);
 };
 
@@ -965,6 +994,32 @@ type HandoffProgress = {
   recapAgentIds: string[];
   canAskInConversation: boolean;
   openBox: HandoffBox | undefined;
+  isBoxInPane: boolean;
+  stepIndex: number | undefined;
+  spinnerFrame: number;
+  spinnerTimer: { cancel: () => void } | undefined;
+};
+
+const stopSpinning = (progress: HandoffProgress) => {
+  progress.spinnerTimer?.cancel();
+  progress.spinnerTimer = undefined;
+};
+
+const showStep = (
+  engine: EngineInterface,
+  progress: HandoffProgress,
+  stepIndex: number | undefined
+) => {
+  progress.stepIndex = stepIndex;
+  if (stepIndex === undefined) {
+    stopSpinning(progress);
+  } else if (!progress.spinnerTimer) {
+    progress.spinnerTimer = engine.clock.every(SPINNER_INTERVAL_MS, () => {
+      progress.spinnerFrame += 1;
+      engine.ui.invalidate("ui.render");
+    });
+  }
+  engine.ui.invalidate("ui.render");
 };
 
 const shouldAskQuestionsFirst = (
@@ -976,6 +1031,21 @@ const shouldAskQuestionsFirst = (
   request.action === "recap" &&
   request.decisionLines === undefined;
 
+const deliverWithProgress = async (
+  engine: EngineInterface,
+  progress: HandoffProgress,
+  request: RecapRequest,
+  recapText: string,
+  isRecapOnScreen: boolean
+) => {
+  showStep(engine, progress, SAVING_STEP);
+  try {
+    return await deliverRecap(engine, request, recapText, isRecapOnScreen);
+  } finally {
+    showStep(engine, progress, undefined);
+  }
+};
+
 const runRecap = async (
   engine: EngineInterface,
   progress: HandoffProgress,
@@ -986,8 +1056,10 @@ const runRecap = async (
     if (!recentMessages) return { text: NO_RECAP_MESSAGE };
     progress.awaitedRecap = askConversationForQuestions(engine, request);
     showStatus(engine, ASKING_QUESTIONS_MESSAGE);
+    showStep(engine, progress, ASKING_STEP);
     return { text: ASKING_QUESTIONS_MESSAGE };
   }
+  showStep(engine, progress, WRITING_STEP);
   const recapStart = await startRecap(engine, request, progress.writer);
   if (recapStart.delegation !== undefined) {
     const { delegation, delegationPrefix } = recapStart;
@@ -998,8 +1070,17 @@ const runRecap = async (
     showStatus(engine, delegation.routeNotice);
     return { text: `${delegationPrefix}${delegation.routeNotice}` };
   }
-  if (recapStart.failure !== undefined) return { text: recapStart.failure };
-  return deliverRecap(engine, request, recapStart.recap, false);
+  if (recapStart.failure !== undefined) {
+    showStep(engine, progress, undefined);
+    return { text: recapStart.failure };
+  }
+  return deliverWithProgress(
+    engine,
+    progress,
+    request,
+    recapStart.recap,
+    false
+  );
 };
 
 const showBox = async (
@@ -1009,8 +1090,15 @@ const showBox = async (
   box: HandoffBox
 ) => {
   progress.openBox = box;
-  const isBoxPlaced = await placeBoxPane(engine, title);
-  if (!isBoxPlaced) progress.openBox = undefined;
+  progress.isBoxInPane = !(await isBandDrawn(engine));
+  const isBoxPlaced =
+    !progress.isBoxInPane || (await placeBoxPane(engine, title));
+  if (isBoxPlaced) {
+    engine.ui.invalidate("ui.render");
+  } else {
+    progress.openBox = undefined;
+    progress.isBoxInPane = false;
+  }
   return isBoxPlaced;
 };
 
@@ -1020,14 +1108,159 @@ const finishBox = async (
 ) => {
   const box = progress.openBox;
   if (!box) return;
-  progress.openBox = undefined;
-  await engine.ui.close({ id: BOX_PANE_ID });
+  await closeBox(engine, progress);
   const notes = box.notes.trim();
   const outcome =
     box.kind === "resume"
       ? await resumeSavedHandoff(engine, box.chosenHandoffId, notes)
       : await runRecap(engine, progress, { ...box.request, notes });
   showToast(engine, outcome.text, { timeoutMs: OUTCOME_TOAST_MS });
+};
+
+type BoxRenderInput = RenderInput<"Pane" | "AbovePrompt">;
+
+const drawDivider = (
+  Text: ReturnType<EngineInterface["ui"]["resolve"]>["Text"],
+  bodyColumns: number
+) =>
+  h(
+    Text,
+    { color: "subtle", wrap: "clip" },
+    "─".repeat(Math.max(bodyColumns - BOX_SIDE_PADDING * 2, 0))
+  );
+
+const drawBox = (
+  engine: EngineInterface,
+  e: BoxRenderInput,
+  box: HandoffBox,
+  progress: HandoffProgress
+) => {
+  const { Box, Text, Input, Select, Button } = engine.ui.resolve(e);
+  const wording = BOX_WORDING[box.kind];
+  return h(
+    Box,
+    {
+      key: "handoff-box",
+      flexDirection: "column",
+      paddingX: BOX_SIDE_PADDING,
+      paddingBottom: 1,
+    },
+    h(
+      Box,
+      { flexDirection: "row", columnGap: 1 },
+      h(Text, { weight: "semibold" }, `${HANDOFF_GLYPH} ${wording.heading}`),
+      h(
+        Text,
+        {},
+        ...PRIDE_STRIPE_COLORS.map((color) => h(Text, { color }, "━━"))
+      )
+    ),
+    drawDivider(Text, e.props.bodyColumns),
+    h(Input, {
+      key: "notes",
+      placeholder: wording.placeholder,
+      submitLabel: wording.submitLabel,
+      rows: NOTES_INPUT_ROWS,
+      autoFocus: true,
+      onInput: (typedNotes: string) => {
+        box.notes = typedNotes;
+      },
+      onSubmit: (typedNotes: string) => {
+        box.notes = typedNotes;
+        return finishBox(engine, progress);
+      },
+    }),
+    box.kind === "resume"
+      ? h(Select, {
+          key: "handoff",
+          label: "Handoff",
+          options: box.handoffOptions,
+          value: String(box.chosenHandoffId),
+          onSelect: (chosenValue: string) => {
+            box.chosenHandoffId = Number(chosenValue);
+            return finishBox(engine, progress);
+          },
+        })
+      : null,
+    h(
+      Box,
+      {
+        key: "handoff-footer",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        columnGap: 2,
+      },
+      h(
+        Box,
+        { flexDirection: "row", columnGap: 2, flexShrink: 0 },
+        h(
+          Button,
+          {
+            key: "continue",
+            variant: "primary",
+            onPress: () => finishBox(engine, progress),
+          },
+          box.kind === "resume" ? "Resume" : "Hand off"
+        ),
+        h(
+          Button,
+          {
+            key: "cancel",
+            role: "dismiss",
+            onPress: () => cancelBox(engine, progress),
+          },
+          "Cancel"
+        )
+      ),
+      h(
+        Box,
+        { flexShrink: 1, justifyContent: "flex-end" },
+        h(Text, { dimColor: true, wrap: "truncate-end" }, wording.keysHint)
+      )
+    )
+  ) as RenderElement;
+};
+
+const drawProgress = (
+  engine: EngineInterface,
+  e: BoxRenderInput,
+  stepIndex: number,
+  spinnerFrame: number
+) => {
+  const { Box, Text } = engine.ui.resolve(e);
+  const spinner = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length];
+  return h(
+    Box,
+    {
+      key: "handoff-progress",
+      flexDirection: "column",
+      paddingX: BOX_SIDE_PADDING,
+      paddingBottom: 1,
+    },
+    h(
+      Box,
+      { flexDirection: "row", columnGap: 1 },
+      h(Text, { color: "claude" }, spinner),
+      h(
+        Text,
+        { weight: "semibold" },
+        `${HANDOFF_GLYPH} Handoff · ${HANDOFF_STEPS[stepIndex]?.word}`
+      )
+    ),
+    drawDivider(Text, e.props.bodyColumns),
+    ...HANDOFF_STEPS.map((step, i) =>
+      h(
+        Box,
+        { key: step.word, flexDirection: "row", columnGap: 1 },
+        i < stepIndex
+          ? h(Text, { color: "success" }, "✓")
+          : i === stepIndex
+            ? h(Text, { color: "claude" }, spinner)
+            : h(Text, { dimColor: true }, "○"),
+        h(Text, { dimColor: i > stepIndex }, step.label)
+      )
+    )
+  ) as RenderElement;
 };
 
 export const register: Register = (on, options) => {
@@ -1037,6 +1270,10 @@ export const register: Register = (on, options) => {
     awaitedRecap: undefined,
     recapAgentIds: [],
     openBox: undefined,
+    isBoxInPane: false,
+    stepIndex: undefined,
+    spinnerFrame: 0,
+    spinnerTimer: undefined,
   };
   let hasPinnedOutcome = false;
 
@@ -1092,98 +1329,24 @@ export const register: Register = (on, options) => {
   });
 
   on("ui.render", { component: "Pane", requestId: BOX_PANE_ID }, ($, e) => {
-    const { Box, Text, Input, Select, Button } = $.ui.resolve(e);
+    const { Text } = $.ui.resolve(e);
     const box = progress.openBox;
     if (!box)
       return h(Text, { dimColor: true }, CLOSED_BOX_HINT) as RenderElement;
-    const wording = BOX_WORDING[box.kind];
-    return h(
-      Box,
-      {
-        key: "handoff-box",
-        flexDirection: "column",
-        gap: 1,
-        paddingX: BOX_SIDE_PADDING,
-        paddingY: 1,
-      },
-      h(
-        Box,
-        { flexDirection: "row", gap: 1 },
-        h(Text, { weight: "semibold" }, `${HANDOFF_GLYPH} ${wording.heading}`),
-        h(
-          Text,
-          {},
-          ...PRIDE_STRIPE_COLORS.map((color) => h(Text, { color }, "━━"))
-        )
-      ),
-      h(
-        Text,
-        { color: "subtle", wrap: "clip" },
-        "─".repeat(Math.max(e.props.bodyColumns - BOX_SIDE_PADDING * 2, 0))
-      ),
-      h(Input, {
-        key: "notes",
-        placeholder: wording.placeholder,
-        submitLabel: wording.submitLabel,
-        rows: NOTES_INPUT_ROWS,
-        autoFocus: true,
-        onInput: (typedNotes: string) => {
-          box.notes = typedNotes;
-        },
-        onSubmit: (typedNotes: string) => {
-          box.notes = typedNotes;
-          return finishBox($, progress);
-        },
-      }),
-      box.kind === "resume"
-        ? h(Select, {
-            key: "handoff",
-            label: "Handoff",
-            options: box.handoffOptions,
-            value: String(box.chosenHandoffId),
-            onSelect: (chosenValue: string) => {
-              box.chosenHandoffId = Number(chosenValue);
-              return finishBox($, progress);
-            },
-          })
-        : null,
-      h(
-        Box,
-        {
-          key: "handoff-footer",
-          flexDirection: "row",
-          justifyContent: "space-between",
-          columnGap: 2,
-        },
-        h(
-          Box,
-          { flexDirection: "row", gap: 2, flexShrink: 0 },
-          h(
-            Button,
-            {
-              key: "continue",
-              variant: "primary",
-              onPress: () => finishBox($, progress),
-            },
-            box.kind === "resume" ? "Resume" : "Hand off"
-          ),
-          h(
-            Button,
-            {
-              key: "cancel",
-              role: "dismiss",
-              onPress: () => cancelBox($, progress),
-            },
-            "Cancel"
-          )
-        ),
-        h(
-          Box,
-          { flexShrink: 1, justifyContent: "flex-end" },
-          h(Text, { dimColor: true, wrap: "truncate-end" }, wording.keysHint)
-        )
-      )
-    ) as RenderElement;
+    return drawBox($, e, box, progress);
+  });
+
+  on("ui.render", { component: "AbovePrompt" }, ($, e, next) => {
+    const box = progress.openBox;
+    if (e.props.hasSurvey) return next(e);
+    if (box) return drawBox($, e, box, progress);
+    if (progress.stepIndex === undefined) return next(e);
+    return drawProgress($, e, progress.stepIndex, progress.spinnerFrame);
+  });
+
+  on("session.end", ($, e, next) => {
+    stopSpinning(progress);
+    return next(e);
   });
 
   on("prompt.submit", (_, e, next) => {
@@ -1223,6 +1386,7 @@ export const register: Register = (on, options) => {
     if (isQuestionTurn) {
       showStatus($, undefined);
       if (e.isAborted) {
+        showStep($, progress, undefined);
         showToast($, CANCELLED_MESSAGE);
         return turnResult;
       }
@@ -1244,8 +1408,17 @@ export const register: Register = (on, options) => {
       return turnResult;
     }
     const outcome = recap
-      ? (await deliverRecap($, request, recap, isConversationTurn)).text
+      ? (
+          await deliverWithProgress(
+            $,
+            progress,
+            request,
+            recap,
+            isConversationTurn
+          )
+        ).text
       : EMPTY_REPLY_MESSAGE;
+    showStep($, progress, undefined);
     if (isConversationTurn) {
       showStatus($, undefined);
       return { ...turnResult, text: outcome };

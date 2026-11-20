@@ -17,6 +17,8 @@ Each planning command has Claude list the work that is left, check it against th
 
 No handoff is needed. `handoff` is one source of work among three, and it needs the handoff plugin only to have saved a handoff under `~/.claude/handoffs` (`/handoff save`). Run again on a handoff that already has plans, it keeps them and adds plans only for work they do not cover.
 
+While `build` runs, a build board above the prompt shows each plan as a WAIT, RUN, PASS or FAIL pill with its elapsed time, and stays until you press `h` to hide it or the next build starts.
+
 `build` is a command only when it stands as shown: `/small-plans build a login page with tests` plans that work.
 
 You can also ask in your own words ("break this into small plans"); Claude calls the same tool.

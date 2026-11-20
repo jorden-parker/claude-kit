@@ -929,3 +929,102 @@ test("every tool is registered behind ToolSearch", async ($, on) => {
   expect(deferredFlags.length).toBeGreaterThan(0);
   expect(deferredFlags.every((flag) => flag === true)).toBe(true);
 });
+
+const BOARD_SET_PLAN = `${SET_FOLDER}/02-store-the-choice.md`;
+
+const mountBand = ($: Engine, bodyColumns = 90, hasSurvey = false) =>
+  $.ui.mount({
+    plugin: "small-plans",
+    component: "AbovePrompt",
+    surface: "terminal",
+    props: {
+      hasSurvey,
+      isCollapsed: false,
+      isWorking: false,
+      maxRows: 20,
+      bodyColumns,
+      scroll: { offset: 0, bodyRows: 20 },
+      view: {},
+    },
+  } as never);
+
+const startBoardedBuild = async ($: Engine, on: On) => {
+  await runCommand($, on, "build dark-mode 2", THREE_PLAN_SET);
+  await callTool($, STATUS_TOOL, {
+    path: BOARD_SET_PLAN,
+    status: "in-progress",
+  });
+};
+
+test("no build board shows before a build starts", async ($, on) => {
+  mockEngine(on, THREE_PLAN_SET);
+  const drawing = await mountBand($);
+
+  expect(
+    await drawing.find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeUndefined();
+});
+
+test("a build board lists each plan under its status pill, failing first, with counts", async ($, on) => {
+  await startBoardedBuild($, on);
+  const drawing = await mountBand($);
+
+  expect(
+    await drawing.find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeDefined();
+  expect(await drawing.find({ type: "Text", text: "✗ Failing" })).toBeDefined();
+  const pills = await drawing.findAll({
+    type: "Text",
+    text: /^ (FAIL|RUN|PASS|WAIT) +$/,
+  });
+  expect(pills.map((pill) => pill.props.backgroundColor)).toEqual([
+    "error",
+    "warning",
+    "success",
+  ]);
+  expect(await drawing.find({ type: "Text", text: "✗ 1" })).toBeDefined();
+  expect(await drawing.find({ type: "Text", text: "● 1" })).toBeDefined();
+  expect(await drawing.find({ type: "Text", text: "✓ 1" })).toBeDefined();
+  expect(await drawing.find({ key: "hide" })).toBeDefined();
+});
+
+test("a build board says Done once no plan runs or waits and none failed", async ($, on) => {
+  await runCommand($, on, "build dark-mode 2", {
+    [`${SET_FOLDER}/01-add-the-toggle.md`]: "status: done",
+    [BOARD_SET_PLAN]: "status: pending",
+  });
+  await callTool($, STATUS_TOOL, { path: BOARD_SET_PLAN, status: "done" });
+  const drawing = await mountBand($);
+
+  expect(await drawing.find({ type: "Text", text: "✓ Done" })).toBeDefined();
+});
+
+test("the build board hides on h and stays hidden", async ($, on) => {
+  await startBoardedBuild($, on);
+  const drawing = await mountBand($);
+  await drawing.press({ key: "hide" });
+
+  expect(
+    await (await mountBand($)).find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeUndefined();
+});
+
+test("a survey keeps the band instead of the build board", async ($, on) => {
+  await startBoardedBuild($, on);
+  const drawing = await mountBand($, 90, true);
+
+  expect(
+    await drawing.find({ type: "Text", text: "🧩 Small plans" })
+  ).toBeUndefined();
+});
+
+test("a narrow build board drops the elapsed time under 40 columns", async ($, on) => {
+  await startBoardedBuild($, on);
+
+  expect(
+    await (await mountBand($, 90)).find({ type: "Text", text: "0s" })
+  ).toBeDefined();
+  expect(
+    await (await mountBand($, 40)).find({ type: "Text", text: "0s" })
+  ).toBeUndefined();
+});

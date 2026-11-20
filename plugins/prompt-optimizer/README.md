@@ -18,6 +18,8 @@ Images pasted into the composer alongside `/optimize` are noted for the model: a
 
 By default the rewrite runs on a local model through Ollama at `http://127.0.0.1:11434`. It uses whichever model Ollama has loaded, so it shares that model and Ollama does not swap it. With nothing loaded, it loads its own model, `qwen3:4b-instruct-2507-q4_K_M` (install it once with `ollama pull qwen3:4b-instruct-2507-q4_K_M`). Thinking is off.
 
+While it works, a one-row band above the prompt shows a spinner, the elapsed seconds and a sweeping bar (the bar is dropped on narrow terminals; VS Code, which has no band, keeps the toast).
+
 While it works, a status line under the prompt shows the step: checking Ollama, loading or waiting for the model, then writing with a token count. The rewrite streams through `curl`, so a cold model load can take up to 3 minutes; the host's 30-second limit on plugin fetches does not apply. If Ollama does not answer the status check within 3 seconds, or the rewrite passes 3 minutes, the error line names the model and the limit; nothing falls back to a cloud model. Each step, with its timing, goes to the debug log (`claude --debug`), led by `/optimize`.
 
 With a cloud model chosen, a rate limit (429), overload (529) or server error is retried on the same model after 1, 2 and 4 seconds, the way the main conversation backs off. If the rewrite model still answers with an API error (a cloud session that cannot use it, for one), the rewrite is tried once more on the session's own model. The error line names the HTTP status and error kind when both fail.

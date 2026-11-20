@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from "claude-code";
+import type { EngineInterface, Register, RenderElement } from "claude-code";
 import {
   BANNED_PHRASES,
   checkPlan,
@@ -8,6 +8,7 @@ import {
 import {
   PLAN_STATUSES_AS_TEXT,
   PLAN_STATUSES,
+  PLAN_FILE_NAME,
   readPlanFolderName,
   setPlanStatus,
   type StatusFiles,
@@ -1113,6 +1114,34 @@ const readStatusFiles = (engine: EngineInterface): StatusFiles => ({
   },
 });
 
+type PlanCard = { title: string; status: string; shortPath: string };
+
+const planCards = new Map<string, PlanCard>();
+const PLAN_CARD_CONTEXT_MINIMUM_COLUMNS = 60;
+const PLAN_TITLE_PATTERN = /^# Plan:[ \t]*(.+)$/m;
+let placedPlanCount = 0;
+
+const placePlanCard = async (
+  engine: EngineInterface,
+  planFolderPath: string,
+  status: string
+) => {
+  const planFolderName = readPlanFolderName(planFolderPath);
+  const planText = await readPlanFiles(engine).read(
+    `${planFolderPath.replace(/\/+$/, "")}/${PLAN_FILE_NAME}`
+  );
+  placedPlanCount += 1;
+  const id = `plan-${Date.now().toString(36)}-${placedPlanCount}`;
+  planCards.set(id, {
+    title:
+      PLAN_TITLE_PATTERN.exec(planText ?? "")?.[1]?.trim() ?? planFolderName,
+    status,
+    shortPath: `~/…/${planFolderName}/${PLAN_FILE_NAME}`,
+  });
+  const placed = await engine.ui.place({ id }).catch(() => undefined);
+  if (!placed?.isPlaced) planCards.delete(id);
+};
+
 const submitPromptAfterReply = (engine: EngineInterface, prompt: string) => {
   engine.clock.after(0, () => void engine.prompt.submit({ text: prompt }));
 };
@@ -1257,6 +1286,48 @@ export const register: Register = (on) => {
     }
   });
 
+  on("ui.render", { component: "Placed" }, ($, e, next) => {
+    const card =
+      e.props.plugin === "brainstorm" ? planCards.get(e.props.id) : undefined;
+    if (!card) return next(e);
+    const { Box, Text } = $.ui.resolve(e);
+    const bodyColumns = (e.props as { bodyColumns?: number }).bodyColumns;
+    const isContextShown =
+      bodyColumns === undefined ||
+      bodyColumns >= PLAN_CARD_CONTEXT_MINIMUM_COLUMNS;
+    return h(
+      Box,
+      { flexDirection: "row", gap: "sm" },
+      h(
+        Box,
+        { width: 7, flexShrink: 0 },
+        h(
+          Text,
+          {
+            backgroundColor: "planMode",
+            color: "inverseText",
+            weight: "semibold",
+          },
+          " PLAN "
+        )
+      ),
+      h(
+        Box,
+        { flexGrow: 1, flexShrink: 1 },
+        h(Text, { weight: "semibold", wrap: "truncate-end" }, card.title)
+      ),
+      ...(isContextShown
+        ? [
+            h(
+              Box,
+              { flexShrink: 0 },
+              h(Text, { dimColor: true }, `${card.status}  ${card.shortPath}`)
+            ),
+          ]
+        : [])
+    ) as RenderElement;
+  });
+
   on("tool.check", async ($, e, next) => {
     const verdict = await next(e);
     const filePath = readText((e.input as { file_path?: unknown })?.file_path);
@@ -1285,6 +1356,7 @@ export const register: Register = (on) => {
         planFolderPath,
         status
       );
+      if (!problems.length) await placePlanCard($, planFolderPath, status);
       return problems.length
         ? { deny: problems.join("\n") }
         : { result: `${readPlanFolderName(planFolderPath)}: ${status}` };

@@ -1136,3 +1136,83 @@ test("later words and other commands get no /brainstorm mode suggestions", async
   expect(suggestedTexts(laterReply)).toEqual([]);
   expect(suggestedTexts(otherReply)).toEqual([]);
 });
+
+const placePlanCard = (on: On, isPlaced = true) => {
+  const placedIds: string[] = [];
+  on("ui.place", (_, e) => {
+    placedIds.push(e.id);
+    return {
+      value: isPlaced
+        ? { isPlaced: true as const, requestId: e.id }
+        : { isPlaced: false as const, reason: "no-surface" },
+    };
+  });
+  return placedIds;
+};
+
+const mountPlanCard = ($: Engine, id: string, bodyColumns = 100) =>
+  $.ui.mount({
+    plugin: "brainstorm",
+    component: "Placed",
+    requestId: id,
+    surface: "terminal",
+    props: { id, plugin: "brainstorm", bodyColumns },
+  } as never);
+
+test("setting a plan status places a card with its pill, title, status and short path", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+  recordFileWrites(on);
+  const placedIds = placePlanCard(on);
+
+  const reply = await setBrainstormPlanStatus(
+    $,
+    `${CLEAN_RUN_FOLDER}/01-replay`,
+    "in-progress"
+  );
+
+  expect(reply.result).toBe("01-replay: in-progress");
+  expect(placedIds).toHaveLength(1);
+  const card = await mountPlanCard($, placedIds[0] ?? "");
+  expect(await card.find({ type: "Text", text: / PLAN / })).toBeDefined();
+  expect(
+    await card.find({ type: "Text", text: /Add the replay test/ })
+  ).toBeDefined();
+  expect(
+    await card.find({
+      type: "Text",
+      text: /in-progress.*~\/…\/01-replay\/plan\.md/,
+    })
+  ).toBeDefined();
+});
+
+test("the plan card drops its context on a narrow row and ignores other plugins' rows", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+  recordFileWrites(on);
+  const placedIds = placePlanCard(on);
+  await setBrainstormPlanStatus($, `${CLEAN_RUN_FOLDER}/01-replay`, "done");
+
+  const card = await mountPlanCard($, placedIds[0] ?? "", 40);
+  expect(await card.find({ type: "Text", text: /done/ })).toBeUndefined();
+  const stranger = await $.ui.mount({
+    plugin: "other",
+    component: "Placed",
+    requestId: "x",
+    surface: "terminal",
+    props: { id: placedIds[0], plugin: "other", bodyColumns: 100 },
+  } as never);
+  expect(await stranger.find({ type: "Text", text: / PLAN / })).toBeUndefined();
+});
+
+test("the status tool replies the same when no row can be placed", async ($, on) => {
+  mockFileTree(on, CLEAN_RUN_FILES);
+  recordFileWrites(on);
+  placePlanCard(on, false);
+
+  const reply = await setBrainstormPlanStatus(
+    $,
+    `${CLEAN_RUN_FOLDER}/01-replay`,
+    "done"
+  );
+
+  expect(reply.result).toBe("01-replay: done");
+});

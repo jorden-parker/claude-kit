@@ -790,3 +790,91 @@ test("every tool is registered behind ToolSearch", async ($, on) => {
   expect(deferredFlags.length).toBeGreaterThan(0);
   expect(deferredFlags.every((flag) => flag === true)).toBe(true);
 });
+
+const placeNoteCard = (on: On, isPlaced = true) => {
+  const placedIds: string[] = [];
+  on("ui.place", (_, e) => {
+    placedIds.push(e.id);
+    return {
+      value: isPlaced
+        ? { isPlaced: true as const, requestId: e.id }
+        : { isPlaced: false as const, reason: "no-surface" },
+    };
+  });
+  return placedIds;
+};
+
+const mountNoteCard = ($: Engine, id: string, bodyColumns = 100) =>
+  $.ui.mount({
+    plugin: "project-notes",
+    component: "Placed",
+    requestId: id,
+    surface: "terminal",
+    props: { id, plugin: "project-notes", bodyColumns },
+  } as never);
+
+test("a saved note places a card showing its pill, title, category and short path", async ($, on) => {
+  mockEngine(on);
+  const placedIds = placeNoteCard(on);
+
+  const reply = await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Store lives in one file",
+    body: "Each plugin has its own store file.",
+    created: "2026-11-19T10:00:00.000Z",
+  });
+
+  expect(reply.result).toBe(
+    `Note saved to ${NOTES_ROOT}/claude-kit/fact/2026-11-19-store-lives-in-one-file.md`
+  );
+  expect(placedIds).toHaveLength(1);
+  const card = await mountNoteCard($, placedIds[0] ?? "");
+  expect(await card.find({ type: "Text", text: / NOTE / })).toBeDefined();
+  expect(
+    await card.find({ type: "Text", text: /Store lives in one file/ })
+  ).toBeDefined();
+  expect(
+    await card.find({
+      type: "Text",
+      text: /fact.*~\/…\/2026-11-19-store-lives-in-one-file\.md/,
+    })
+  ).toBeDefined();
+});
+
+test("the note card drops its context on a narrow row and ignores other plugins' rows", async ($, on) => {
+  mockEngine(on);
+  const placedIds = placeNoteCard(on);
+  await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Store lives in one file",
+    body: "Body.",
+    created: "2026-11-19T10:00:00.000Z",
+  });
+
+  const card = await mountNoteCard($, placedIds[0] ?? "", 40);
+  expect(await card.find({ type: "Text", text: /fact/ })).toBeUndefined();
+  const stranger = await $.ui.mount({
+    plugin: "other",
+    component: "Placed",
+    requestId: "x",
+    surface: "terminal",
+    props: { id: placedIds[0], plugin: "other", bodyColumns: 100 },
+  } as never);
+  expect(await stranger.find({ type: "Text", text: / NOTE / })).toBeUndefined();
+});
+
+test("a note still saves with the same result when no row can be placed", async ($, on) => {
+  mockEngine(on);
+  placeNoteCard(on, false);
+
+  const reply = await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Store lives in one file",
+    body: "Body.",
+    created: "2026-11-19T10:00:00.000Z",
+  });
+
+  expect(reply.result).toBe(
+    `Note saved to ${NOTES_ROOT}/claude-kit/fact/2026-11-19-store-lives-in-one-file.md`
+  );
+});

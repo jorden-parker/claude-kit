@@ -106,6 +106,10 @@ A stopped build is resumed by running `/brainstorm build` again: `done` plans ar
 
 The skill has `user-invocable: false`, so it stays out of the slash menu and `/brainstorm` is the plugin's only entry there. Claude still loads it for `/brainstorm build` and for plain-word requests.
 
+## Transcript card
+
+Setting a plan status places a small PLAN card in the transcript with the plan title, status and short path.
+
 ## Where things live
 
 | File                          | Holds                                                            |

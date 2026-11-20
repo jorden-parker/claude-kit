@@ -12,8 +12,13 @@ should_check() {
   [ "$is_staged_only" = false ] || ! git diff --cached --quiet -- "$@"
 }
 
-run_outside_the_commit_index() {
-  env -u GIT_INDEX_FILE "$@"
+run_outside_the_commit_hook() {
+  (
+    while read -r git_variable; do
+      unset "$git_variable"
+    done < <(git rev-parse --local-env-vars)
+    "$@"
+  )
 }
 
 is_missing_generated_types() {
@@ -32,33 +37,38 @@ for manifest in plugins/*/package.json; do
   else
     (cd "$plugin_folder" && pnpm run typecheck)
   fi
-  (cd "$plugin_folder" && run_outside_the_commit_index pnpm run test)
+  (cd "$plugin_folder" && run_outside_the_commit_hook pnpm run test)
 done
 
 if should_check notes-viewer; then
   echo "check: notes-viewer"
-  (cd notes-viewer && run_outside_the_commit_index go test ./...)
+  (cd notes-viewer && run_outside_the_commit_hook go test ./...)
 fi
 
 for bun_folder in plugin-host design-studio; do
   should_check "$bun_folder" || continue
   echo "check: $bun_folder"
-  run_outside_the_commit_index bun test "$bun_folder"
+  run_outside_the_commit_hook bun test "$bun_folder"
 done
 
 for sync_test in tests/sync-*.test.sh; do
   sync_script="$(basename "$sync_test" .test.sh)"
   should_check "$sync_script" "$sync_test" plugin-host || continue
   echo "check: $sync_test"
-  run_outside_the_commit_index bash "$sync_test"
+  run_outside_the_commit_hook bash "$sync_test"
 done
 
 if should_check claude-kit-update tests/claude-kit-update.test.sh notes-viewer/claude-notes; then
   echo "check: tests/claude-kit-update.test.sh"
-  run_outside_the_commit_index bash tests/claude-kit-update.test.sh
+  run_outside_the_commit_hook bash tests/claude-kit-update.test.sh
+fi
+
+if should_check check tests/check.test.sh; then
+  echo "check: tests/check.test.sh"
+  run_outside_the_commit_hook bash tests/check.test.sh
 fi
 
 echo "check: tests/repository.test.sh"
-run_outside_the_commit_index bash tests/repository.test.sh
+run_outside_the_commit_hook bash tests/repository.test.sh
 
 echo "check: passed"

@@ -442,17 +442,56 @@ const listHandoffNamesNewestFirst = async (
     .sort((first, second) => parseInt(second, 10) - parseInt(first, 10))
     .map((name) => name.replace(/\.md$/, ""));
 
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+const STAMPED_SET_NAME = /^\d{4}-(\d{2})-(\d{2})-(\d{2})(\d{2})-(.+)$/;
+const NUMBERED_NAME = /^(\d+)-(.+)$/;
+
+const toSentence = (slug: string) => {
+  const words = slug.replace(/[-_]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+const labelSet = (setName: string) => {
+  const stamp = setName.match(STAMPED_SET_NAME);
+  if (!stamp) return toSentence(setName);
+  const [, month, day, hour, minute, slug] = stamp;
+  return `${toSentence(slug ?? "")} · ${MONTH_NAMES[Number(month) - 1]} ${Number(day)}, ${hour}:${minute}`;
+};
+
+const labelNumbered = (prefix: string) => (name: string) => {
+  const numbered = name.match(NUMBERED_NAME);
+  return numbered
+    ? `${prefix}${Number(numbered[1])} · ${toSentence(numbered[2] ?? "")}`
+    : name;
+};
+
 const pickFromList = async (
   engine: EngineInterface,
   question: string,
   header: string,
-  namesNewestFirst: string[]
+  namesNewestFirst: string[],
+  labelName: (name: string) => string
 ) => {
+  const askedNames = namesNewestFirst.slice(0, MAX_ASKED_OPTIONS);
   try {
-    return await engine.ui.ask(question, {
+    const answer = await engine.ui.ask(question, {
       header,
-      options: namesNewestFirst.slice(0, MAX_ASKED_OPTIONS),
+      options: askedNames.map(labelName),
     });
+    return askedNames.find((name) => labelName(name) === answer) ?? answer;
   } catch {
     return undefined;
   }
@@ -476,7 +515,8 @@ const splitHandoff = async (
         engine,
         "Which handoff should be split into small plans?",
         "Handoff",
-        handoffNames
+        handoffNames,
+        labelNumbered("#")
       )
     : handoffNames.find(
         (name) =>
@@ -544,7 +584,8 @@ const pickPlanName = async (
     engine,
     "Build the whole set, or one plan of it?",
     "Plans",
-    [WHOLE_SET_OPTION, ...planNames]
+    [WHOLE_SET_OPTION, ...planNames],
+    (name) => (name === WHOLE_SET_OPTION ? name : labelNumbered("")(name))
   );
   if (pickedOption === WHOLE_SET_OPTION) return "";
   return pickedOption === undefined
@@ -582,7 +623,8 @@ const buildPlans = async (
         engine,
         "Which set of small plans should be built?",
         "Plan set",
-        setNames
+        setNames,
+        labelSet
       )
     : requestedName;
   if (pickedName === undefined)

@@ -376,7 +376,7 @@ test("/small-plans <work> that starts with a command word is still planned as wo
 });
 
 test("/small-plans handoff lists the handoffs newest first and splits the one picked", async ($, on) => {
-  const askedQuestions = answerAskUserQuestion(on, "001-add-the-viewer");
+  const askedQuestions = answerAskUserQuestion(on, "#1 · Add the viewer");
   const { reply, submittedPrompts } = await runCommand($, on, "handoff", {
     [OLDER_HANDOFF]: "older",
     [NEWER_HANDOFF]: "newer",
@@ -384,8 +384,8 @@ test("/small-plans handoff lists the handoffs newest first and splits the one pi
 
   const setPattern = `${NEW_SET_STAMP}-handoff-001-add-the-viewer`;
   expect(askedLabels(askedQuestions)).toEqual([
-    "002-fix-login",
-    "001-add-the-viewer",
+    "#2 · Fix login",
+    "#1 · Add the viewer",
   ]);
   expect(reply.text).toMatch(new RegExp(setPattern));
   expect(submittedPrompts).toHaveLength(1);
@@ -474,13 +474,19 @@ const askedLabels = (askedQuestions: AskedQuestion[]) =>
   );
 
 test("/small-plans build lists the sets newest first and builds the one picked", async ($, on) => {
-  const askedQuestions = answerAskUserQuestion(on, HANDOFF_SET);
+  const askedQuestions = answerAskUserQuestion(
+    on,
+    "Handoff 002 fix login · Nov 18, 09:00"
+  );
   const { submittedPrompts } = await runCommand($, on, "build", {
     [HANDOFF_SET_PLAN]: "older, from a handoff",
     [STANDALONE_SET_PLAN]: "newer, planned on its own",
   });
 
-  expect(askedLabels(askedQuestions)).toEqual([STANDALONE_SET, HANDOFF_SET]);
+  expect(askedLabels(askedQuestions)).toEqual([
+    "Add a dark mode toggle · Nov 19, 10:00",
+    "Handoff 002 fix login · Nov 18, 09:00",
+  ]);
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${HANDOFF_SET}`);
 });
@@ -536,14 +542,14 @@ test("/small-plans build asks for the whole set or one plan that is not done", a
 
   expect(askedLabels(askedQuestions)).toEqual([
     "Whole set",
-    "02-store-the-choice",
-    "03-test-the-toggle",
+    "2 · Store the choice",
+    "3 · Test the toggle",
   ]);
   expect(submittedPrompts[0]).toContain(`Build the plans in ${SET_FOLDER}.`);
 });
 
 test("/small-plans build builds only the plan picked", async ($, on) => {
-  answerAskUserQuestion(on, "03-test-the-toggle");
+  answerAskUserQuestion(on, "3 · Test the toggle");
   const { submittedPrompts } = await runCommand($, on, "build", THREE_PLAN_SET);
 
   expect(submittedPrompts[0]).toContain(

@@ -65,7 +65,7 @@ on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
 
 ## The grid
 
-1. **One side padding everywhere.** Use `paddingX: 1` on the root Box only, and compute `innerWidth = e.props.bodyColumns - 2`. Header, rows, dividers and footer all share those edges.
+1. **Space between the panel and the terminal.** Put `paddingX: 2` and `paddingBottom: 1` on the root Box only, and compute `innerWidth = e.props.bodyColumns - 4`. Header, rows, dividers and footer all share those edges, and the empty row keeps the panel off the status line. Don't add `paddingTop`: the engine draws its `[-]` on the tree's first row, and a top padding row leaves the `[-]` alone on an empty line. Don't pad a wrapper Box as well; one padded root keeps every mod on the same column.
 2. **Divider lines, not blank rows.** Put a full-width `─` line under the header and above the footer. Blank rows inside a pane read as missing lines.
 3. **Fixed columns on every row.** Each cell except the name has a fixed `width` and `flexShrink: 0`. The name is the only `flexGrow` cell. Reserve a column even on rows that leave it empty, so the column after it still lines up.
 4. **One gap size.** Use `columnGap: 2` between cells and `columnGap: 1` inside a label group (such as `CI · main`). No `gap` between rows.
@@ -164,7 +164,7 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 ```
 
 ```jsx
-<Box flexDirection="row" columnGap={2} paddingX={1}>
+<Box flexDirection="row" columnGap={2} paddingX={2} paddingBottom={1}>
   <Box width={6} flexShrink={0}>{pill}</Box>
   <Box flexShrink={0}><Text weight="semibold">Indexing repo</Text></Box>
   <Box flexDirection="row" flexShrink={0}>{segments}</Box>
@@ -210,4 +210,6 @@ Box({ flexDirection: 'row', justifyContent: 'space-between', children: [
 | Duration wrapped to `1m` / `35s` | A fixed-width cell without `flexShrink: 0` shrank beside a long name | `flexShrink: 0` on every fixed cell |
 | Panel looked patchy, lines missing | Blank spacer rows, no dividers | `─` dividers at `innerWidth` |
 | Band felt stretched | Bar with `flexGrow` across the whole row | Cap the bar at ~24 segments, spacer before the hint |
+| Panel jammed against the terminal edge and status line | `paddingX: 1`, no bottom space | `paddingX: 2`, `paddingBottom: 1` on the root only |
+| `[-]` alone on an empty row | `paddingTop` on the band's root | Pad below only |
 | Grid lost its low values | Low ramp colour near the panel background | Brighter low end |

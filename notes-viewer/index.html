@@ -3,33 +3,50 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)" />
     <title>Claude notes</title>
     <style>
       :root {
         --background: #ffffff;
-        --sidebar: #fafafa;
-        --hover: #f2f2f2;
-        --selected: #ebebeb;
-        --text: #171717;
-        --muted: #666666;
-        --border: #eaeaea;
-        --border-strong: #d4d4d4;
-        --focus: #0070f3;
-        --blocked: #c62828;
+        --sidebar: #f8fafc;
+        --surface: #f1f5f9;
+        --hover: #eef2f6;
+        --selected: #e2e8f0;
+        --text: #0f172a;
+        --text-soft: #334155;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --border-strong: #cbd5e1;
+        --accent: #2563eb;
+        --focus: #2563eb;
+        --done: #15803d;
+        --in-progress: #b45309;
+        --pending: #64748b;
+        --blocked: #b91c1c;
+        --radius: 8px;
+        --sidebar-width: 304px;
+        --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
         color-scheme: light;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --background: #0a0a0a;
-          --sidebar: #000000;
-          --hover: #1a1a1a;
-          --selected: #242424;
-          --text: #ededed;
-          --muted: #a1a1a1;
-          --border: #262626;
-          --border-strong: #3d3d3d;
-          --focus: #3291ff;
-          --blocked: #ff6b6b;
+          --background: #0b1120;
+          --sidebar: #020617;
+          --surface: #111827;
+          --hover: #131c2e;
+          --selected: #1e293b;
+          --text: #f1f5f9;
+          --text-soft: #cbd5e1;
+          --muted: #94a3b8;
+          --border: #1e293b;
+          --border-strong: #334155;
+          --accent: #60a5fa;
+          --focus: #60a5fa;
+          --done: #4ade80;
+          --in-progress: #fbbf24;
+          --pending: #94a3b8;
+          --blocked: #f87171;
           color-scheme: dark;
         }
       }
@@ -39,8 +56,9 @@
       body {
         margin: 0;
         display: grid;
-        grid-template-columns: 300px minmax(0, 1fr);
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
         height: 100vh;
+        height: 100dvh;
         font:
           14px/1.6 system-ui,
           -apple-system,
@@ -48,79 +66,167 @@
           sans-serif;
         color: var(--text);
         background: var(--background);
+        -webkit-font-smoothing: antialiased;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .skip-link {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 10;
+        padding: 8px 12px;
+        border-radius: var(--radius);
+        background: var(--text);
+        color: var(--background);
+        text-decoration: none;
+        transform: translateY(-200%);
+      }
+      .skip-link:focus-visible {
+        transform: none;
       }
       nav {
         overflow-y: auto;
-        padding: 16px 8px;
+        overscroll-behavior: contain;
+        padding: 0 12px 24px;
         background: var(--sidebar);
         border-right: 1px solid var(--border);
       }
       nav h1 {
-        margin: 0 8px 12px;
-        font-size: 14px;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 -12px 8px;
+        padding: 16px 20px 12px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        background: var(--sidebar);
+      }
+      nav h1::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        background: var(--accent);
       }
       nav h2 {
-        margin: 16px 8px 2px;
+        margin: 20px 8px 4px;
         font-size: 13px;
+        font-weight: 600;
+        color: var(--text-soft);
+        overflow-wrap: anywhere;
       }
       nav h3 {
         display: flex;
         justify-content: space-between;
+        align-items: baseline;
         gap: 8px;
         overflow-wrap: anywhere;
-        margin: 8px 8px 2px;
+        margin: 12px 8px 4px;
         font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.04em;
+        font-weight: 600;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted);
       }
+      nav h3 .progress {
+        flex: none;
+        font-weight: 500;
+        text-transform: none;
+        letter-spacing: 0;
+        font-variant-numeric: tabular-nums;
+      }
       nav a {
         display: block;
-        padding: 4px 8px;
+        min-width: 0;
+        padding: 6px 10px;
         border-radius: 6px;
         color: inherit;
         text-decoration: none;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        touch-action: manipulation;
+        transition:
+          background-color 150ms ease,
+          color 150ms ease;
+      }
+      nav a + a {
+        margin-top: 1px;
       }
       nav a small {
-        display: block;
-        font-size: 11px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
         color: var(--muted);
+      }
+      nav a[data-status] small::before {
+        content: "";
+        flex: none;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--pending);
       }
       nav a[data-status="done"] {
         color: var(--muted);
       }
+      nav a[data-status="done"] small::before {
+        background: var(--done);
+      }
+      nav a[data-status="in-progress"] small::before {
+        background: var(--in-progress);
+      }
       nav a[data-status="blocked"] small {
         color: var(--blocked);
       }
-      nav h3 .progress {
-        flex: none;
-        text-transform: none;
-        letter-spacing: 0;
+      nav a[data-status="blocked"] small::before {
+        background: var(--blocked);
       }
       .sections {
-        margin-bottom: 12px;
+        display: grid;
+        gap: 2px;
+        margin-bottom: 8px;
         padding-bottom: 12px;
         border-bottom: 1px solid var(--border);
       }
       .sections a {
         display: flex;
         justify-content: space-between;
+        align-items: center;
         gap: 8px;
+        padding: 8px 10px;
+        font-weight: 500;
       }
       .sections .count {
+        flex: none;
+        min-width: 24px;
+        padding: 0 7px;
+        border-radius: 999px;
+        background: var(--surface);
         color: var(--muted);
-        font-weight: 400;
+        font-size: 12px;
+        font-weight: 500;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
       }
       nav a:hover {
         background: var(--hover);
+        color: var(--text);
       }
       nav a[aria-current] {
         background: var(--selected);
-        font-weight: 500;
+        color: var(--text);
+        font-weight: 600;
+        box-shadow: inset 2px 0 0 var(--accent);
+      }
+      .sections a[aria-current] .count {
+        background: var(--accent);
+        color: var(--background);
       }
       :is(a, main):focus-visible {
         outline: 2px solid var(--focus);
@@ -128,114 +234,231 @@
       }
       main {
         overflow-y: auto;
-        padding: 32px 40px 64px;
+        padding: 48px 56px 96px;
+      }
+      main:focus {
+        outline: none;
       }
       article {
-        max-width: 760px;
+        max-width: 72ch;
+        margin: 0 auto;
+        font-size: 15px;
+        line-height: 1.7;
+        color: var(--text-soft);
       }
       article > h1 {
         margin: 0;
-        font-size: 24px;
-        line-height: 1.3;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+        color: var(--text);
+        text-wrap: balance;
+        overflow-wrap: anywhere;
       }
       .entry-details {
-        margin: 4px 0 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 14px 0 32px;
+        padding: 0 0 20px;
+        list-style: none;
+        border-bottom: 1px solid var(--border);
         font-size: 12px;
+        line-height: 1.5;
         color: var(--muted);
+      }
+      .entry-details li {
+        max-width: 100%;
+        padding: 2px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--sidebar);
+        overflow-wrap: anywhere;
+      }
+      .entry-details li:last-child {
+        font-family: var(--mono);
+        font-size: 11px;
       }
       .empty {
+        max-width: 420px;
+        margin: 15vh auto 0;
+        padding: 32px 28px;
+        border: 1px dashed var(--border-strong);
+        border-radius: 12px;
+        text-align: center;
         color: var(--muted);
+        text-wrap: pretty;
+      }
+      .entry-body > :first-child {
+        margin-top: 0;
       }
       .entry-body :is(h1, h2, h3, h4, h5, h6) {
-        margin: 28px 0 8px;
+        margin: 36px 0 10px;
         line-height: 1.3;
+        color: var(--text);
+        text-wrap: balance;
+        scroll-margin-top: 24px;
       }
       .entry-body h1 {
-        font-size: 20px;
+        font-size: 22px;
+        letter-spacing: -0.01em;
       }
       .entry-body h2 {
-        font-size: 17px;
-        padding-bottom: 4px;
+        font-size: 18px;
+        padding-bottom: 6px;
         border-bottom: 1px solid var(--border);
       }
-      .entry-body :is(h3, h4, h5, h6) {
+      .entry-body h3 {
+        font-size: 15px;
+      }
+      .entry-body :is(h4, h5, h6) {
         font-size: 14px;
+        color: var(--text-soft);
       }
       .entry-body :is(p, ul, ol, pre, blockquote, table) {
-        margin: 0 0 12px;
+        margin: 0 0 16px;
+      }
+      .entry-body p {
+        text-wrap: pretty;
       }
       .entry-body :is(ul, ol) {
         padding-left: 24px;
+      }
+      .entry-body li + li {
+        margin-top: 4px;
+      }
+      .entry-body li::marker {
+        color: var(--muted);
       }
       .entry-body li:has(> input[type="checkbox"]) {
         list-style: none;
         margin-left: -24px;
       }
       .entry-body input[type="checkbox"] {
-        margin: 0 6px 0 0;
-        accent-color: var(--focus);
+        width: 15px;
+        height: 15px;
+        margin: 0 8px 0 0;
+        vertical-align: -2px;
+        accent-color: var(--done);
+      }
+      .entry-body strong {
+        color: var(--text);
+        font-weight: 600;
       }
       .entry-body code {
-        font:
-          0.9em ui-monospace,
-          "SF Mono",
-          Menlo,
-          monospace;
-        padding: 1px 4px;
+        font: 0.875em var(--mono);
+        padding: 2px 5px;
         border-radius: 4px;
-        background: var(--hover);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        overflow-wrap: anywhere;
       }
       .entry-body pre {
-        padding: 10px 12px;
-        border-radius: 6px;
+        padding: 14px 16px;
+        border-radius: var(--radius);
         border: 1px solid var(--border);
         background: var(--sidebar);
         overflow-x: auto;
+        line-height: 1.55;
       }
       .entry-body pre code {
         padding: 0;
+        border: 0;
         background: none;
+        overflow-wrap: normal;
       }
       .entry-body a {
-        color: var(--focus);
+        color: var(--accent);
+        text-decoration: underline;
+        text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+        text-underline-offset: 3px;
+        transition: text-decoration-color 150ms ease;
+      }
+      .entry-body a:hover {
+        text-decoration-color: currentColor;
       }
       .entry-body blockquote {
-        padding-left: 12px;
-        border-left: 3px solid var(--border-strong);
-        color: var(--muted);
+        padding: 8px 16px;
+        border-left: 3px solid var(--accent);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        background: var(--sidebar);
+        color: var(--text-soft);
+      }
+      .entry-body blockquote > :last-child {
+        margin-bottom: 0;
       }
       .entry-body table {
         display: block;
+        max-width: 100%;
         overflow-x: auto;
         border-collapse: collapse;
+        font-size: 14px;
+        font-variant-numeric: tabular-nums;
       }
       .entry-body :is(th, td) {
-        padding: 4px 10px;
+        padding: 6px 12px;
         border: 1px solid var(--border);
         text-align: left;
+        vertical-align: top;
+      }
+      .entry-body th {
+        background: var(--sidebar);
+        color: var(--text);
+        font-weight: 600;
       }
       .entry-body hr {
+        margin: 32px 0;
         border: 0;
         border-top: 1px solid var(--border);
+      }
+      .entry-body img {
+        max-width: 100%;
+        height: auto;
+        border-radius: var(--radius);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+      @media (max-width: 960px) {
+        :root {
+          --sidebar-width: 260px;
+        }
+        main {
+          padding: 32px 32px 72px;
+        }
       }
       @media (max-width: 720px) {
         body {
           grid-template-columns: 1fr;
           grid-template-rows: 40vh 1fr;
+          grid-template-rows: 40dvh 1fr;
         }
         nav {
           border-right: 0;
           border-bottom: 1px solid var(--border);
         }
+        nav a {
+          padding-block: 10px;
+        }
         main {
-          padding: 20px 16px 48px;
+          padding: 24px 16px 48px;
+        }
+        article > h1 {
+          font-size: 24px;
         }
       }
     </style>
   </head>
   <body>
+    <a class="skip-link" href="#note">Skip to note</a>
     <nav aria-label="All notes"></nav>
-    <main tabindex="-1"></main>
+    <main id="note" tabindex="-1" aria-busy="true">
+      <p class="empty" role="status">Loading notes…</p>
+    </main>
     <script>
       const sidebar = document.querySelector("nav");
       const entryArea = document.querySelector("main");
@@ -387,6 +610,22 @@
         });
       };
 
+      const createDetailList = (selectedSection, selectedEntry) => {
+        const detailList = createElement("ul", "", "entry-details");
+        detailList.setAttribute("aria-label", "Note details");
+        [
+          selectedEntry.project,
+          ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
+          selectedEntry.created.slice(0, 16).replace("T", " "),
+          selectedEntry.path,
+        ]
+          .filter(Boolean)
+          .forEach((detail) =>
+            detailList.append(createElement("li", detail))
+          );
+        return detailList;
+      };
+
       const renderEntry = (selectedSection, selectedEntry) => {
         if (!selectedEntry) {
           entryArea.replaceChildren(
@@ -402,18 +641,7 @@
           .forEach((checkbox) => (checkbox.disabled = true));
         article.append(
           createElement("h1", selectedEntry.title),
-          createElement(
-            "p",
-            [
-              selectedEntry.project,
-              ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
-              selectedEntry.created.slice(0, 16).replace("T", " "),
-              selectedEntry.path,
-            ]
-              .filter(Boolean)
-              .join(" · "),
-            "entry-details"
-          ),
+          createDetailList(selectedSection, selectedEntry),
           body
         );
         entryArea.replaceChildren(article);
@@ -431,7 +659,13 @@
       const loadSections = async () => {
         sections = await (await fetch("/api/sections")).json();
         render();
+        entryArea.removeAttribute("aria-busy");
       };
+
+      document.querySelector(".skip-link").addEventListener("click", (event) => {
+        event.preventDefault();
+        entryArea.focus();
+      });
 
       addEventListener("hashchange", () => {
         render();

@@ -54,6 +54,22 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 - If it is already running, `claude-notes` opens the same page again. `Ctrl+C` stops it
 - The page reloads the notes when you come back to its tab. Raw HTML in a note is not rendered
 
+## Set up and update
+
+`claude-kit-update` sets up a machine and brings every plugin up to date in one run. The first run, by its path, links it onto the PATH; after that `claude-kit-update` works from any terminal:
+
+```
+~/src/claude-kit/claude-kit-update
+```
+
+1. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
+2. Updates every marketplace
+3. Updates every installed plugin, from any marketplace, in its own scope
+4. Installs, for the user, every claude-kit plugin that is not installed yet
+5. Links `claude-notes` and `claude-kit-update` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
+
+It needs `claude` and `jq` on the PATH. A failed update or install does not stop the others; the run ends by naming each failure and exits 1. Start a new Claude Code session afterwards to load the updated plugins.
+
 ## Install
 
 On any machine:
@@ -297,6 +313,7 @@ plugin-host/                      runs register.ts plugins and command hooks out
 notes-viewer/                     claude-notes: the local web page for saved notes (Go)
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
+claude-kit-update                 sets up the marketplace, updates every installed plugin, installs missing claude-kit plugins
 check                             runs every test suite; --staged runs only staged ones (the pre-commit hook)
 ```
 

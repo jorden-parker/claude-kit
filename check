@@ -49,6 +49,11 @@ for sync_test in tests/sync-*.test.sh; do
   bash "$sync_test"
 done
 
+if should_check claude-kit-update tests/claude-kit-update.test.sh notes-viewer/claude-notes; then
+  echo "check: tests/claude-kit-update.test.sh"
+  bash tests/claude-kit-update.test.sh
+fi
+
 echo "check: tests/repository.test.sh"
 bash tests/repository.test.sh
 

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+repository_root="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+link_directory="${CLAUDE_KIT_LINK_DIR:-$HOME/.local/bin}"
+failed_steps=()
+
+command -v claude >/dev/null || fail "claude-kit-update needs the claude CLI on the PATH."
+command -v jq >/dev/null || fail "claude-kit-update needs jq: brew install jq"
+
+has_claude_kit_marketplace() {
+  claude plugin marketplace list --json | jq -e '.[] | select(.name == "claude-kit")' >/dev/null
+}
+
+link_command() {
+  local command_path="$1"
+  local link_path="$link_directory/$(basename "$command_path")"
+  if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+    echo "Left $link_path alone: it is a file, not a link."
+    return
+  fi
+  ln -sfn "$command_path" "$link_path"
+}
+
+if ! has_claude_kit_marketplace; then
+  echo "Adding the claude-kit marketplace from $repository_root"
+  claude plugin marketplace add "$repository_root"
+fi
+
+echo "Updating every marketplace"
+claude plugin marketplace update
+
+plugin_listing="$(claude plugin list --available --json)"
+
+while IFS=$'\t' read -r plugin_id plugin_scope; do
+  echo "Updating $plugin_id"
+  claude plugin update "$plugin_id" --scope "$plugin_scope" || failed_steps+=("update $plugin_id")
+done < <(jq -r '.installed[] | [.id, .scope] | @tsv' <<<"$plugin_listing")
+
+while IFS= read -r plugin_id; do
+  echo "Installing $plugin_id"
+  claude plugin install "$plugin_id" --scope user || failed_steps+=("install $plugin_id")
+done < <(jq -r '.available[] | select(.marketplaceName == "claude-kit") | .pluginId' <<<"$plugin_listing")
+
+mkdir -p "$link_directory"
+link_command "$repository_root/notes-viewer/claude-notes"
+link_command "$repository_root/claude-kit-update"
+
+if [ "${#failed_steps[@]}" -gt 0 ]; then
+  printf 'Failed: %s\n' "${failed_steps[@]}" >&2
+  exit 1
+fi
+echo "Done. Start a new Claude Code session to load the updated plugins."

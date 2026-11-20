@@ -150,11 +150,15 @@ const testWithSession = (
   messages: SessionMessageRow[],
   body: HandoffTestBody
 ) =>
-  test(name, { options: { writer: "haiku" } }, ($, on) => {
-    on("session.cwd", () => ({ value: "/repo" }));
-    on("session.messages", () => ({ value: messages }));
-    return body($, on, mockHandoffFiles(on), mockStore(on));
-  });
+  test(
+    name,
+    { options: { writer: "haiku", hasConversationTurns: false } },
+    ($, on) => {
+      on("session.cwd", () => ({ value: "/repo" }));
+      on("session.messages", () => ({ value: messages }));
+      return body($, on, mockHandoffFiles(on), mockStore(on));
+    }
+  );
 
 const refuseFill = () => ({ isFilled: false, refusal: "no_composer" as const });
 
@@ -456,11 +460,15 @@ const endAgentTurn = async (
 };
 
 const testWithSubagentWriter = (name: string, body: HandoffTestBody) =>
-  test(name, { options: { writer: "subagent" } }, ($, on) => {
-    on("session.cwd", () => ({ value: "/repo" }));
-    on("session.messages", () => ({ value: CONVERSATION }));
-    return body($, on, mockHandoffFiles(on), mockStore(on));
-  });
+  test(
+    name,
+    { options: { writer: "subagent", hasConversationTurns: false } },
+    ($, on) => {
+      on("session.cwd", () => ({ value: "/repo" }));
+      on("session.messages", () => ({ value: CONVERSATION }));
+      return body($, on, mockHandoffFiles(on), mockStore(on));
+    }
+  );
 
 testWithSession(
   "an API error on haiku starts a Haiku subagent with the same conversation digest",
@@ -527,24 +535,6 @@ testWithSubagentWriter(
     expect(spawnedAgents).toHaveLength(1);
   }
 );
-
-test("with no writer setting the subagent writes the recap without calling haiku", async ($, on) => {
-  on("session.cwd", () => ({ value: "/repo" }));
-  on("session.messages", () => ({ value: CONVERSATION }));
-  mockStore(on);
-  const spawnedAgents = collectSpawnedAgents(on);
-  let modelCalls = 0;
-  on("model.complete", () => {
-    modelCalls += 1;
-    return { value: REJECTED_REPLY };
-  });
-
-  const reply = await $.command.run(handoff("save"));
-
-  expect(reply.text).toBe(SUBAGENT_WRITING_MESSAGE);
-  expect(modelCalls).toBe(0);
-  expect(spawnedAgents).toHaveLength(1);
-});
 
 testWithSubagentWriter(
   "save stores the recap the subagent wrote and reports its id in a toast",
@@ -1604,7 +1594,7 @@ for (const [commonGitFolder, projectName] of Object.entries(
 )) {
   test(
     `a worktree whose repository is ${commonGitFolder} files its handoffs under ${projectName}`,
-    { options: { writer: "haiku" } },
+    { options: { writer: "haiku", hasConversationTurns: false } },
     async ($, on) => {
       on("session.cwd", () => ({ value: "/worktrees/feature-branch" }));
       on("session.messages", () => ({ value: CONVERSATION }));
@@ -1633,7 +1623,7 @@ for (const [commonGitFolder, projectName] of Object.entries(
 
 test(
   "a folder outside git files its handoffs under its own name",
-  { options: { writer: "haiku" } },
+  { options: { writer: "haiku", hasConversationTurns: false } },
   async ($, on) => {
     on("session.cwd", () => ({ value: "/scratch/My Notes" }));
     on("session.messages", () => ({ value: CONVERSATION }));
@@ -1652,7 +1642,7 @@ test(
 
 test(
   "HANDOFFS_DIR moves the handoffs folder",
-  { options: { writer: "haiku" } },
+  { options: { writer: "haiku", hasConversationTurns: false } },
   async ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: CONVERSATION }));
@@ -1814,7 +1804,7 @@ test("later words, other words and other commands get no /handoff suggestions", 
 
 test(
   "save shows the recap and says why when its file cannot be written",
-  { options: { writer: "haiku" } },
+  { options: { writer: "haiku", hasConversationTurns: false } },
   async ($, on) => {
     on("session.cwd", () => ({ value: "/repo" }));
     on("session.messages", () => ({ value: CONVERSATION }));
@@ -2223,14 +2213,16 @@ testWithSession(
   }
 );
 
-const QUESTION_LIST = [
-  "- Should the token live in a cookie? (Cookie | Local storage)",
-  "- Is the old endpoint still needed?",
-].join("\n");
-
 const COOKIE_QUESTION = "Should the token live in a cookie?";
 const ENDPOINT_QUESTION = "Is the old endpoint still needed?";
 const WRITTEN_RECAP = "Fix the login\n\nGoal: the login works.";
+const ASKING_QUESTIONS_MESSAGE =
+  "Checking for open questions in the conversation…";
+const DECISION_LINES = [
+  `- ${COOKIE_QUESTION} Answer: Cookie`,
+  `- ${ENDPOINT_QUESTION} Left open`,
+].join("\n");
+const DECISIONS_BLOCK = `<decisions>\n${DECISION_LINES}\n</decisions>`;
 
 const answerQuestions = (on: On, answers: Record<string, string>) => {
   const askedOptions: Record<string, string[]> = {};
@@ -2254,129 +2246,138 @@ const answerQuestions = (on: On, answers: Record<string, string>) => {
 const readSavedRecap = (handoffFiles: Map<string, string>) =>
   [...handoffFiles.values()][0]?.split("\n---\n\n")[1];
 
-const QUESTIONS_REPLY = `**Open questions for the user:**\n${QUESTION_LIST}`;
-const BOTH_DECISIONS = [
-  "<decisions>",
-  `- ${COOKIE_QUESTION} Answer: Cookie`,
-  `- ${ENDPOINT_QUESTION} Answer: No`,
-  "</decisions>",
-].join("\n");
-
-const answerQuestionsThenRecap = (on: On) => {
+const collectWriterRequests = (on: On) => {
   const writerRequests: { system: string; prompt: string }[] = [];
   on("model.complete", (_, e) => {
     writerRequests.push({ system: e.system ?? "", prompt: e.prompt });
     return {
-      value: {
-        isAnswered: true,
-        text: e.prompt.includes("<decisions>")
-          ? WRITTEN_RECAP
-          : QUESTIONS_REPLY,
-        usage: MODEL_USAGE,
-      },
+      value: { isAnswered: true, text: WRITTEN_RECAP, usage: MODEL_USAGE },
     };
   });
   return writerRequests;
 };
 
-testWithSession(
-  "save asks each open question before the recap is written and hands the answers to the writer",
-  CONVERSATION,
-  async ($, on, handoffFiles) => {
-    mock.clock(on, { now: NOVEMBER_NINTH });
+const testWithQuestionTurn = (
+  name: string,
+  options: Record<string, string>,
+  body: HandoffTestBody
+) =>
+  test(name, { options }, ($, on) => {
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    answerTurns(on);
     ignoreToasts(on);
-    const writerRequests = answerQuestionsThenRecap(on);
-    const askedOptions = answerQuestions(on, {
-      [COOKIE_QUESTION]: "Cookie",
-      [ENDPOINT_QUESTION]: "No",
-    });
+    collectStatuses(on);
+    return body($, on, mockHandoffFiles(on), mockStore(on));
+  });
 
-    await $.command.run(handoff("save the auth change"));
+testWithQuestionTurn(
+  "the session's own model is asked for the open questions first, and its answer reaches the recap writer as decisions",
+  { writer: "haiku" },
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    const writerRequests = collectWriterRequests(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
 
-    expect(askedOptions).toEqual({
-      [COOKIE_QUESTION]: ["Cookie", "Local storage", "Leave open"],
-      [ENDPOINT_QUESTION]: ["Yes", "No", "Leave open"],
-    });
-    expect(writerRequests).toHaveLength(2);
-    expect(writerRequests[1]?.prompt).toContain(BOTH_DECISIONS);
+    const reply = await $.command.run(handoff("save the auth change"));
+    await clock.settle();
+    const writerRequestsBeforeAnswer = [...writerRequests];
+    const turnResult = await endRecapTurn(
+      $,
+      submittedPrompts[0] ?? "",
+      `The user answered.\n${DECISION_LINES}`
+    );
+
+    expect(reply.text).toBe(ASKING_QUESTIONS_MESSAGE);
+    expect(submittedPrompts[0]).toContain(
+      "ask the user each one with AskUserQuestion"
+    );
+    expect(submittedPrompts[0]).toContain("<focus>\nthe auth change\n</focus>");
+    expect(writerRequestsBeforeAnswer).toEqual([]);
+    expect(writerRequests[0]?.prompt).toContain(DECISIONS_BLOCK);
+    expect(turnResult.text).toContain("Saved as handoff #1");
     expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
   }
 );
 
+testWithQuestionTurn(
+  "a session with nothing to ask tells the recap writer no question is left",
+  { writer: "haiku" },
+  async ($, on) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    const writerRequests = collectWriterRequests(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("save"));
+    await clock.settle();
+    await endRecapTurn($, submittedPrompts[0] ?? "", "none");
+
+    expect(writerRequests[0]?.prompt).toContain(
+      "<decisions>\nNo question was left for the user.\n</decisions>"
+    );
+  }
+);
+
+testWithQuestionTurn(
+  "with no writer setting the session's own model asks the open questions, then one subagent writes the recap with no haiku call",
+  {},
+  async ($, on) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    const spawnedAgents = collectSpawnedAgents(on);
+    const writerRequests = collectWriterRequests(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("save"));
+    await clock.settle();
+    const agentCountBeforeAnswer = spawnedAgents.length;
+    const turnResult = await endRecapTurn(
+      $,
+      submittedPrompts[0] ?? "",
+      DECISION_LINES
+    );
+
+    expect(agentCountBeforeAnswer).toBe(0);
+    expect(turnResult.text).toBe(SUBAGENT_WRITING_MESSAGE);
+    expect(spawnedAgents.map((agent) => agent.prompt)).toEqual([
+      expect.stringContaining(DECISIONS_BLOCK),
+    ]);
+    expect(writerRequests).toEqual([]);
+  }
+);
+
+testWithQuestionTurn(
+  "interrupting the question turn cancels the handoff",
+  { writer: "haiku" },
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on, { now: NOVEMBER_NINTH });
+    const writerRequests = collectWriterRequests(on);
+    const submittedPrompts = collectSubmittedPrompts(on);
+
+    await $.command.run(handoff("save"));
+    await clock.settle();
+    await $.turn.start({
+      text: submittedPrompts[0] ?? "",
+      turnId: RECAP_TURN_ID,
+    });
+    await $.turn.complete({
+      answer: "",
+      durationMs: 1,
+      isAborted: true,
+      turnId: RECAP_TURN_ID,
+      reason: "answer",
+    });
+
+    expect(writerRequests).toEqual([]);
+    expect(handoffFiles.size).toBe(0);
+  }
+);
+
 testWithSession(
-  "a question the user leaves open is not handed to the writer as a decision",
+  "the recap writer is told to start with a short title, to write decisions into the prompt and to list only what was left open",
   CONVERSATION,
   async ($, on) => {
-    mock.clock(on, { now: NOVEMBER_NINTH });
     ignoreToasts(on);
-    const writerRequests = answerQuestionsThenRecap(on);
-    answerQuestions(on, {
-      [COOKIE_QUESTION]: "Leave open",
-      [ENDPOINT_QUESTION]: "Only for the mobile app",
-    });
-
-    await $.command.run(handoff("save the auth change"));
-
-    expect(writerRequests[1]?.prompt).toContain(
-      [
-        "<decisions>",
-        `- ${ENDPOINT_QUESTION} Answer: Only for the mobile app`,
-        "</decisions>",
-      ].join("\n")
-    );
-    expect(writerRequests[1]?.prompt).not.toContain(COOKIE_QUESTION);
-  }
-);
-
-testWithSession(
-  "dismissing the first question stops the asking and the writer is told every question was left open",
-  CONVERSATION,
-  async ($, on, handoffFiles) => {
-    mock.clock(on, { now: NOVEMBER_NINTH });
-    ignoreToasts(on);
-    const writerRequests = answerQuestionsThenRecap(on);
-    const askedOptions = answerQuestions(on, {});
-
-    await $.command.run(handoff("save the auth change"));
-
-    expect(Object.keys(askedOptions)).toEqual([COOKIE_QUESTION]);
-    expect(writerRequests[1]?.prompt).toContain(
-      "<decisions>\nThe user left every question open.\n</decisions>"
-    );
-    expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
-  }
-);
-
-testWithSession(
-  "a recap with no open questions is written in one call and asks nothing",
-  CONVERSATION,
-  async ($, on, handoffFiles) => {
-    mock.clock(on, { now: NOVEMBER_NINTH });
-    ignoreToasts(on);
-    let modelCallCount = 0;
-    on("model.complete", () => {
-      modelCallCount += 1;
-      return {
-        value: { isAnswered: true, text: WRITTEN_RECAP, usage: MODEL_USAGE },
-      };
-    });
-    const askedOptions = answerQuestions(on, {});
-
-    await $.command.run(handoff("save the auth change"));
-
-    expect(modelCallCount).toBe(1);
-    expect(askedOptions).toEqual({});
-    expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
-  }
-);
-
-testWithSession(
-  "the recap writer is told to start with a short title, to list open questions first and to write decisions into the prompt",
-  CONVERSATION,
-  async ($, on) => {
-    ignoreToasts(on);
-    const writerRequests = answerQuestionsThenRecap(on);
-    answerQuestions(on, {});
+    const writerRequests = collectWriterRequests(on);
     on("prompt.fill", () => ({ isFilled: true }));
 
     await $.command.run(handoff("the auth change"));
@@ -2385,80 +2386,40 @@ testWithSession(
       "Start with a one-line title that names the work"
     );
     expect(writerRequests[0]?.system).toContain(
-      'do not write the prompt: output only a line reading exactly "Open questions for the user:"'
+      "If a <decisions> block is present"
     );
     expect(writerRequests[0]?.system).toContain(
-      "If a <decisions> block is present"
+      'a line reading exactly "Open questions for the user:"'
     );
   }
 );
 
 testWithConversationWriter(
-  "the conversation asks the open questions itself, and the ones it leaves open are not asked again",
+  "the conversation writer asks the open questions itself, in the turn that writes the recap",
   async ($, on, handoffFiles) => {
     const clock = mock.clock(on, { now: NOVEMBER_NINTH });
     answerTurns(on);
     ignoreToasts(on);
     collectStatuses(on);
-    const writerRequests = answerQuestionsThenRecap(on);
-    const askedOptions = answerQuestions(on, {});
+    const writerRequests = collectWriterRequests(on);
     const submittedPrompts = collectSubmittedPrompts(on);
-    const recapWithOpenQuestion = `${WRITTEN_RECAP}\n\n${QUESTIONS_REPLY}`;
 
     await $.command.run(handoff("save"));
     await clock.settle();
-    await endRecapTurn($, submittedPrompts[0] ?? "", recapWithOpenQuestion);
+    await endRecapTurn($, submittedPrompts[0] ?? "", WRITTEN_RECAP);
 
+    expect(submittedPrompts).toHaveLength(1);
     expect(submittedPrompts[0]).toContain(
       "First ask the user, with AskUserQuestion"
     );
     expect(writerRequests).toEqual([]);
-    expect(askedOptions).toEqual({});
-    expect(readSavedRecap(handoffFiles)).toBe(`${recapWithOpenQuestion}\n`);
-  }
-);
-
-testWithSubagentWriter(
-  "a subagent lists the open questions, a second one writes the recap from the answers, and both reports stay out of the conversation",
-  async ($, on, handoffFiles) => {
-    mock.clock(on, { now: NOVEMBER_NINTH });
-    answerTurns(on);
-    ignoreToasts(on);
-    collectStatuses(on);
-    const submittedPrompts = collectSubmittedPrompts(on);
-    const spawnedPrompts: string[] = [];
-    on("agent.spawn", (_, e) => {
-      spawnedPrompts.push(e.prompt);
-      return {
-        model: "claude-haiku-5-5",
-        agentId: `agent-${spawnedPrompts.length}`,
-      };
-    });
-    answerQuestions(on, {
-      [COOKIE_QUESTION]: "Cookie",
-      [ENDPOINT_QUESTION]: "No",
-    });
-
-    await $.command.run(handoff("save"));
-    await endAgentTurn($, "agent-1", spawnedPrompts[0] ?? "", QUESTIONS_REPLY);
-    const questionListReport = await submitAgentReport($, "agent-1");
-    await endAgentTurn($, "agent-2", spawnedPrompts[1] ?? "", WRITTEN_RECAP);
-    const recapReport = await submitAgentReport($, "agent-2");
-
-    expect(spawnedPrompts[0]).not.toContain("\n<decisions>\n");
-    expect(spawnedPrompts[1]).toContain(BOTH_DECISIONS);
     expect(readSavedRecap(handoffFiles)).toBe(`${WRITTEN_RECAP}\n`);
-    expect([questionListReport.drop, recapReport.drop]).toEqual([
-      "The handoff subagent finished; its result is in the status line.",
-      "The handoff subagent finished; its result is in the status line.",
-    ]);
-    expect(submittedPrompts).toEqual([]);
   }
 );
 
 test(
   "a deleted worktree files its handoffs under the main repository's name",
-  { options: { writer: "haiku" } },
+  { options: { writer: "haiku", hasConversationTurns: false } },
   async ($, on) => {
     on("session.cwd", () => ({ value: "/repo/.claude/worktrees/feature-x" }));
     on("session.messages", () => ({ value: CONVERSATION }));
@@ -2487,7 +2448,7 @@ for (const [repositoryLine, answers, projectName] of [
 ] as const) {
   test(
     `a recap whose ${repositoryLine} is filed under ${projectName}`,
-    { options: { writer: "haiku" } },
+    { options: { writer: "haiku", hasConversationTurns: false } },
     async ($, on) => {
       on("session.cwd", () => ({ value: "/repo" }));
       on("session.messages", () => ({ value: CONVERSATION }));

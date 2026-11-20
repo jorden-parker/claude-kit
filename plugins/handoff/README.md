@@ -38,15 +38,14 @@ The old dashed forms (`--new`, `--save`, `--each`, `--list`, `--resume`) still w
 
 ## Open questions
 
-A handoff can hinge on decisions only you can make. `/handoff` asks them before the recap is written, one at a time in Claude Code's own question dialog, so the recap is written once with your answers already part of it. With `/handoff save` or `/handoff new` this comes after the notes box.
+A handoff can hinge on decisions only you can make. Before the recap is written, `/handoff` has the session's own model judge that: in a short normal turn it asks you each such decision in Claude Code's own question dialog, then passes your answers to the recap writer. With `/handoff save` or `/handoff new` this comes after the notes box.
 
-- The recap writer replies with the questions alone when it finds any. A session with nothing to ask is still written in one go
-- Each question offers the likely answers the writer listed, or Yes and No, plus `Leave open`. Other takes any text
+- The session's own model judges because it sees the whole session, where the recap writer gets the last 40 messages. Its turn stays short: it asks, then replies with one line per question
 - An answer goes to the writer as a decision. The writer puts it into the recap in its own words, where it belongs (the goal, a constraint, a next step), so the handoff holds no question-and-answer lines
-- `Leave open` keeps that question under `Open questions for the user:`
-- Esc stops the asking. The questions not yet answered stay open, and the handoff is still written and saved
-- With the `subagent` writer, one subagent lists the questions and a second writes the recap once you have answered. With the `conversation` writer, the session's own model asks you itself, in the turn that writes the recap
-- `/handoff each` asks nothing
+- A question you do not answer stays under `Open questions for the user:`
+- Interrupting that turn cancels the handoff
+- With Recap writer set to `conversation`, the session's own model asks and writes the recap in one turn
+- `/handoff each` asks nothing. Neither does a host without conversation turns (Qwen Code, pi, OpenCode): there the recap lists what is open
 
 ## Where handoffs live
 

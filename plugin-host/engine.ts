@@ -308,7 +308,10 @@ export const createPluginHost = ({
     start: async () => {
       isStarting = true;
       try {
-        await register(registerHook, options);
+        await register(registerHook, {
+          hasConversationTurns: false,
+          ...options,
+        });
         await dispatch("session.start", { source: "startup" });
         await finishScheduledWork();
       } finally {

@@ -13,10 +13,10 @@ The working directory, the conversation and the <guidance> and <decisions> block
 Start with a one-line title that names the work, in 60 characters at most and with no period at the end, then a blank line.
 Right after the title line, when the work is about a git repository other than the working directory's, write a line "Repository: <absolute folder path>" naming it, judged from the files and commands in the conversation. When the work could belong to more than one repository, list each folder: "Repository: <path> | <path>". Leave the line out when the work is in the working directory's repository.
 Include the goal, what has been done, what is left, and the files and commands mentioned.
-If decisions are left that only the user can make and no <decisions> block is present, do not write the prompt: output only a line reading exactly "${OPEN_QUESTIONS_HEADING}", then one line per decision in the form "- <question ending in a question mark> (<likely answer> | <likely answer>)", with two or three likely answers. Never list there what the next session can check for itself.
+If decisions are left that only the user can make, end with a line reading exactly "${OPEN_QUESTIONS_HEADING}", then one line per decision in the form "- <question ending in a question mark> (<likely answer> | <likely answer>)", with two or three likely answers. Leave that section out when no such decision is left, and never list there what the next session can check for itself.
 If a <focus> block is present, center the recap on it and keep the rest brief.
 If a <guidance> block is present, it holds the user's rough notes for the next session: a direction to take, or extra requests. Work out what they mean and write that into the prompt in your own clear words, where it belongs: as the next step, a priority, a constraint or an added task. Do not quote the notes, label them, or add them as a separate block.
-If a <decisions> block is present, the user has been asked those questions, so always write the prompt. The block holds each question the user answered, with the answer, and each is settled: write it into the prompt in your own clear words, where it belongs, in the goal, as a constraint, a next step or an added task, and make the rest of the prompt agree with it. Do not quote the questions or the answers, label them, add them as a separate block, or list a settled question as open. If decisions that only the user can make are still left, end the prompt with the "${OPEN_QUESTIONS_HEADING}" line and its question lines.
+If a <decisions> block is present, the user has already been asked: it holds each question with the user's answer, or marked as left open. An answered question is settled: write it into the prompt in your own clear words, where it belongs, in the goal, as a constraint, a next step or an added task, and make the rest of the prompt agree with it. Do not quote the questions or the answers, label them, add them as a separate block, or list a settled question as open. The open questions are then only the ones the block marks as left open: list no others.
 Output only the prompt, with no preamble, quotes or explanation.`;
 
 const PLAN_SEPARATOR = "---handoff---";
@@ -188,7 +188,7 @@ const describeFocus = (focus: string) =>
 const describeGuidance = (notes: string) =>
   notes ? `\n\n<guidance>\n${notes}\n</guidance>` : "";
 
-const NO_DECISION_LINE = "The user left every question open.";
+const NO_DECISION_LINE = "No question was left for the user.";
 
 const describeDecisions = (decisionLines: string | undefined) =>
   decisionLines === undefined
@@ -206,7 +206,7 @@ const buildRecapPrompt = (
 const NO_TOOLS_RULE =
   "Do not use any tools for this message: answer it straight away.";
 const ASK_FIRST_RULE =
-  "Use no tool for this message except AskUserQuestion. First ask the user, with AskUserQuestion, each decision that only they can make and that the work cannot continue without, offering two or three likely answers each; never ask what the next session can check for itself. Then answer straight away. For the rules below, a <decisions> block is present: it holds the questions the user answered, with their answers, and is empty when they answered none.";
+  "Use no tool for this message except AskUserQuestion. First ask the user, with AskUserQuestion, each decision that only they can make and that the work cannot continue without, offering two or three likely answers each; never ask what the next session can check for itself. Then answer straight away. For the rules below, a <decisions> block is present: it holds each question you asked, with the user's answer or marked as left open, and is empty when you asked nothing.";
 const buildConversationPreamble = (toolRule: string) =>
   `Stop the work here. ${toolRule}
 The conversation above is what the rules below call "the conversation below".`;
@@ -473,6 +473,7 @@ type AwaitedRecap = {
   promptText: string;
   turnId?: string;
   agentId?: string;
+  isQuestionTurn?: boolean;
 };
 
 type RecapStyle = {
@@ -567,11 +568,6 @@ const describeUnansweredReply = (
 
 type RecapDelegation = { awaitedRecap: AwaitedRecap; routeNotice: string };
 
-const markQuestionsAsked = (request: RecapRequest): RecapRequest =>
-  request.action === "recap"
-    ? { ...request, decisionLines: request.decisionLines ?? "" }
-    : request;
-
 const askConversationForRecap = (
   engine: EngineInterface,
   request: RecapRequest
@@ -582,7 +578,7 @@ const askConversationForRecap = (
     () => void engine.prompt.submit({ text: promptText, asUser: true })
   );
   return {
-    awaitedRecap: { request: markQuestionsAsked(request), promptText },
+    awaitedRecap: { request, promptText },
     routeNotice: WRITING_IN_CONVERSATION_MESSAGE,
   };
 };
@@ -793,106 +789,48 @@ const startNewSessionWithRecap = async (
   return { text: HANDING_OFF_MESSAGE };
 };
 
-const LEAVE_OPEN_ANSWER = "Leave open";
-const YES_OR_NO_ANSWERS = ["Yes", "No"];
-const MAX_SUGGESTED_ANSWERS = 3;
 const QUESTION_DIALOG_HEADER = "Handoff";
-const OPEN_QUESTIONS_HEADING_LINE =
-  /^[#*\s]*open questions for the user:?[*\s]*$/i;
-const QUESTION_BULLET = /^\s*[-*]\s+(.*)$/;
-const QUESTION_WITH_ANSWERS = /^(.*?\?)\s*\(([^()]*\|[^()]*)\)\s*$/;
+const QUESTION_BULLET = /^\s*[-*]\s+\S/;
+const ASKING_QUESTIONS_MESSAGE =
+  "Checking for open questions in the conversation…";
+const QUESTION_TURN_RULES = `Stop the work here. Use no tool for this message except AskUserQuestion.
+A prompt is about to be written that hands the work of this conversation to a fresh coding-agent session. If decisions are left that only the user can make and that the work cannot continue without, ask the user each one with AskUserQuestion, offering two or three likely answers. Never ask what the next session can check for itself, or what the conversation already settles.
+If a <focus> block follows, only ask about it. A <guidance> block holds the user's notes for the next session: never ask what they settle.
+Then reply with only one line per question you asked, in the form "- <question> Answer: <the user's answer>", or "- <question> Left open" when the user did not answer it. When you asked nothing, reply with only the word "none".`;
 
-type OpenQuestion = {
-  question: string;
-  suggestedAnswers: string[];
-};
-
-const readOpenQuestion = (bulletLine: string): OpenQuestion[] => {
-  const bulletText = QUESTION_BULLET.exec(bulletLine)?.[1]?.trim();
-  if (!bulletText) return [];
-  const [, question = bulletText, answerList = ""] =
-    QUESTION_WITH_ANSWERS.exec(bulletText) ?? [];
-  const listedAnswers = answerList
-    .split("|")
-    .map((answer) => answer.trim())
-    .filter((answer) => answer)
-    .slice(0, MAX_SUGGESTED_ANSWERS);
-  return [
-    {
-      question,
-      suggestedAnswers:
-        listedAnswers.length > 1 ? listedAnswers : YES_OR_NO_ANSWERS,
-    },
-  ];
-};
-
-const askOpenQuestion = async (
-  engine: EngineInterface,
-  openQuestion: OpenQuestion
-) => {
-  try {
-    return await engine.ui.ask(openQuestion.question, {
-      header: QUESTION_DIALOG_HEADER,
-      options: [...openQuestion.suggestedAnswers, LEAVE_OPEN_ANSWER],
-    });
-  } catch {
-    return undefined;
-  }
-};
-
-const collectAnswers = async (
-  engine: EngineInterface,
-  openQuestions: OpenQuestion[]
-) => {
-  const answers: string[] = [];
-  for (const openQuestion of openQuestions) {
-    const answer = await askOpenQuestion(engine, openQuestion);
-    if (answer === undefined) break;
-    answers.push(answer.replace(/\s+/g, " ").trim());
-  }
-  return answers;
-};
-
-const findOpenQuestions = (recap: string) => {
-  const recapLines = recap.split("\n");
-  const headingIndex = recapLines.findIndex((line) =>
-    OPEN_QUESTIONS_HEADING_LINE.test(line)
-  );
-  return headingIndex < 0
-    ? []
-    : recapLines.slice(headingIndex + 1).flatMap(readOpenQuestion);
-};
-
-const askOpenQuestions = async (
-  engine: EngineInterface,
-  openQuestions: OpenQuestion[]
-) => {
-  const answers = await collectAnswers(engine, openQuestions);
-  return openQuestions
-    .flatMap((openQuestion, questionIndex) => {
-      const answer = answers[questionIndex];
-      return answer && answer !== LEAVE_OPEN_ANSWER
-        ? [`- ${openQuestion.question} Answer: ${answer}`]
-        : [];
-    })
+const readDecisionLines = (answer: string) =>
+  answer
+    .split("\n")
+    .filter((line) => QUESTION_BULLET.test(line))
+    .map((line) => line.trim())
     .join("\n");
+
+const settleQuestions = (
+  request: RecapRequest,
+  decisionLines: string
+): RecapRequest =>
+  request.action === "recap" ? { ...request, decisionLines } : request;
+
+const askConversationForQuestions = (
+  engine: EngineInterface,
+  request: RecapRequest
+): AwaitedRecap => {
+  const promptText = `${QUESTION_TURN_RULES}${describeSteering(request)}`;
+  engine.clock.after(
+    0,
+    () => void engine.prompt.submit({ text: promptText, asUser: true })
+  );
+  return { request, promptText, isQuestionTurn: true };
 };
 
 const deliverRecap = async (
   engine: EngineInterface,
-  progress: HandoffProgress,
   request: RecapRequest,
   recapText: string,
   isRecapOnScreen: boolean
 ) => {
   if (request.action === "each") {
     return savePlanHandoffs(engine, recapText, request.focus);
-  }
-  const openQuestions =
-    request.decisionLines === undefined ? findOpenQuestions(recapText) : [];
-  if (openQuestions.length > 0) {
-    const decisionLines = await askOpenQuestions(engine, openQuestions);
-    return runRecap(engine, progress, { ...request, decisionLines });
   }
   const saveOutcome = await saveSessionHandoff(
     engine,
@@ -1024,14 +962,31 @@ type HandoffProgress = {
   writer: string;
   awaitedRecap: AwaitedRecap | undefined;
   recapAgentIds: string[];
+  canAskInConversation: boolean;
   openBox: HandoffBox | undefined;
 };
+
+const shouldAskQuestionsFirst = (
+  progress: HandoffProgress,
+  request: RecapRequest
+) =>
+  progress.canAskInConversation &&
+  progress.writer !== CONVERSATION_WRITER &&
+  request.action === "recap" &&
+  request.decisionLines === undefined;
 
 const runRecap = async (
   engine: EngineInterface,
   progress: HandoffProgress,
   request: RecapRequest
 ): Promise<{ text: string }> => {
+  if (shouldAskQuestionsFirst(progress, request)) {
+    const recentMessages = await describeRecentMessages(engine, false);
+    if (!recentMessages) return { text: NO_RECAP_MESSAGE };
+    progress.awaitedRecap = askConversationForQuestions(engine, request);
+    showStatus(engine, ASKING_QUESTIONS_MESSAGE);
+    return { text: ASKING_QUESTIONS_MESSAGE };
+  }
   const recapStart = await startRecap(engine, request, progress.writer);
   if (recapStart.delegation !== undefined) {
     const { delegation, delegationPrefix } = recapStart;
@@ -1043,7 +998,7 @@ const runRecap = async (
     return { text: `${delegationPrefix}${delegation.routeNotice}` };
   }
   if (recapStart.failure !== undefined) return { text: recapStart.failure };
-  return deliverRecap(engine, progress, request, recapStart.recap, false);
+  return deliverRecap(engine, request, recapStart.recap, false);
 };
 
 const showBox = async (
@@ -1077,6 +1032,7 @@ const finishBox = async (
 export const register: Register = (on, options) => {
   const progress: HandoffProgress = {
     writer: readStringOption(options, "writer"),
+    canAskInConversation: options.hasConversationTurns !== false,
     awaitedRecap: undefined,
     recapAgentIds: [],
     openBox: undefined,
@@ -1243,8 +1199,21 @@ export const register: Register = (on, options) => {
     const turnResult = await next(e);
     if (!progress.awaitedRecap || !isAwaitedTurn(progress.awaitedRecap, e))
       return turnResult;
-    const { request } = progress.awaitedRecap;
+    const { request, isQuestionTurn } = progress.awaitedRecap;
     progress.awaitedRecap = undefined;
+    if (isQuestionTurn) {
+      showStatus($, undefined);
+      if (e.isAborted) {
+        showToast($, CANCELLED_MESSAGE);
+        return turnResult;
+      }
+      const settledRequest = settleQuestions(
+        request,
+        readDecisionLines(e.answer)
+      );
+      const recapOutcome = await runRecap($, progress, settledRequest);
+      return { ...turnResult, text: recapOutcome.text };
+    }
 
     const isConversationTurn = e.agentId === undefined;
     if (e.agentId !== undefined) progress.recapAgentIds.push(e.agentId);
@@ -1256,8 +1225,7 @@ export const register: Register = (on, options) => {
       return turnResult;
     }
     const outcome = recap
-      ? (await deliverRecap($, progress, request, recap, isConversationTurn))
-          .text
+      ? (await deliverRecap($, request, recap, isConversationTurn)).text
       : EMPTY_REPLY_MESSAGE;
     if (isConversationTurn) {
       showStatus($, undefined);

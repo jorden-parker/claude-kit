@@ -6,7 +6,7 @@
     "writer": {
       "type": "string",
       "title": "Recap writer",
-      "description": "Who writes the recap. subagent (the default) starts a Haiku subagent, which also works behind an API proxy that refuses background requests. haiku asks Haiku in the background first and starts the subagent when the API refuses. conversation has the session's own model write the recap as a normal turn.",
+      "description": "Who writes the recap. subagent (the default) starts a Haiku subagent, which also works behind an API proxy that refuses background requests. haiku asks Haiku in the background first and starts the subagent when the API refuses. With both, the session's own model first judges and asks the open questions in a short turn. conversation has the session's own model ask and write the recap in one normal turn.",
       "default": "subagent",
       "options": ["subagent", "haiku", "conversation"]
     }

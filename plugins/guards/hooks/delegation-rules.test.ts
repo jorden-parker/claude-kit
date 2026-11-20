@@ -20,6 +20,7 @@ test("adds the delegation rules as session context", () => {
   expect(contextOf(result)).toContain("guards:worker");
   expect(contextOf(result)).toContain("orchestrator");
   expect(contextOf(result)).toContain('model: "haiku"');
+  expect(contextOf(result)).toContain("never the user's");
 });
 
 test("adds nothing when GUARDS_DELEGATE_GUARD is 0", () => {

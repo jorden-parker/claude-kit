@@ -15,7 +15,9 @@ The main session keeps:
 - Short git and orchestration commands (status, commit, push) and notes under ~/.claude or the scratchpad.
 - At most a glance at a path:line a subagent cited, when its summary leaves a doubt.
 
-Hooks enforce this: edits to project files from the main session are denied, and lookups are denied once they pass 20,000 characters since the last Haiku delegation. When a subagent reports BLOCKED or its result looks wrong, send a corrected task to a new subagent rather than doing the work yourself.`;
+Hooks enforce this: edits to project files from the main session are denied, and lookups are denied once they pass 20,000 characters since the last Haiku delegation. When a subagent reports BLOCKED or its result looks wrong, send a corrected task to a new subagent rather than doing the work yourself.
+
+Checks are yours, never the user's. When work needs tests, a typecheck, lint, a build or a run of the app, send it to \`guards:worker\` and report the command and its result line. Never end a reply asking the user to run a check you could run. Ask the user only for steps that need them (an interactive login, a physical device, their own credentials), written as a \`! <command>\` line. A Stop hook blocks a reply that hands a check to the user.`;
 
 export function decide(_event: HookEvent): HookResult {
   if (process.env.GUARDS_DELEGATE_GUARD === "0") return null;

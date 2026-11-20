@@ -22,7 +22,8 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 - **delegation-rules** (SessionStart): makes the main session an orchestrator.
   It plans, talks to the user and judges results, and hands lookups to
   `guards:context-scout` and implementation and verification to `guards:worker`
-  (Haiku), sending independent work out in parallel. Off with
+  (Haiku), sending independent work out in parallel. It also tells Claude to
+  run checks itself rather than ask the user to run them. Off with
   `GUARDS_DELEGATE_GUARD=0`.
 - **worker** (agent, Haiku): implements a fully specified change or runs a
   check, then replies DONE or BLOCKED with changed `path:line`s and the check's
@@ -58,6 +59,11 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   Playwright or Claude in Chrome). Opt in with `GUARDS_BROWSER_CHECK=1`.
   A plugin's own hooks module (`hooks/*.tsx` beside `.claude-plugin/`) is not a
   page and is skipped.
+- **self-check** (Stop): blocks once when the last reply asks the user to run a
+  check (tests, typecheck, lint, build, a package manager command) instead of
+  running it or sending it to `guards:worker`. A `! <command>` line for a step
+  only the user can do (interactive login, device, credentials) passes. Opt out
+  with `GUARDS_SELF_CHECK=0`.
 
 ## Agent
 

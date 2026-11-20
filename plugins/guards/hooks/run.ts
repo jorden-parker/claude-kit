@@ -14,6 +14,7 @@ import { decideDelegationFromTranscript as delegateGuard } from "./delegate-guar
 import { decide as delegationRules } from "./delegation-rules.ts";
 import { decide as bashTrim } from "./bash-trim.ts";
 import { decide as readGuard } from "./read-guard.ts";
+import { decideFromTranscript as selfCheck } from "./self-check.ts";
 import type { HookEvent, HookResult, SavedOutput } from "./types.ts";
 
 const MAX_LOG_BYTES = 5_000_000;
@@ -26,6 +27,7 @@ const HOOKS: Record<string, (event: HookEvent) => HookResult> = {
   "delegate-guard": delegateGuard,
   "delegation-rules": delegationRules,
   "read-guard": readGuard,
+  "self-check": selfCheck,
 };
 
 export function hookLogPath(userHome: string): string {

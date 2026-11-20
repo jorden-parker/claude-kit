@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -327,4 +328,117 @@ export function readNewestEntries(
     .sort((first, second) => statSync(second).mtimeMs - statSync(first).mtimeMs)
     .slice(0, count)
     .flatMap((path) => readEntry(path) ?? []);
+}
+
+export type ReplyWordCounts = { finalWords: number; narrationWords: number };
+
+type TranscriptEntry = {
+  type?: string;
+  isSidechain?: boolean;
+  message?: TranscriptMessage;
+};
+
+const DEFAULT_REPLY_WORDS = 150;
+const DEFAULT_NARRATION_WORDS = 40;
+
+function parseEntry(text: string): TranscriptEntry | undefined {
+  try {
+    return JSON.parse(text) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const countWords = (text: string) =>
+  text.split(/\s+/).filter((word) => word.length > 0).length;
+
+function isPromptEntry(entry: TranscriptEntry): boolean {
+  const content = entry.message?.content;
+  if (typeof content === "string") return true;
+  if (!Array.isArray(content)) return false;
+  const hasText = content.some((block) => block?.type === "text");
+  const hasToolResult = content.some((block) => block?.type === "tool_result");
+  return hasText && !hasToolResult;
+}
+
+export function countLastReplyWords(transcript: string): ReplyWordCounts {
+  const entries = transcript
+    .split("\n")
+    .map(parseEntry)
+    .filter(
+      (entry): entry is TranscriptEntry =>
+        entry !== undefined && entry.isSidechain !== true
+    );
+  const lastPromptIndex = entries.findLastIndex(
+    (entry) => entry.type === "user" && isPromptEntry(entry)
+  );
+  const counts: ReplyWordCounts = { finalWords: 0, narrationWords: 0 };
+  let pendingWords = 0;
+  for (const entry of entries.slice(lastPromptIndex + 1)) {
+    const content = entry.message?.content;
+    if (entry.type !== "assistant" || !Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block?.type === "text" && typeof block.text === "string") {
+        pendingWords += countWords(block.text);
+      } else if (block?.type === "tool_use") {
+        counts.narrationWords += pendingWords;
+        pendingWords = 0;
+      }
+    }
+  }
+  counts.finalWords = pendingWords;
+  return counts;
+}
+
+function replyNotePath(userHome: string, sessionId: string): string {
+  return join(userHome, ".cache/token-ledger/notes", `${sessionId}.txt`);
+}
+
+export function recordReplyMeter(event: StopEvent, userHome: string): void {
+  const transcriptPath = event.transcript_path;
+  if (!event.session_id || !transcriptPath || !existsSync(transcriptPath))
+    return;
+  const notePath = replyNotePath(userHome, event.session_id);
+  const { finalWords, narrationWords } = countLastReplyWords(
+    readFileSync(transcriptPath, "utf8")
+  );
+  const replyBudget = Number(
+    process.env.TOKEN_LEDGER_REPLY_WORDS ?? DEFAULT_REPLY_WORDS
+  );
+  const narrationBudget = Number(
+    process.env.TOKEN_LEDGER_NARRATION_WORDS ?? DEFAULT_NARRATION_WORDS
+  );
+  if (finalWords <= replyBudget && narrationWords <= narrationBudget) {
+    rmSync(notePath, { force: true });
+    return;
+  }
+  mkdirSync(dirname(notePath), { recursive: true });
+  writeFileSync(
+    notePath,
+    `Your last reply ran ${finalWords} words (budget ${replyBudget}) with ${narrationWords} words of narration between tool calls (budget ${narrationBudget}). Say less: write nothing between tool calls, and keep the final reply under ${replyBudget} words unless the reader asked you to explain.`
+  );
+}
+
+export type ReplyNoteOutput = {
+  hookSpecificOutput: {
+    hookEventName: "UserPromptSubmit";
+    additionalContext: string;
+  };
+};
+
+export function takeReplyNote(
+  sessionId: string | undefined,
+  userHome: string
+): ReplyNoteOutput | null {
+  if (!sessionId) return null;
+  const notePath = replyNotePath(userHome, sessionId);
+  if (!existsSync(notePath)) return null;
+  const additionalContext = readFileSync(notePath, "utf8");
+  rmSync(notePath, { force: true });
+  return {
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext,
+    },
+  };
 }

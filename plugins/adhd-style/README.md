@@ -14,6 +14,7 @@ Every reply in the main conversation follows the rules in
 - Work replies end with `Now:` and one concrete action.
 - Errors, failing tests, security warnings and destructive-action confirmations
   stay in full.
+- Says less: nothing between tool calls, about 100 words per reply, no echoing diffs or output.
 
 Claude Code's coding instructions stay on (`keep-coding-instructions: true`).
 

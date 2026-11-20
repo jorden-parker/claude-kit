@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   appendFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -11,10 +12,13 @@ import { join } from "node:path";
 import {
   composeNudge,
   composeSummary,
+  countLastReplyWords,
   formatReport,
   type LedgerEntry,
+  recordReplyMeter,
   recordSession,
   summarizeTranscript,
+  takeReplyNote,
   waitForLastReply,
 } from "./ledger.ts";
 
@@ -296,4 +300,111 @@ test("the report lists the newest sessions with their totals and biggest tools",
   );
   expect(report).toContain("subagents haiku: in 50k");
   expect(report).toContain("Read 40k chars, Bash 9k chars, Agent 0k chars");
+});
+
+const promptLine = (text: string) =>
+  JSON.stringify({ type: "user", message: { role: "user", content: text } });
+
+const assistantTextLine = (messageId: string, text: string) =>
+  assistantLine(messageId, "fable", usage(1, 0, 0, 1), [
+    { type: "text", text },
+  ]);
+
+test("counts narration before a tool call apart from the final reply", () => {
+  const counts = countLastReplyWords(
+    transcript(
+      promptLine("fix the build"),
+      assistantLine("msg_1", "fable", usage(1, 0, 0, 1), [
+        { type: "text", text: "Let me check the build log now." },
+        { type: "tool_use", id: "toolu_1", name: "Bash" },
+      ]),
+      toolResultLine("toolu_1", "build failed"),
+      assistantTextLine("msg_2", "The build now passes after the fix.")
+    )
+  );
+  expect(counts).toEqual({ finalWords: 7, narrationWords: 7 });
+});
+
+test("a tool_result user entry does not start a new reply", () => {
+  const counts = countLastReplyWords(
+    transcript(
+      promptLine("first question"),
+      assistantLine("msg_1", "fable", usage(1, 0, 0, 1), [
+        { type: "text", text: "Working on it." },
+        { type: "tool_use", id: "toolu_1", name: "Bash" },
+      ]),
+      toolResultLine("toolu_1", "output"),
+      assistantTextLine("msg_2", "Done here now.")
+    )
+  );
+  expect(counts).toEqual({ finalWords: 3, narrationWords: 3 });
+});
+
+test("no assistant text gives zero words", () => {
+  const counts = countLastReplyWords(
+    transcript(
+      promptLine("hello"),
+      assistantLine("msg_1", "fable", usage(1, 0, 0, 1), [
+        { type: "tool_use", id: "toolu_1", name: "Bash" },
+      ]),
+      toolResultLine("toolu_1", "output")
+    )
+  );
+  expect(counts).toEqual({ finalWords: 0, narrationWords: 0 });
+});
+
+test("sidechain entries and broken lines are not counted", () => {
+  const sidechainLine = JSON.stringify({
+    type: "assistant",
+    isSidechain: true,
+    message: {
+      id: "msg_9",
+      content: [{ type: "text", text: "one two three" }],
+    },
+  });
+  const counts = countLastReplyWords(
+    transcript(
+      promptLine("question"),
+      '{"type": "assistant", "message"',
+      sidechainLine,
+      assistantTextLine("msg_1", "Answer  with   spaces.")
+    )
+  );
+  expect(counts).toEqual({ finalWords: 3, narrationWords: 0 });
+});
+
+const replyNotePath = (userHome: string) =>
+  join(userHome, ".cache/token-ledger/notes/session-1.txt");
+
+test("a reply over the word budget leaves a note that the next prompt reads", () => {
+  const { userHome, event } = createSession(1000);
+  const longReply = Array.from({ length: 160 }, () => "word").join(" ");
+  writeFileSync(
+    event.transcript_path,
+    transcript(promptLine("explain it"), assistantTextLine("msg_1", longReply))
+  );
+  recordReplyMeter(event, userHome);
+  const note =
+    "Your last reply ran 160 words (budget 150) with 0 words of narration between tool calls (budget 40). Say less: write nothing between tool calls, and keep the final reply under 150 words unless the reader asked you to explain.";
+  expect(readFileSync(replyNotePath(userHome), "utf8")).toBe(note);
+  expect(takeReplyNote("session-1", userHome)).toEqual({
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: note,
+    },
+  });
+  expect(existsSync(replyNotePath(userHome))).toBe(false);
+});
+
+test("a reply within budget removes an old note", () => {
+  const { userHome, event } = createSession(1000);
+  writeFileSync(
+    event.transcript_path,
+    transcript(promptLine("short?"), assistantTextLine("msg_1", "Yes."))
+  );
+  mkdirSync(join(userHome, ".cache/token-ledger/notes"), { recursive: true });
+  writeFileSync(replyNotePath(userHome), "stale note");
+  recordReplyMeter(event, userHome);
+  expect(existsSync(replyNotePath(userHome))).toBe(false);
+  expect(takeReplyNote("session-1", userHome)).toBeNull();
 });

@@ -409,10 +409,10 @@ ${
 2. Start the ${IMPLEMENTER_AGENT} agent with the plan file's absolute path as its prompt. It answers DONE or BLOCKED.
 3. On DONE, review the work yourself, like a tech lead reviewing a pull request against the plan. Trust nothing in the agent's report until a tool result shows it:
    a. Run the command under "## Check" and compare its output with "- Expect:".
-   b. Run \`git diff --stat\`. Every file this plan changed is named in the plan; a change to any other file fails the review.
+   b. Run \`git diff --stat\`. Every file this plan changed is named in the plan; a change to any other file fails the review, unless it fixes a lint, fallow, code style or test failure a check or hook reported.
    c. Read the full \`git diff\` of those files. Every hunk traces to a step, the code the plan quotes is there as quoted, and each "## Review" line holds.
    d. Read what each new or changed test asserts. A test that would pass without the change fails the review.
-   e. Run the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json) and, in a JavaScript or TypeScript project, \`fallow audit\`. A lint error or a failing fallow verdict fails the review, even when the plan's check passes.
+   e. Run the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json) and, in a JavaScript or TypeScript project, \`fallow audit\`. Run the project's tests too. When lint, fallow or the tests fail, even with the plan's check passing, start a general-purpose agent to fix every reported failure, including pre-existing ones and ones in files the plan does not name, then run the commands again. Repeat until they pass; a failing guard never sets a plan to blocked or counts as a fix round.
 4. When the review passes, set the status to done.
 5. When it fails, write numbered findings, each naming the step or "## Review" line, the file and line, and what the plan asks for that the work does not do. Start a new ${IMPLEMENTER_AGENT} agent with the plan file's absolute path, a blank line, then the findings. Review its work again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
 6. When the implementer answers BLOCKED, or the work still fails review after ${MAX_FIX_ROUNDS} fix rounds, set the status to blocked with the reason and go on with the next plan that does not depend on it.

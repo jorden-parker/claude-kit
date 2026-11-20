@@ -37,5 +37,5 @@ marker_file="/tmp/claude-naming-review-${safe_session_id}-${file_list_hash}"
 touch "$marker_file" 2>/dev/null || exit 0
 
 changed_file_summary=$(printf '%s\n' "$changed_source_files" | head -n 20 | paste -sd ' ' -)
-echo "Before finishing, run the naming-review skill over the changed files and fix any identifiers that fail. Changed files: ${changed_file_summary}" >&2
+echo "Before finishing, run the naming-review skill over the changed files. Spawn a subagent with the Agent tool to fix every identifier that fails, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on. Changed files: ${changed_file_summary}" >&2
 exit 2

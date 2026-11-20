@@ -2,7 +2,7 @@
 set -uo pipefail
 
 readonly MAX_REPORTED_LINES=5
-readonly VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove them and make the code self-explanatory (extract a named function or variable instead)."
+readonly VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove them and make the code self-explanatory (extract a named function or variable instead). Spawn a subagent with the Agent tool to fix these comments and every other comment in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
 
 comment_style_for_shebang() {
   case "$1" in

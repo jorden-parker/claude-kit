@@ -58,7 +58,7 @@ fi
 mkdir -p "$(dirname "$block_count_file")" 2>/dev/null
 echo $((blocks_so_far + 1)) > "$block_count_file"
 {
-  echo "Tests are failing. Fix them before finishing:"
+  echo "Tests are failing. Spawn a subagent with the Agent tool to fix every failure below, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
   printf '%s\n' "$test_output" | tail -n 40
 } >&2
 exit 2

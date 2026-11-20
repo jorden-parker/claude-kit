@@ -529,7 +529,7 @@ test("/small-plans build has the session review each plan and send fixes to a ne
   expect(submittedPrompts[0]).not.toContain("small-plan-reviewer");
 });
 
-test("/small-plans build fails the review of a plan while lint or fallow fails", async ($, on) => {
+test("/small-plans build has a failing guard fixed by a subagent instead of blocking the plan", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "build", {
     [STANDALONE_SET_PLAN]: "status: pending",
   });
@@ -537,7 +537,13 @@ test("/small-plans build fails the review of a plan while lint or fallow fails",
   expect(submittedPrompts[0]).toContain("project's lint command");
   expect(submittedPrompts[0]).toContain("fallow audit");
   expect(submittedPrompts[0]).toContain(
-    "A lint error or a failing fallow verdict fails the review"
+    "start a general-purpose agent to fix every reported failure, including pre-existing ones and ones in files the plan does not name"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "a failing guard never sets a plan to blocked"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "unless it fixes a lint, fallow, code style or test failure a check or hook reported"
   );
 });
 

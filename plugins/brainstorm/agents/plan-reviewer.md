@@ -82,7 +82,7 @@ The prompt gives the plan folder path and the base commit.
 
 1. Read plan.md and every step file in the folder.
 2. Run `git diff <base>` and `git status --short`, and read any new untracked files. Limit your review to the files the plan's steps name. Changes from earlier plans may also show up for shared files: review only this plan's edits.
-3. Check that every step was done as written, and that nothing outside the plan's scope changed.
+3. Check that every step was done as written, and that nothing outside the plan's scope changed, apart from fixes for lint, fallow, code style or test failures a check or hook reported.
 4. Run every step's Check and every Done criterion. Run the project's full test suite and type-checker when it has them. Do not change any file to make them pass.
 5. For a spike plan, check that findings.md answers every question.
 6. Look for what a careful senior reviewer would block on: bugs, missed edge cases, tests that were weakened or do not test the change, broken conventions, and rules from CLAUDE.md that were ignored.

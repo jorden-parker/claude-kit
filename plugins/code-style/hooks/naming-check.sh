@@ -63,6 +63,6 @@ violations=$(printf '%s\n' "$new_text" | EXTENSION="$extension" ALLOWLIST_FILE="
 {
   echo "Naming violations in ${file_path}:"
   printf '%s\n' "$violations" | head -n 8 | sed 's/^/  /'
-  echo "Rename to a descriptive name; the Naming rules from session start list what passes."
+  echo "Rename to a descriptive name; the Naming rules from session start list what passes. Spawn a subagent with the Agent tool to fix these names and every other failing name in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
 } >&2
 exit 2

@@ -90,6 +90,7 @@ const PRIDE_STRIPE_COLORS = [
 ] as const;
 const BOX_PANE_ID = "handoff";
 const BOX_ROWS = 11;
+const BOX_SIDE_PADDING = 2;
 const NOTES_INPUT_ROWS = 3;
 const NOTES_BOX_TITLE = "Handoff notes";
 const RESUME_BOX_TITLE = "Resume a handoff";
@@ -1102,18 +1103,23 @@ export const register: Register = (on, options) => {
         key: "handoff-box",
         flexDirection: "column",
         gap: 1,
-        paddingX: 2,
+        paddingX: BOX_SIDE_PADDING,
         paddingY: 1,
       },
       h(
         Box,
         { flexDirection: "row", gap: 1 },
-        h(Text, { bold: true }, `${HANDOFF_GLYPH} ${wording.heading}`),
+        h(Text, { weight: "semibold" }, `${HANDOFF_GLYPH} ${wording.heading}`),
         h(
           Text,
           {},
           ...PRIDE_STRIPE_COLORS.map((color) => h(Text, { color }, "━━"))
         )
+      ),
+      h(
+        Text,
+        { color: "subtle", wrap: "clip" },
+        "─".repeat(Math.max(e.props.bodyColumns - BOX_SIDE_PADDING * 2, 0))
       ),
       h(Input, {
         key: "notes",
@@ -1143,27 +1149,40 @@ export const register: Register = (on, options) => {
         : null,
       h(
         Box,
-        { flexDirection: "row", gap: 2 },
+        {
+          key: "handoff-footer",
+          flexDirection: "row",
+          justifyContent: "space-between",
+          columnGap: 2,
+        },
         h(
-          Button,
-          {
-            key: "continue",
-            variant: "primary",
-            onPress: () => finishBox($, progress),
-          },
-          box.kind === "resume" ? "Resume" : "Hand off"
+          Box,
+          { flexDirection: "row", gap: 2, flexShrink: 0 },
+          h(
+            Button,
+            {
+              key: "continue",
+              variant: "primary",
+              onPress: () => finishBox($, progress),
+            },
+            box.kind === "resume" ? "Resume" : "Hand off"
+          ),
+          h(
+            Button,
+            {
+              key: "cancel",
+              role: "dismiss",
+              onPress: () => cancelBox($, progress),
+            },
+            "Cancel"
+          )
         ),
         h(
-          Button,
-          {
-            key: "cancel",
-            role: "dismiss",
-            onPress: () => cancelBox($, progress),
-          },
-          "Cancel"
+          Box,
+          { flexShrink: 1, justifyContent: "flex-end" },
+          h(Text, { dimColor: true, wrap: "truncate-end" }, wording.keysHint)
         )
-      ),
-      h(Text, { dimColor: true }, wording.keysHint)
+      )
     ) as RenderElement;
   });
 

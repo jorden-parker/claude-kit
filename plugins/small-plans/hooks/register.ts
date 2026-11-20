@@ -715,7 +715,7 @@ export const register: Register = (on) => {
       h(
         Box,
         { flexDirection: "row", gap: 1, paddingX: 1 },
-        h(Text, { bold: true }, PICKER_HEADING),
+        h(Text, { weight: "semibold" }, PICKER_HEADING),
         h(
           Text,
           {},

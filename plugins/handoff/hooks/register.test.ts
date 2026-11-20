@@ -1917,6 +1917,48 @@ testWithSession(
 );
 
 testWithSession(
+  "the notes box heading is semibold, with a subtle divider across the body below it",
+  CONVERSATION,
+  async ($, on) => {
+    ignoreToasts(on);
+    placeBoxPane(on);
+
+    await $.command.run(handoff("new"));
+    const box = await $.ui.mount(BOX_PANE);
+
+    const heading = await box.find({
+      type: "Text",
+      text: "📜 Notes for the next session",
+    });
+    expect(heading?.props).toMatchObject({ weight: "semibold" });
+    expect(heading?.props).not.toHaveProperty("bold");
+    const divider = await box.find({ type: "Text", text: /^─+$/ });
+    expect(divider?.text).toBe("─".repeat(56));
+    expect(divider?.props).toMatchObject({ color: "subtle", wrap: "clip" });
+  }
+);
+
+testWithSession(
+  "the notes box puts its buttons and key hint on one footer row",
+  CONVERSATION,
+  async ($, on) => {
+    ignoreToasts(on);
+    placeBoxPane(on);
+
+    await $.command.run(handoff("new"));
+    const box = await $.ui.mount(BOX_PANE);
+
+    expect((await box.find({ key: "handoff-footer" }))?.props).toMatchObject({
+      flexDirection: "row",
+      justifyContent: "space-between",
+    });
+    expect(
+      (await box.find({ type: "Text", text: /Esc cancels$/ }))?.props
+    ).toMatchObject({ dimColor: true, wrap: "truncate-end" });
+  }
+);
+
+testWithSession(
   "the notes box keeps two columns and a blank row clear of the pane edge",
   CONVERSATION,
   async ($, on) => {

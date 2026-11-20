@@ -895,6 +895,14 @@ test("a small-plans picker gets a blank row above and below, and no side padding
   expect(picker?.props).not.toHaveProperty("paddingX");
 });
 
+test("the small-plans picker heading is semibold rather than the deprecated bold", async ($) => {
+  const drawing = await mountQuestion($, SET_QUESTION);
+  const heading = await drawing.find({ type: "Text", text: "🧩 Small plans" });
+
+  expect(heading?.props).toMatchObject({ weight: "semibold" });
+  expect(heading?.props).not.toHaveProperty("bold");
+});
+
 test("another plugin's question gets no small-plans heading", async ($) => {
   const drawing = await mountQuestion($, "Which database should we use?");
 

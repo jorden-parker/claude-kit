@@ -62,4 +62,12 @@ for themed_page in \
   expect "$themed_page carries every line of theme/kit-theme.css" has_kit_theme "$themed_page"
 done
 
+has_go_version_file() {
+  [ -f "$repository_root/$1" ]
+}
+
+while IFS= read -r go_version_file; do
+  expect "workflow go-version-file $go_version_file exists" has_go_version_file "$go_version_file"
+done < <(grep -ho 'go-version-file: .*' "$repository_root"/.github/workflows/*.yml | sed 's/go-version-file: //')
+
 [ "$failures" -eq 0 ] || exit 1

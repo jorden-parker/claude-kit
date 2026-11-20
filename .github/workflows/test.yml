@@ -22,7 +22,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-go@v5
         with:
-          go-version-file: plugins/project-notes/web/go.mod
+          go-version-file: notes-viewer/go.mod
           cache: false
       - run: npm install --global @anthropic-ai/claude-code
       - run: |

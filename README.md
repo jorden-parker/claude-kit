@@ -63,6 +63,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
   - Brainstorm plans: a `# Plan: <title>` first line, a `- Status:` line, `## Context`, `## Steps`, and no banned phrases
 - The server only writes files that match a section's note layout, and refuses requests from other hosts or origins. It listens on `127.0.0.1`, port `47618`; `CLAUDE_NOTES_PORT` picks another, `CLAUDE_NOTES_NO_OPEN=1` skips opening the browser
 - If it is already running, `claude-notes` opens the same page again. `Ctrl+C` stops it
+- The Token use section lists each project's token use from token-ledger's `~/.cache/token-ledger/sessions/`, with a bar against the biggest project and a table of its sessions. It is read-only; `TOKEN_LEDGER_DIR` reads another folder
 - The page reloads the notes when you come back to its tab. Raw HTML in a note is not rendered
 - It serves `index.html` from the checkout and reloads the page whenever that file is saved. Go changes still need `Ctrl+C` and a rerun
 

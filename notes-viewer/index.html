@@ -240,6 +240,11 @@
         transform: scaleX(var(--progress, 0));
         transition: transform 500ms var(--spring);
       }
+      nav a .progress-bar {
+        display: block;
+        width: 100%;
+        margin-top: 4px;
+      }
       .progress[data-complete] {
         color: var(--done);
       }
@@ -1236,6 +1241,15 @@
         },
         "small-plans": { ...PLAN_VIEW, hasEditableSets: true },
         brainstorm: { ...PLAN_VIEW, deleteWarning: "Its step files go with it." },
+        tokens: {
+          noun: "project",
+          isReadOnly: true,
+          describeLink: (entry) => ({
+            label: entry.title,
+            caption: `${Number(entry.fields.total_tokens).toLocaleString()} tokens · ${entry.fields.sessions} sessions`,
+          }),
+          listDetails: (entry) => [`${entry.fields.sessions} sessions`],
+        },
       };
 
       const setMenuOpen = (isOpen) => {
@@ -1266,6 +1280,12 @@
         link.title = entry.title;
         if (status) link.dataset.status = status;
         if (caption) link.append(createElement("small", caption));
+        if (entry.fields.share) {
+          const shareBar = createElement("span", "", "progress-bar");
+          shareBar.setAttribute("aria-hidden", "true");
+          shareBar.style.setProperty("--progress", entry.fields.share);
+          link.append(shareBar);
+        }
         if (entry === selectedEntry) link.setAttribute("aria-current", "page");
         return link;
       };
@@ -1325,7 +1345,7 @@
         entries.forEach((entry, entryIndex) => {
           const previousEntry = entries[entryIndex - 1] ?? {};
           const isNewProject = entry.project !== previousEntry.project;
-          if (isNewProject) sidebar.append(createProjectHeading(entry.project));
+          if (isNewProject && !SECTION_VIEWS[selectedSection.id].isReadOnly) sidebar.append(createProjectHeading(entry.project));
           if (entry.group && (isNewProject || entry.group !== previousEntry.group)) sidebar.append(createGroupHeading(selectedSection, entry));
           sidebar.append(createEntryLink(selectedSection, entry, selectedEntry));
         });
@@ -1364,7 +1384,8 @@
           createButton(`Edit ${capitalNoun}`, "pencil", "button", () => startEditing(selectedSection, selectedEntry)),
           createButton(`Delete ${capitalNoun}`, "trash", "button quiet-danger", () => deleteEntry(selectedSection, selectedEntry))
         );
-        header.append(createElement("h1", selectedEntry.title), actions);
+        header.append(createElement("h1", selectedEntry.title));
+        if (!SECTION_VIEWS[selectedSection.id].isReadOnly) header.append(actions);
         return header;
       };
 
@@ -1390,7 +1411,10 @@
 
       const loadSections = async () => {
         try {
-          sections = await (await fetch("/api/sections")).json();
+          const [noteSections, tokenSection] = await Promise.all(
+            ["/api/sections", "/api/tokens"].map(async (url) => (await fetch(url)).json())
+          );
+          sections = [...noteSections, tokenSection];
         } catch (error) {
           entryArea.replaceChildren(createElement("p", "Can’t reach the notes server. Run claude-notes again, then reload this page.", "empty"));
           return;

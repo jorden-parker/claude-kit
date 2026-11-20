@@ -967,7 +967,7 @@ const buildImplementationPrompt = (
   requestedRuns: string,
   plansFolder: string
 ) =>
-  `Build brainstorm plans. Load the brainstorm:build-plans skill with the Skill tool and follow it exactly. Do not commit anything.
+  `Build brainstorm plans. Load the brainstorm:build-plans skill with the Skill tool and follow it exactly. Commit and push only each plan the reviewer approves, as the skill says.
 
 The plans folder of this project is ${plansFolder}.
 

@@ -547,6 +547,23 @@ test("/small-plans build has a failing guard fixed by a subagent instead of bloc
   );
 });
 
+test("/small-plans build commits and pushes each approved plan with a one-line subject", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(submittedPrompts[0]).toContain(
+    "When the review passes, commit and push that work"
+  );
+  expect(submittedPrompts[0]).toContain("one short conventional subject line");
+  expect(submittedPrompts[0]).toContain(
+    "no body and no Co-Authored-By or other attribution line"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "Never commit or push work the review has not approved"
+  );
+});
+
 const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;
 const THREE_PLAN_SET = {
   [`${SET_FOLDER}/01-add-the-toggle.md`]: "status: done",

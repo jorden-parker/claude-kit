@@ -758,7 +758,9 @@ test("brainstorm build hands the build to the build-plans skill and does not rep
   expect(instructions).toContain("Skill tool");
   expect(instructions).toContain("brainstorm:build-plans");
   expect(instructions).toContain("follow it exactly");
-  expect(instructions).toContain("Do not commit anything.");
+  expect(instructions).toContain(
+    "Commit and push only each plan the reviewer approves"
+  );
   expect(instructions).not.toContain("brainstorm:step-implementer");
   expect(instructions).not.toContain("brainstorm:plan-reviewer");
   expect(instructions).not.toContain("<focus>");

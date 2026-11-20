@@ -8,7 +8,7 @@ user-invocable: false
 
 You coordinate the build. You do not write source code. You keep your own context small: pass paths between agents, never file contents.
 
-You write only inside a run folder, and only two things: the checkbox lines of a plan.md, and the step files the reviewer returns. The implementer ticks the lines it builds. Do not commit anything.
+You write only inside a run folder, and only two things: the checkbox lines of a plan.md, and the step files the reviewer returns. The implementer ticks the lines it builds. The only commits are the ones the final review's step 2 makes, after the reviewer approves a plan.
 
 ## The files
 
@@ -77,7 +77,7 @@ One implementer builds the whole plan. It takes every unticked line of plan.md i
 ### Final review
 
 1. Call the Agent tool with subagent_type `brainstorm:plan-reviewer`. Its prompt is the word "final review", the absolute plan folder path, and the base commit.
-2. If it replies APPROVED, set the plan's status to `done`.
+2. If it replies APPROVED, commit and push that work: stage only the files this plan and its guard fixes changed, never a file that was already dirty before the plan started unless the plan changed it; match the style of `git log --oneline -10`; commit with one short conventional subject line, such as `git commit -m "feat(scope): add the toggle"`, with no body and no Co-Authored-By or other attribution line; then run `git push`. Never commit or push work the review has not approved. If the commit or push fails, say so in the plan's report line and go on. Then set the plan's status to `done`.
 3. If it replies FIXES NEEDED, it returns fix steps as more step files. Write them into the plan folder, and add one unticked line for each at the end of `## Steps` in plan.md: `- [ ] [step-NN](step-NN.md): <title>`.
    - If this build has already done two fix rounds for this plan, the plan stops. Its unticked lines are the open fixes, and the next build picks them up.
    - Otherwise build those lines as "Build the steps" says, with one implementer call for all of them, then do the final review again.

@@ -1,5 +1,5 @@
 {
   "name": "small-plans",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "/small-plans breaks work into small, self-contained plans a weaker model can implement and review, saved as Markdown files under ~/.claude/small-plans/<project>/<set>/; the work is what you name, what the conversation leaves, or with handoff what a saved handoff leaves; build has small-model agents implement a whole set or one plan while the session reviews and sends back fixes"
 }

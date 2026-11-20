@@ -35,17 +35,10 @@ fi
 echo "Updating every marketplace"
 claude plugin marketplace update
 
-plugin_listing="$(claude plugin list --available --json)"
-
 while IFS=$'\t' read -r plugin_id plugin_scope; do
   echo "Updating $plugin_id"
   claude plugin update "$plugin_id" --scope "$plugin_scope" || failed_steps+=("update $plugin_id")
-done < <(jq -r '.installed[] | [.id, .scope] | @tsv' <<<"$plugin_listing")
-
-while IFS= read -r plugin_id; do
-  echo "Installing $plugin_id"
-  claude plugin install "$plugin_id" --scope user || failed_steps+=("install $plugin_id")
-done < <(jq -r '.available[] | select(.marketplaceName == "claude-kit") | .pluginId' <<<"$plugin_listing")
+done < <(claude plugin list --available --json | jq -r '.installed[] | [.id, .scope] | @tsv')
 
 mkdir -p "$link_directory"
 link_command "$repository_root/notes-viewer/claude-notes"

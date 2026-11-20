@@ -408,6 +408,67 @@ test("the render tool saves the ideas as numbered data beside the page", async (
   ]);
 });
 
+test("earlier ideas whose files changed since that brainstorm show as done", async ($, on) => {
+  const writes: FileWrite[] = [];
+  const gitLogCommands: string[][] = [];
+  mockHome(on);
+  on("session.cwd", () => ({ value: "/repo" }));
+  on("clock.now", () => ({ value: NOVEMBER_NINTH_NOON }));
+  on("fs.write", (_, e) => {
+    writes.push({ path: e.path, text: e.text });
+    return { value: undefined };
+  });
+  on("fs.list", () => ({
+    value: [{ name: "brainstorm-2026-11-08-1500.json", kind: "file" }],
+  }));
+  on("fs.read", () => ({
+    value: JSON.stringify({
+      project: "repo",
+      summary: "The earlier brainstorm.",
+      ideas: [
+        { ...SECURITY_IDEA, number: 1, title: "Rotate the deploy key" },
+        {
+          ...CREATIVE_IDEA,
+          number: 2,
+          title: "Cache the config",
+          files: ["src/config.ts"],
+        },
+      ],
+    }),
+  }));
+  on("process.run", (_, e) => {
+    const isGitLog = e.argv.includes("log");
+    if (isGitLog) gitLogCommands.push([...e.argv]);
+    return {
+      value: {
+        exitCode: 0,
+        stdout: isGitLog ? "src/auth.ts\n\nREADME.md\n" : "",
+        stderr: "",
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    };
+  });
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  const html = findPage(writes)?.text ?? "";
+  expect(gitLogCommands).toEqual([
+    [
+      "git",
+      "-C",
+      "/repo",
+      "log",
+      "--since=2026-11-08T15:00:00Z",
+      "--name-only",
+      "--pretty=format:",
+    ],
+  ]);
+  expect(html).toContain("Earlier ideas done since the last brainstorm (1)");
+  expect(html).toContain("Rotate the deploy key");
+  expect(html).not.toContain("Cache the config");
+});
+
 test("the page numbers each idea and offers a plan picker", async ($, on) => {
   const { writes } = mockEngine(on);
 

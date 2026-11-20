@@ -365,10 +365,27 @@ func isSameOrigin(request *http.Request) bool {
 func newViewerServer() http.Handler {
 	routes := http.NewServeMux()
 
+	sourceDirectory := devSourceDirectory()
+
 	routes.HandleFunc("GET /{$}", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		writer.Write(indexPage)
+		if sourceDirectory == "" {
+			writer.Write(indexPage)
+			return
+		}
+		page, err := readDevPage(sourceDirectory)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writer.Write(page)
 	})
+
+	if sourceDirectory != "" {
+		routes.HandleFunc("GET /api/live-reload", func(writer http.ResponseWriter, request *http.Request) {
+			streamPageChanges(sourceDirectory, writer, request)
+		})
+	}
 
 	routes.HandleFunc("GET /api/sections", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")

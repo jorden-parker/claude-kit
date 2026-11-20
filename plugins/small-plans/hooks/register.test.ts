@@ -564,6 +564,21 @@ test("/small-plans build commits and pushes each approved plan with a one-line s
   );
 });
 
+test("/small-plans build commits and pushes leftover uncommitted and unpushed work at the end", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(submittedPrompts[0]).toContain(
+    "commit and push the leftover work too"
+  );
+  expect(submittedPrompts[0]).toContain("@{u}..");
+  expect(submittedPrompts[0]).toContain(
+    "including ones from before this build, into logical commits, one per concern"
+  );
+  expect(submittedPrompts[0]).toContain("so no commit is left unpushed");
+});
+
 const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;
 const THREE_PLAN_SET = {
   [`${SET_FOLDER}/01-add-the-toggle.md`]: "status: done",

@@ -417,6 +417,8 @@ ${
 5. When it fails, write numbered findings, each naming the step or "## Review" line, the file and line, and what the plan asks for that the work does not do. Start a new ${IMPLEMENTER_AGENT} agent with the plan file's absolute path, a blank line, then the findings. Review its work again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
 6. When the implementer answers BLOCKED, or the work still fails review after ${MAX_FIX_ROUNDS} fix rounds, set the status to blocked with the reason and go on with the next plan that does not depend on it.
 
+When every plan is handled, commit and push the leftover work too: run \`git status --short\` and \`git log --oneline -n 50 @{u}..\`. Group the uncommitted changes that are left, including ones from before this build, into logical commits, one per concern, each with one short conventional subject line in the style of \`git log --oneline -n 10\`, with no body and no Co-Authored-By or other attribution line. Never commit a file that holds a secret, such as \`.env\`. Then run \`git push\` so no commit is left unpushed. If a commit or push fails, say so in the report.
+
 Finish with one line per plan: order, title, status and the fix rounds it took, with the reason for each plan that is blocked or still waiting.`;
 
 const planWork = (engine: EngineInterface, requestedWork: string) => {

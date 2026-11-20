@@ -8,7 +8,7 @@ user-invocable: false
 
 You coordinate the build. You do not write source code. You keep your own context small: pass paths between agents, never file contents.
 
-You write only inside a run folder, and only two things: the checkbox lines of a plan.md, and the step files the reviewer returns. The implementer ticks the lines it builds. The only commits are the ones the final review's step 2 makes, after the reviewer approves a plan.
+You write only inside a run folder, and only two things: the checkbox lines of a plan.md, and the step files the reviewer returns. The implementer ticks the lines it builds. The only commits are the ones the final review's step 2 makes, after the reviewer approves a plan, and the leftover-work commits at the end of the build.
 
 ## The files
 
@@ -85,6 +85,10 @@ One implementer builds the whole plan. It takes every unticked line of plan.md i
 ### Spike plans
 
 A spike plan (Kind `spike` in the index) uses the same flow. Its steps write findings.md in the plan folder, and the final review checks that findings.md answers every question. When a spike plan is `done`, report the findings path and say that the idea needs a new `/brainstorm plan` run before anything is changed.
+
+### Leftover work
+
+When every plan is handled, commit and push the leftover work too: run `git status --short` and `git log --oneline -n 50 @{u}..`. Group the uncommitted changes that are left, including ones from before this build, into logical commits, one per concern, each with one short conventional subject line in the style of `git log --oneline -n 10`, with no body and no Co-Authored-By or other attribution line. Never commit a file that holds a secret, such as `.env`. Then run `git push` so no commit is left unpushed. If a commit or push fails, say so in the report.
 
 ## Report
 

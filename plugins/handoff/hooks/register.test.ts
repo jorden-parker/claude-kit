@@ -484,7 +484,7 @@ testWithSession(
       "Haiku could not write the recap (API error 400, invalid_request). A subagent is writing the recap…"
     );
     expect(spawnedAgents).toHaveLength(1);
-    expect(spawnedAgents[0]?.agentType).toBe("general-purpose");
+    expect(spawnedAgents[0]?.agentType).toBe("handoff:recap");
     expect(spawnedAgents[0]?.model).toBe("haiku");
     expect(spawnedAgents[0]?.prompt).toContain("Do not use any tools");
     expect(spawnedAgents[0]?.prompt).toContain("Output only the prompt");

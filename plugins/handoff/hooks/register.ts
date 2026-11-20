@@ -527,7 +527,7 @@ const buildConversationPrompt = (request: RecapRequest) => {
 const RECAP_MODEL = "haiku";
 const HAIKU_WRITER = "haiku";
 const CONVERSATION_WRITER = "conversation";
-const RECAP_AGENT_TYPE = "general-purpose";
+const RECAP_AGENT_TYPE = "handoff:recap";
 const AGENT_PREAMBLE =
   "Do not use any tools for this task: answer straight away from the conversation below.";
 const RECAP_AGENT_DESCRIPTION = "Write the handoff recap";

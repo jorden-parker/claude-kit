@@ -1,5 +1,5 @@
 {
   "name": "guards",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Command guards: denies unbounded git log, diff and find, trims long Bash output, blocks commits that skip hooks or fail the project's checks, limits Reads of large files, forces context-heavy lookups onto the Haiku context-scout subagent, and, opted in, asks for a browser check after UI edits"
 }

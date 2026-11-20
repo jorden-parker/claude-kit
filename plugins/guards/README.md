@@ -22,7 +22,11 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   points Claude at the `guards:context-scout` agent. Only a delegation to Haiku
   (that agent, or any agent spawned with `model: "haiku"`) resets the budget;
   a new user prompt does not, since the context keeps the earlier reads. It
-  also denies an `Explore` subagent that is not spawned with `model: "haiku"`.
+  also denies three kinds of Agent call: an `Explore` subagent (the scout is
+  the only lookup agent, since its reply is capped), a scout prompt over 1,500
+  characters, and a `general-purpose` or `claude` agent (or one with no
+  `subagent_type`) that names no `model`, since it would run on the session
+  model. Plugin agents keep the model their own file pins.
   Subagents are never limited. Claude Code only. Opt out with
   `GUARDS_DELEGATE_GUARD=0`. Hooks load when a session starts, so a session
   opened before the plugin was updated runs without this guard.
@@ -37,8 +41,8 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 ## Agent
 
 - **context-scout** (`agents/context-scout.md`, Haiku, read-only): reads and
-  searches the codebase and replies with the conclusion and `path:line`
-  references. delegate-guard sends Claude here.
+  searches the codebase and replies in 25 lines at most with the conclusion and
+  `path:line` references. delegate-guard sends Claude here.
 
 Hook events are logged to `~/.cache/guards/hooks.log`.
 

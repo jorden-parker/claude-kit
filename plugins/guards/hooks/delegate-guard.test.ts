@@ -9,6 +9,7 @@ import {
 import type { HookEvent, HookResult } from "./types.ts";
 
 const LIMIT = 40_000;
+const SCOUT_PROMPT_LIMIT = 1_500;
 
 const mainEvent = (
   toolName: string,
@@ -261,12 +262,53 @@ test("denies an Explore task on sonnet", () => {
   expect(isDenied(decideDelegation(event, ""))).toBe(true);
 });
 
-test("allows an Explore agent on haiku", () => {
+test("denies an Explore agent even on haiku and names the scout", () => {
   const event = mainEvent("Agent", {
     subagent_type: "Explore",
     model: "haiku",
   });
+  const result = decideDelegation(event, "");
+  expect(isDenied(result)).toBe(true);
+  expect(reasonOf(result)).toContain("guards:context-scout");
+});
+
+test.each([
+  { subagent_type: "general-purpose" },
+  { subagent_type: "claude" },
+  { prompt: "no agent type" },
+])("denies a general agent that names no model: %j", (input) => {
+  const result = decideDelegation(mainEvent("Agent", input), "");
+  expect(isDenied(result)).toBe(true);
+  expect(reasonOf(result)).toContain('"haiku"');
+});
+
+test.each(["haiku", "sonnet", "opus"])(
+  "allows a general agent that names the model %s",
+  (model) => {
+    const event = mainEvent("Agent", {
+      subagent_type: "general-purpose",
+      model,
+    });
+    expect(decideDelegation(event, "")).toBeNull();
+  }
+);
+
+test("allows a scout prompt at the length limit", () => {
+  const event = mainEvent("Agent", {
+    subagent_type: "guards:context-scout",
+    prompt: "x".repeat(SCOUT_PROMPT_LIMIT),
+  });
   expect(decideDelegation(event, "")).toBeNull();
+});
+
+test("denies a scout prompt over the length limit", () => {
+  const event = mainEvent("Agent", {
+    subagent_type: "guards:context-scout",
+    prompt: "x".repeat(SCOUT_PROMPT_LIMIT + 1),
+  });
+  const result = decideDelegation(event, "");
+  expect(isDenied(result)).toBe(true);
+  expect(reasonOf(result)).toContain("1500");
 });
 
 test("allows the context-scout agent", () => {
@@ -276,8 +318,10 @@ test("allows the context-scout agent", () => {
   expect(decideDelegation(event, "")).toBeNull();
 });
 
-test("allows other agents even over budget", () => {
-  const event = mainEvent("Agent", { subagent_type: "general-purpose" });
+test("allows a plugin agent that names no model, even over budget", () => {
+  const event = mainEvent("Agent", {
+    subagent_type: "small-plans:small-plan-implementer",
+  });
   expect(decideDelegation(event, overBudget)).toBeNull();
 });
 

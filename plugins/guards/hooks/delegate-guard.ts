@@ -3,7 +3,10 @@ import { GIT_OPTIONS, withoutQuotedText } from "./bash-guard.ts";
 import { deny, type HookEvent, type HookResult } from "./types.ts";
 
 const LOOKUP_BUDGET = 40_000;
+const SCOUT_PROMPT_LIMIT = 1_500;
 const SCOUT_AGENT = "guards:context-scout";
+const DEFAULT_AGENT = "general-purpose";
+const SESSION_MODEL_AGENTS = [DEFAULT_AGENT, "claude"];
 const LOOKUP_TOOLS = ["Read", "Grep", "Glob"];
 const DELEGATION_TOOLS = ["Agent", "Task"];
 const TOOL_BLOCK_MARK = '"tool_';
@@ -45,17 +48,28 @@ function isExempt(event: HookEvent): boolean {
   );
 }
 
-function exploreProblem(event: HookEvent): HookResult {
+function delegationProblem(event: HookEvent): HookResult {
   const input = event.tool_input ?? {};
-  const isExplore = input.subagent_type === "Explore";
-  if (!isExplore || input.model === "haiku") return null;
-  return deny(
-    `Explore subagents must run on Haiku. Re-send this Agent call with model: "haiku", or use subagent_type: "${SCOUT_AGENT}" instead.`
-  );
+  const agentType = input.subagent_type ?? DEFAULT_AGENT;
+  const promptLength = String(input.prompt ?? "").length;
+  if (agentType === "Explore") {
+    return deny(`Explore is denied. Use subagent_type: "${SCOUT_AGENT}".`);
+  }
+  if (agentType === SCOUT_AGENT && promptLength > SCOUT_PROMPT_LIMIT) {
+    return deny(
+      `The scout prompt is ${promptLength} characters; the limit is ${SCOUT_PROMPT_LIMIT}. Send only the question and the paths to start from.`
+    );
+  }
+  if (SESSION_MODEL_AGENTS.includes(agentType) && input.model === undefined) {
+    return deny(
+      `Name a model: "haiku" to read or search, "sonnet" to write code. With none, this agent runs on the session model, the costliest choice.`
+    );
+  }
+  return null;
 }
 
 function budgetReason(spent: number): string {
-  return `This session has read or searched ${spent} characters since the last Haiku delegation, over the ${LOOKUP_BUDGET} budget. Delegate the rest of the reading and searching to the ${SCOUT_AGENT} agent (Haiku) through the Agent tool, and ask it for the conclusion with file:line references. The budget resets only when you delegate to it or to an agent spawned with model: "haiku".`;
+  return `${spent} characters read or searched since the last Haiku delegation; the budget is ${LOOKUP_BUDGET}. Send the remaining lookups to ${SCOUT_AGENT} through the Agent tool.`;
 }
 
 function parseLine(line: string): TranscriptLine | undefined {
@@ -137,7 +151,7 @@ export function decideDelegation(
   transcript: string
 ): HookResult {
   if (isExempt(event)) return null;
-  if (isAgentCall(event)) return exploreProblem(event);
+  if (isAgentCall(event)) return delegationProblem(event);
   if (!isLookup(event.tool_name, event.tool_input)) return null;
   const spent = lookupCharacters(transcript);
   return spent < LOOKUP_BUDGET ? null : deny(budgetReason(spent));

@@ -19,6 +19,11 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 - **read-guard** (PreToolUse, Read): caps a Read of a text file over 300 lines
   at `limit: 300`, keeping the `offset`, and tells Claude the file's length so
   it can read on. Denies a text file over 5 MB unless `limit` is 300 or less.
+- **delegation-rules** (SessionStart): tells Claude to delegate by default:
+  multi-file lookups to `guards:context-scout`, fully specified multi-file
+  edits to an Agent call with `model: "haiku"` (or `"sonnet"`), and
+  independent work to parallel agents, while keeping single reads, design and
+  review inline. Off with `GUARDS_DELEGATE_GUARD=0`.
 - **delegate-guard** (PreToolUse, Read, Grep, Glob, Bash, Agent): forces
   context-heavy work onto Haiku subagents. In the main session it adds up the
   characters that lookups (`Read`, `Grep`, `Glob`, and Bash commands that start

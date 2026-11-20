@@ -11,6 +11,7 @@ import { decide as bashGuard } from "./bash-guard.ts";
 import { decideFromTranscript as browserCheck } from "./browser-check.ts";
 import { decide as commitGuard } from "./commit-guard.ts";
 import { decideDelegationFromTranscript as delegateGuard } from "./delegate-guard.ts";
+import { decide as delegationRules } from "./delegation-rules.ts";
 import { decide as bashTrim } from "./bash-trim.ts";
 import { decide as readGuard } from "./read-guard.ts";
 import type { HookEvent, HookResult, SavedOutput } from "./types.ts";
@@ -23,6 +24,7 @@ const HOOKS: Record<string, (event: HookEvent) => HookResult> = {
   "browser-check": browserCheck,
   "commit-guard": commitGuard,
   "delegate-guard": delegateGuard,
+  "delegation-rules": delegationRules,
   "read-guard": readGuard,
 };
 

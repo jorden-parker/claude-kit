@@ -30,6 +30,8 @@ const CODE_FENCE = /```[\s\S]*?```/g;
 const NUMBERED_STEP = /^\d+\.\s/gm;
 const BACKTICKED_TEXT = /`[^`\n]+`/;
 const STATUS_LINE = /^status: .*$/m;
+const INDEX_FILE_NAME = "index.md";
+const FILE_EDITING_TOOLS = ["Edit", "Write", "MultiEdit"];
 const COMMAND_NAME = "small-plans";
 const COMMAND_PREFIX = `/${COMMAND_NAME} `;
 const SUBCOMMAND_SUGGESTIONS = [
@@ -79,7 +81,8 @@ const WRITE_TOOL_SCHEMA = {
     depends_on: {
       type: "array",
       items: { type: "number" },
-      description: "The orders of the earlier plans this plan needs done.",
+      description:
+        "The orders of the earlier plans this plan needs done; [] when it needs none. Required: it declares the dependency order.",
     },
     project: {
       type: "string",
@@ -87,7 +90,7 @@ const WRITE_TOOL_SCHEMA = {
         "Only when the plan belongs to another project than this session's: that project's folder name.",
     },
   },
-  required: ["set", "order", "title", "kind", "body"],
+  required: ["set", "order", "title", "kind", "body", "depends_on"],
 };
 const STATUS_TOOL_SCHEMA = {
   type: "object",
@@ -240,6 +243,11 @@ const writeSmallPlan = async (
     ...(KINDS.includes(kind)
       ? []
       : [`kind must be one of: ${KINDS.join(", ")}.`]),
+    ...(Array.isArray(toolInput.depends_on)
+      ? []
+      : [
+          "depends_on is required: list the orders of the earlier plans this plan needs, or [] when it needs none.",
+        ]),
     ...(dependencies.every(
       (dependency) =>
         Number.isInteger(dependency) && dependency >= 1 && dependency < order
@@ -280,7 +288,60 @@ const writeSmallPlan = async (
       : []),
   ].join("\n");
   await engine.fs.write(planPath, `---\n${frontMatter}\n---\n\n${body}\n`);
-  return { result: `Plan saved to ${planPath}` };
+  await writeSetIndex(engine, setFolder);
+  return {
+    result: `Plan saved to ${planPath}. The set's index at ${setFolder}/${INDEX_FILE_NAME} is updated.`,
+  };
+};
+
+const readFrontMatterField = (planText: string, field: string) =>
+  new RegExp(`^${field}: (.*)$`, "m").exec(planText)?.[1]?.trim() ?? "";
+
+const composeIndexRow = (planName: string, planText: string) => {
+  const title = readFrontMatterField(planText, "title") || planName;
+  const dependencies = readFrontMatterField(planText, "depends_on") || "none";
+  return `| ${parseInt(planName, 10)} | [${title}](${planName}) | ${readFrontMatterField(planText, "kind")} | ${readFrontMatterField(planText, "status")} | ${dependencies} |`;
+};
+
+const readSetPlans = async (engine: EngineInterface, setFolder: string) => {
+  const planNames = (await listNames(engine, setFolder))
+    .filter((name) => NUMBERED_MARKDOWN_FILE.test(name))
+    .sort();
+  const planTexts = await Promise.all(
+    planNames.map(async (name) =>
+      String(await engine.fs.read(`${setFolder}/${name}`).catch(() => ""))
+    )
+  );
+  return { planNames, planTexts };
+};
+
+const writeSetIndex = async (engine: EngineInterface, setFolder: string) => {
+  const { planNames, planTexts } = await readSetPlans(engine, setFolder);
+  const setName = setFolder.split("/").pop() ?? "";
+  await engine.fs.write(
+    `${setFolder}/${INDEX_FILE_NAME}`,
+    [
+      `# Plans: ${setName}`,
+      "",
+      "The small-plans plugin rewrites this index each time a plan of this set is saved, edited or changes status. Build the plans in this order: a plan waits until every plan in its Depends on column is done.",
+      "",
+      "| Order | Plan | Kind | Status | Depends on |",
+      "| --- | --- | --- | --- | --- |",
+      ...planNames.map((name, i) => composeIndexRow(name, planTexts[i] ?? "")),
+      "",
+    ].join("\n")
+  );
+};
+
+const findPlanSetFolder = (plansRoot: string, filePath: string) => {
+  const relativeSegments = filePath.startsWith(`${plansRoot}/`)
+    ? filePath.slice(plansRoot.length + 1).split("/")
+    : [];
+  const isPlanFile =
+    relativeSegments.length === 3 &&
+    !relativeSegments.includes("..") &&
+    NUMBERED_MARKDOWN_FILE.test(relativeSegments[2] ?? "");
+  return isPlanFile ? filePath.slice(0, filePath.lastIndexOf("/")) : undefined;
 };
 
 const setPlanStatus = async (
@@ -305,7 +366,11 @@ const setPlanStatus = async (
     planPath,
     planText.replace(STATUS_LINE, `status: ${status}`)
   );
-  return { result: `Plan marked ${status}: ${planPath}` };
+  const setFolder = findPlanSetFolder(plansRoot, planPath);
+  if (setFolder) await writeSetIndex(engine, setFolder);
+  return {
+    result: `Plan marked ${status}: ${planPath}${setFolder ? `. The set's index at ${setFolder}/${INDEX_FILE_NAME} is updated.` : ""}`,
+  };
 };
 
 const askClaude = (engine: EngineInterface, instruction: string) => {
@@ -321,18 +386,19 @@ const composePlanInstruction = (
     workSource,
     `1. List the work that is still left. Check each item against the project as it is now (the files it names, the recent commits) and drop what is already done. If nothing is left, say so and stop.
 2. Split that work into plans. A plan is one change that a small model can implement in one sitting and a second small model can review in one read: one goal, at most ${MAX_STEPS} steps, few files. Work that needs more becomes two plans. Leave out work that waits on a decision only the user can make.
-3. Order the plans so that each one needs earlier plans only.
-4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set "${setName}", its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs, and its body.`,
+3. Declare the dependency order: number the plans from 1 so that each one needs earlier plans only, and its number is its place in the build order.
+4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set "${setName}", its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs ([] when it needs none), and its body.`,
     PLAN_SHAPE,
+    `The plugin writes ${INDEX_FILE_NAME} in the set folder, listing every plan with its order, kind, status and dependencies, and rewrites it each time a plan is saved, edited with Edit or Write, or changes status. Never write or edit ${INDEX_FILE_NAME} yourself, and change a plan file only with Edit or Write, never with a shell command, so the index stays true.`,
     ...laterNotes,
-    `When every plan is saved, reply with one line per plan (order, kind, title), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them.`,
+    `When every plan is saved, reply with one line per plan (order, kind, title, the orders it depends on), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them.`,
   ].join("\n\n");
 
 const composeBuildInstruction = (setFolder: string, planName: string) => `${
   planName
     ? `Build only the plan at ${setFolder}/${planName}.md. If its depends_on names a plan in ${setFolder} that is not done, stop and say which.`
     : `Build the plans in ${setFolder}.`
-} You coordinate and review: never edit project files yourself.
+} You coordinate and review: never edit project files yourself. Change a plan's status only with ${QUALIFIED_STATUS_TOOL_NAME}, which also rewrites the set's ${INDEX_FILE_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand.
 
 ${
   planName
@@ -453,14 +519,7 @@ const listPlanNamesNotDone = async (
   engine: EngineInterface,
   setFolder: string
 ) => {
-  const planNames = (await listNames(engine, setFolder))
-    .filter((name) => NUMBERED_MARKDOWN_FILE.test(name))
-    .sort();
-  const planTexts = await Promise.all(
-    planNames.map(async (name) =>
-      String(await engine.fs.read(`${setFolder}/${name}`).catch(() => ""))
-    )
-  );
+  const { planNames, planTexts } = await readSetPlans(engine, setFolder);
   return planNames
     .filter((_, i) => planTexts[i]?.match(STATUS_LINE)?.[0] !== "status: done")
     .map((name) => name.replace(/\.md$/, ""));
@@ -498,7 +557,25 @@ const buildPlans = async (
   requestedName: string,
   requestedPlan: string
 ) => {
-  const setNames = await listSetsNewestFirst(engine);
+  const projectFolder = await resolveProjectFolder(engine);
+  const savedSetNames = await listSetsNewestFirst(engine);
+  const setNamesNotDone = (
+    await Promise.all(
+      savedSetNames.map(async (name) =>
+        (await listPlanNamesNotDone(engine, `${projectFolder}/${name}`))
+          .length > 0
+          ? name
+          : ""
+      )
+    )
+  ).filter(Boolean);
+  if (
+    !requestedName &&
+    savedSetNames.length > 0 &&
+    setNamesNotDone.length === 0
+  )
+    return { text: `Every plan of this project is done.` };
+  const setNames = requestedName ? savedSetNames : setNamesNotDone;
   const shouldAsk = !requestedName && setNames.length > 1;
   const pickedName = shouldAsk
     ? await pickFromList(
@@ -519,7 +596,7 @@ const buildPlans = async (
     return {
       text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
     };
-  const setFolder = `${await resolveProjectFolder(engine)}/${setName}`;
+  const setFolder = `${projectFolder}/${setName}`;
   const planNames = await listPlanNamesNotDone(engine, setFolder);
   if (planNames.length === 0)
     return { text: `Every plan in set ${setName} is done.` };
@@ -582,7 +659,14 @@ export const register: Register = (on) => {
       return writeSmallPlan($, toolInput);
     if (e.tool === (QUALIFIED_STATUS_TOOL_NAME as string))
       return setPlanStatus($, toolInput);
-    return next(e);
+    if (!FILE_EDITING_TOOLS.includes(e.tool)) return next(e);
+    const toolResult = await next(e);
+    const setFolder = findPlanSetFolder(
+      await resolvePlansRoot($),
+      trimText(toolInput.file_path)
+    );
+    if (setFolder) await writeSetIndex($, setFolder);
+    return toolResult;
   });
 
   on("prompt.autocomplete", async (_, e, next) => {

@@ -42,6 +42,7 @@ const VALID_PLAN = {
   title: "Clear the cached token",
   kind: "fix",
   body: PLAN_BODY,
+  depends_on: [] as number[],
 };
 
 type Recorded = {
@@ -221,6 +222,89 @@ test("a status change rewrites only the status line", async ($, on) => {
   expect(reply.result).toContain("done");
   expect(files.get(HANDOFF_SET_PLAN)).toBe(
     "---\ntitle: Clear\nstatus: done\n---\n\nstatus: body\n"
+  );
+});
+
+const HANDOFF_SET_INDEX = `${PROJECT_FOLDER}/${HANDOFF_SET}/index.md`;
+
+test("a plan must declare depends_on, even when it needs no other plan", async ($, on) => {
+  const { depends_on: _, ...planWithoutDependencies } = {
+    ...VALID_PLAN,
+    depends_on: [],
+  };
+  mockEngine(on);
+
+  const refused = await callTool($, WRITE_TOOL, planWithoutDependencies);
+  const saved = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    depends_on: [],
+  });
+
+  expect(refused.deny).toContain("depends_on");
+  expect(saved.result).toContain("Plan saved");
+});
+
+test("saving a plan rewrites the set's index with every plan in build order", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  await callTool($, WRITE_TOOL, { ...VALID_PLAN, depends_on: [] });
+  await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    order: 2,
+    title: "Retry the profile request",
+    kind: "feature",
+    depends_on: [1],
+  });
+
+  expect(files.get(HANDOFF_SET_INDEX)).toContain(
+    [
+      "| Order | Plan | Kind | Status | Depends on |",
+      "| --- | --- | --- | --- | --- |",
+      "| 1 | [Clear the cached token](01-clear-the-cached-token.md) | fix | pending | none |",
+      "| 2 | [Retry the profile request](02-retry-the-profile-request.md) | feature | pending | 1 |",
+    ].join("\n")
+  );
+});
+
+test("a status change rewrites the plan's row in the set's index", async ($, on) => {
+  const { files } = mockEngine(on);
+  await callTool($, WRITE_TOOL, { ...VALID_PLAN, depends_on: [] });
+
+  await callTool($, STATUS_TOOL, {
+    path: HANDOFF_SET_PLAN,
+    status: "in-progress",
+  });
+  expect(files.get(HANDOFF_SET_INDEX)).toContain(
+    "| fix | in-progress | none |"
+  );
+
+  await callTool($, STATUS_TOOL, { path: HANDOFF_SET_PLAN, status: "done" });
+  expect(files.get(HANDOFF_SET_INDEX)).toContain("| fix | done | none |");
+});
+
+test("an edit to a plan file rewrites the set's index", async ($, on) => {
+  const { files } = mockEngine(on, {
+    [HANDOFF_SET_PLAN]:
+      "---\ntitle: Clear the stale token\norder: 1\nkind: fix\nstatus: pending\n---\n\nbody\n",
+  });
+
+  await $.tool.call({ tool: "Edit", file_path: HANDOFF_SET_PLAN } as never);
+
+  expect(files.get(HANDOFF_SET_INDEX)).toContain(
+    "| 1 | [Clear the stale token](01-clear-the-cached-token.md) | fix | pending | none |"
+  );
+});
+
+test("an edit outside a plan set writes no index", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  await $.tool.call({
+    tool: "Write",
+    file_path: "/work/claude-kit/notes.md",
+  } as never);
+
+  expect([...files.keys()].some((path) => path.endsWith("index.md"))).toBe(
+    false
   );
 });
 
@@ -502,6 +586,18 @@ test("/small-plans build says so when every plan of the set is done", async ($, 
 
   expect(reply.text).toContain("Every plan");
   expect(submittedPrompts).toHaveLength(0);
+});
+
+test("/small-plans build lists no set whose plans are all done", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, HANDOFF_SET);
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [HANDOFF_SET_PLAN]: "status: pending",
+    [`${PROJECT_FOLDER}/2026-11-17-0800-old-work/01-done.md`]: "status: done",
+    [STANDALONE_SET_PLAN]: "status: done",
+  });
+
+  expect(askedQuestions).toHaveLength(0);
+  expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${HANDOFF_SET}`);
 });
 
 test("/small-plans build <name> runs the set whose name holds it", async ($, on) => {

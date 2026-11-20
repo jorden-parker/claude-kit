@@ -37,13 +37,14 @@ The tool refuses a plan, and names every problem at once, when:
 - `## Check` has no command in backticks
 - the prose holds vague wording: "as appropriate", "if needed", "as needed", "where appropriate", "consider", "similar to", "etc.", "and so on", "you may", "TODO" (code fences are exempt)
 - the kind is not one of `feature`, `fix`, `refactor`, `test`, `docs`, `chore`
-- `depends_on` names a plan that is not earlier in the order
+- `depends_on` is missing (pass `[]` for a plan that needs no other), or names a plan that is not earlier in the order, so the numbers always follow the dependency order
 - a plan of the same order is already saved in the set: a saved plan is never replaced. Delete its file to write it again
 
 ## Storage
 
 ```
 ~/.claude/small-plans/<project>/<set>/<order>-<slug>.md
+~/.claude/small-plans/<project>/<set>/index.md
 ```
 
 - `<project>` is the folder of the repository, shared by its worktrees (the name the handoff plugin uses too), also from a deleted `<repo>/.claude/worktrees/<name>` worktree
@@ -51,13 +52,14 @@ The tool refuses a plan, and names every problem at once, when:
 - `<order>` is the plan's place in the build order, two digits; `<slug>` comes from the title
 - Each file starts with front matter: `title`, `project`, `set`, `order`, `kind`, `status`, `depends_on` when it has any, and `created`
 - `status` is `pending`, `in-progress`, `done` or `blocked`. The `set_small_plan_status` tool changes it, and only for files under the plans folder
+- `index.md` lists every plan of the set in build order: order, linked title, kind, status and depends on. The plugin rewrites it each time a plan is saved, changes status, or is changed with Edit or Write. Do not edit it by hand: the next rewrite replaces it
 - Set `SMALL_PLANS_DIR` to keep the plans in another folder. Handoffs are read from `~/.claude/handoffs`, or `HANDOFFS_DIR` when set
 
-The files are plain Markdown: edit, move or delete them with any tool. A set you write by hand builds like any other.
+The files are plain Markdown: edit, move or delete them with any tool. A change made outside Claude's Edit and Write tools reaches `index.md` at the next save or status change in that set. A set you write by hand builds like any other.
 
 ## Build
 
-`/small-plans build` lists this project's four newest sets and asks which to build (type a name under "Other" for an older set; with one set it skips the question). It then asks whether to build the whole set or one plan of it, listing the plans that are not done (type an order under "Other" for one not listed; with one plan left it skips the question).
+`/small-plans build` lists this project's four newest sets that still have a plan not done (sets whose plans are all done are left out) and asks which to build (type a name under "Other" for an older set; with one set it skips the question). It then asks whether to build the whole set or one plan of it, listing the plans that are not done (type an order under "Other" for one not listed; with one plan left it skips the question).
 
 - `/small-plans build <text>` picks the newest set whose name holds that text (`build fix-login`, `build 007`)
 - `/small-plans build <text> <order>` builds that one plan without asking (`build fix-login 2`)

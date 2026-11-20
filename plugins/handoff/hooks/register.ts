@@ -9,27 +9,16 @@ import type {
 
 const OPEN_QUESTIONS_HEADING = "Open questions for the user:";
 
-const RECAP_RULES = `You write a prompt that a fresh coding-agent session could receive to continue the work in the conversation below.
+const RECAP_RULES = `You write a handoff note: background context about the conversation below, which a fresh coding-agent session reads to understand what happened. It is not a task and never asks for work.
 The working directory, the conversation and the <guidance> and <decisions> blocks, when present, are the only sources: invent nothing they do not contain.
 Start with a one-line title that names the work, in 60 characters at most and with no period at the end, then a blank line.
 Right after the title line, when the work is about a git repository other than the working directory's, write a line "Repository: <absolute folder path>" naming it, judged from the files and commands in the conversation. When the work could belong to more than one repository, list each folder: "Repository: <path> | <path>". Leave the line out when the work is in the working directory's repository.
-Include the goal, what has been done, what is left, and the files and commands mentioned.
+Include the goal, what has been done, what is still open, and the files and commands mentioned. Write it as a description of the state of things, and never phrase any of it as instructions to do work.
 If decisions are left that only the user can make, end with a line reading exactly "${OPEN_QUESTIONS_HEADING}", then one line per decision in the form "- <question ending in a question mark> (<likely answer> | <likely answer>)", with two or three likely answers. Leave that section out when no such decision is left, and never list there what the next session can check for itself.
-If a <focus> block is present, center the recap on it and keep the rest brief.
-If a <guidance> block is present, it holds the user's rough notes for the next session: a direction to take, or extra requests. Work out what they mean and write that into the prompt in your own clear words, where it belongs: as the next step, a priority, a constraint or an added task. Do not quote the notes, label them, or add them as a separate block.
-If a <decisions> block is present, the user has already been asked: it holds each question with the user's answer, or marked as left open. An answered question is settled: write it into the prompt in your own clear words, where it belongs, in the goal, as a constraint, a next step or an added task, and make the rest of the prompt agree with it. Do not quote the questions or the answers, label them, add them as a separate block, or list a settled question as open. The open questions are then only the ones the block marks as left open: list no others.
-Output only the prompt, with no preamble, quotes or explanation.`;
-
-const PLAN_SEPARATOR = "---handoff---";
-
-const PER_PLAN_RULES = `You write prompts that fresh coding-agent sessions could each receive to carry out one plan suggested in the conversation below.
-Find every separate plan, idea or task the conversation suggests, usually listed in the latest assistant message, and write one prompt per plan.
-The working directory and the conversation are the only sources: invent nothing they do not contain.
-Each prompt must stand alone: start with a one-line title naming the plan, then give its goal, the rationale and files the conversation gives for it, and what "done" means.
-Right after the title line, when the plan is about a git repository other than the planing directory's, write a line "Repository: <absolute folder path>" naming it, judged from the files and commands in the conversation. When the plan could belong to more than one repository, list each folder: "Repository: <path> | <path>". Leave the line out when the plan is in the planing directory's repository.
-If a <focus> block is present, only cover the plans it names.
-Separate the prompts with a line containing only ${PLAN_SEPARATOR}.
-Output only the prompts and separators, with no preamble, numbering, quotes or explanation.`;
+If a <focus> block is present, center the note on it and keep the rest brief.
+If a <guidance> block is present, it holds the user's rough notes about the session. Work out what they mean and write that into the note in your own clear words, as context or a constraint. Do not quote the notes, label them, or add them as a separate block.
+If a <decisions> block is present, the user has already been asked: it holds each question with the user's answer, or marked as left open. An answered question is settled: write it into the note in your own clear words, in the goal or as context or a constraint, and make the rest of the note agree with it. Do not quote the questions or the answers, label them, add them as a separate block, or list a settled question as open. The open questions are then only the ones the block marks as left open: list no others.
+Output only the note, with no preamble, quotes or explanation.`;
 
 const RECENT_MESSAGE_COUNT = 40;
 const RECENT_MESSAGE_MAX_LENGTH = 1500;
@@ -44,14 +33,12 @@ const HANDOFF_ID_AND_REST = /^(?:#?(\d+)(?=\s|$))?\s*([\s\S]*)$/;
 const HANDOFF_COMMAND_PREFIX = "/handoff ";
 
 const SUBCOMMAND_SUGGESTIONS = [
-  { text: "new", description: "Continue the recap in a fresh session" },
   { text: "save", description: "Only save the recap" },
-  { text: "each", description: "Save one handoff per suggested plan" },
   { text: "list", description: "Show this project's handoffs" },
   {
     text: "resume",
     description:
-      "Continue the latest handoff, or one by id, plus optional extra context",
+      "Load the latest handoff, or one by id, plus optional extra context",
   },
 ];
 const PENDING_HANDOFF_KEY = "pendingHandoff";
@@ -69,14 +56,9 @@ const CREATED_FIELD = /^created: (.+)$/m;
 const describeNoHandoffs = (projectName: string) =>
   `No handoffs for ${projectName} yet. Run /handoff to create one.`;
 const RESUME_HINT =
-  "Run /handoff resume <id> to continue one in a new session, or claude-notes in a terminal to browse them all.";
-const NO_PLANS_MESSAGE = "No suggested plans found to hand off.";
-const describeSavedPlanCount = (planCount: number) =>
-  planCount === 1
-    ? "Saved 1 handoff, one per suggested plan:"
-    : `Saved ${planCount} handoffs, one per suggested plan:`;
+  "Run /handoff resume <id> to load one into a new session, or claude-notes in a terminal to browse them all.";
 const describeResumeCommand = (handoffId: number) =>
-  `Run /handoff resume ${handoffId} to continue it in a new session.`;
+  `Run /handoff resume ${handoffId} to load it into a new session.`;
 
 type HandoffFile = { handoffId: number; path: string };
 
@@ -110,7 +92,7 @@ const NOTES_BOX_MESSAGE =
 const RESUME_BOX_MESSAGE =
   "Pick a handoff in the box and add notes if you like. Cancel drops it.";
 const CANCELLED_MESSAGE = "Handoff cancelled.";
-const CLOSED_BOX_HINT = "Run /handoff new, save or resume to use this box.";
+const CLOSED_BOX_HINT = "Run /handoff save or resume to use this box.";
 
 const showToast = (
   engine: EngineInterface,
@@ -121,10 +103,8 @@ const showToast = (
 const showStatus = (engine: EngineInterface, text: string | undefined) =>
   engine.ui.status(text === undefined ? undefined : `${HANDOFF_GLYPH} ${text}`);
 
-type SingleRecapRequest = Extract<HandoffArguments, { action: "recap" }>;
-
 type HandoffBox = { notes: string } & (
-  | { kind: "notes"; request: SingleRecapRequest }
+  | { kind: "notes"; request: RecapRequest }
   | {
       kind: "resume";
       chosenHandoffId: number;
@@ -172,25 +152,13 @@ const truncateMessageText = (text: string) =>
     ? `${text.slice(0, RECENT_MESSAGE_MAX_LENGTH)}…`
     : text;
 
-const describeRecentMessages = async (
-  engine: EngineInterface,
-  shouldKeepLatestAssistantWhole: boolean
-) => {
+const describeRecentMessages = async (engine: EngineInterface) => {
   const messages = await engine.session.messages();
   const recentMessages = messages
     .filter((message) => message.text.trim())
     .slice(-RECENT_MESSAGE_COUNT);
-  const latestAssistantIndex = shouldKeepLatestAssistantWhole
-    ? recentMessages.findLastIndex((message) => message.role === "assistant")
-    : -1;
   return recentMessages
-    .map((message, index) => {
-      const messageText =
-        index === latestAssistantIndex
-          ? message.text
-          : truncateMessageText(message.text);
-      return `${message.role}: ${messageText}`;
-    })
+    .map((message) => `${message.role}: ${truncateMessageText(message.text)}`)
     .join("\n");
 };
 
@@ -226,10 +194,8 @@ The conversation above is what the rules below call "the conversation below".`;
 type HandoffArguments =
   | { action: "list" }
   | { action: "resume"; handoffId: number | undefined; extraContext: string }
-  | { action: "each"; focus: string }
   | {
       action: "recap";
-      isNewSession: boolean;
       isSaveOnly: boolean;
       focus: string;
       notes: string;
@@ -252,13 +218,11 @@ const parseHandoffArguments = (args: string): HandoffArguments => {
       extraContext,
     };
   }
-  if (subcommand === "each") return { action: "each", focus: laterWords };
-  const isRecapSubcommand = subcommand === "new" || subcommand === "save";
+  const isSaveOnly = subcommand === "save";
   return {
     action: "recap",
-    isNewSession: subcommand === "new",
-    isSaveOnly: subcommand === "save",
-    focus: isRecapSubcommand ? laterWords : args.trim(),
+    isSaveOnly,
+    focus: isSaveOnly ? laterWords : args.trim(),
     notes: "",
   };
 };
@@ -488,40 +452,18 @@ type AwaitedRecap = {
   isQuestionTurn?: boolean;
 };
 
-type RecapStyle = {
-  rules: string;
-  shouldKeepLatestAssistantWhole: boolean;
-  timeoutMs: number;
-};
-
-const SINGLE_RECAP_STYLE: RecapStyle = {
-  rules: RECAP_RULES,
-  shouldKeepLatestAssistantWhole: false,
-  timeoutMs: 15000,
-};
-
-const PER_PLAN_RECAP_STYLE: RecapStyle = {
-  rules: PER_PLAN_RULES,
-  shouldKeepLatestAssistantWhole: true,
-  timeoutMs: 60000,
-};
-
-const chooseRecapStyle = (request: RecapRequest) =>
-  request.action === "each" ? PER_PLAN_RECAP_STYLE : SINGLE_RECAP_STYLE;
+const RECAP_TIMEOUT_MS = 15000;
 
 const describeSteering = (request: RecapRequest) =>
   describeFocus(request.focus) +
-  (request.action === "recap"
-    ? describeGuidance(request.notes) + describeDecisions(request.decisionLines)
-    : "");
+  describeGuidance(request.notes) +
+  describeDecisions(request.decisionLines);
 
 const buildConversationPrompt = (request: RecapRequest) => {
-  const shouldAskFirst =
-    request.action === "recap" && request.decisionLines === undefined;
   const preamble = buildConversationPreamble(
-    shouldAskFirst ? ASK_FIRST_RULE : NO_TOOLS_RULE
+    request.decisionLines === undefined ? ASK_FIRST_RULE : NO_TOOLS_RULE
   );
-  return `${preamble}\n\n${chooseRecapStyle(request).rules}${describeSteering(request)}`;
+  return `${preamble}\n\n${RECAP_RULES}${describeSteering(request)}`;
 };
 
 const RECAP_MODEL = "haiku";
@@ -596,7 +538,7 @@ const askConversationForRecap = (
 };
 
 const buildAgentPrompt = (request: RecapRequest, digest: string) =>
-  `${AGENT_PREAMBLE}\n\n${chooseRecapStyle(request).rules}\n\n${digest}`;
+  `${AGENT_PREAMBLE}\n\n${RECAP_RULES}\n\n${digest}`;
 
 const spawnRecapAgent = async (engine: EngineInterface, promptText: string) => {
   try {
@@ -643,11 +585,7 @@ const buildRecap = async (
   request: RecapRequest,
   isHaikuWriter: boolean
 ): Promise<RecapBuild> => {
-  const style = chooseRecapStyle(request);
-  const recentMessages = await describeRecentMessages(
-    engine,
-    style.shouldKeepLatestAssistantWhole
-  );
+  const recentMessages = await describeRecentMessages(engine);
   if (!recentMessages) return { failure: NO_RECAP_MESSAGE };
   const digest = buildRecapPrompt(
     await engine.session.cwd(),
@@ -660,10 +598,10 @@ const buildRecap = async (
   const reply = await completeWithBackoff(engine, () =>
     engine.model.complete({
       model: RECAP_MODEL,
-      system: style.rules,
+      system: RECAP_RULES,
       prompt: digest,
       effort: "low",
-      timeoutMs: style.timeoutMs,
+      timeoutMs: RECAP_TIMEOUT_MS,
     })
   );
 
@@ -711,35 +649,6 @@ const startRecap = async (
   };
 };
 
-const splitPlanRecaps = (text: string) =>
-  text
-    .split(PLAN_SEPARATOR)
-    .map(stripWrappingCodeFence)
-    .filter((planRecap) => planRecap);
-
-const savePlanHandoffs = async (
-  engine: EngineInterface,
-  recapText: string,
-  focus: string
-) => {
-  const planRecaps = splitPlanRecaps(recapText);
-  if (planRecaps.length === 0) return { text: NO_PLANS_MESSAGE };
-
-  const savedHandoffLines: string[] = [];
-  for (const planRecap of planRecaps) {
-    const { handoffId } = await saveSessionHandoff(engine, planRecap, focus);
-    savedHandoffLines.push(`#${handoffId}  ${summarizeRecap(planRecap)}`);
-  }
-  return {
-    text: [
-      describeSavedPlanCount(savedHandoffLines.length),
-      ...savedHandoffLines,
-      "",
-      RESUME_HINT,
-    ].join("\n"),
-  };
-};
-
 const offerRecapInThisSession = async (
   engine: EngineInterface,
   recap: string,
@@ -763,24 +672,15 @@ const showRecapInComposer = async (engine: EngineInterface, recap: string) => {
 
 const clearSessionAndPassRecap = async (
   engine: EngineInterface,
-  recap: string,
-  shouldSubmitRecap: boolean
+  recap: string
 ) => {
   await engine.command.run({ command: "clear" });
-  if (shouldSubmitRecap) {
-    await engine.prompt.submit({ text: recap, asUser: true });
-  } else {
-    await showRecapInComposer(engine, recap);
-  }
+  await showRecapInComposer(engine, recap);
 };
 
-const handOffToNewSession = async (
-  engine: EngineInterface,
-  recap: string,
-  shouldSubmitRecap: boolean
-) => {
+const handOffToNewSession = async (engine: EngineInterface, recap: string) => {
   try {
-    await clearSessionAndPassRecap(engine, recap, shouldSubmitRecap);
+    await clearSessionAndPassRecap(engine, recap);
   } catch {
     showToast(engine, "Could not start a new session.");
     await offerRecapInThisSession(engine, recap);
@@ -790,14 +690,10 @@ const handOffToNewSession = async (
 
 const startNewSessionWithRecap = async (
   engine: EngineInterface,
-  recap: string,
-  shouldSubmitRecap: boolean
+  recap: string
 ) => {
   await engine.store.set(PENDING_HANDOFF_KEY, recap);
-  engine.clock.after(
-    0,
-    () => void handOffToNewSession(engine, recap, shouldSubmitRecap)
-  );
+  engine.clock.after(0, () => void handOffToNewSession(engine, recap));
   return { text: HANDING_OFF_MESSAGE };
 };
 
@@ -806,7 +702,7 @@ const QUESTION_BULLET = /^\s*[-*]\s+\S/;
 const ASKING_QUESTIONS_MESSAGE =
   "Checking for open questions in the conversation…";
 const QUESTION_TURN_RULES = `Stop the work here. Use no tool for this message except AskUserQuestion.
-A prompt is about to be written that hands the work of this conversation to a fresh coding-agent session. If decisions are left that only the user can make and that the work cannot continue without, ask the user each one with AskUserQuestion, offering two or three likely answers. Never ask what the next session can check for itself, or what the conversation already settles.
+A prompt is about to be written that records this conversation as background for a fresh coding-agent session. If decisions are left that only the user can make and that the work cannot continue without, ask the user each one with AskUserQuestion, offering two or three likely answers. Never ask what the next session can check for itself, or what the conversation already settles.
 If a <focus> block follows, only ask about it. A <guidance> block holds the user's notes for the next session: never ask what they settle.
 Then reply with only one line per question you asked, in the form "- <question> Answer: <the user's answer>", or "- <question> Left open" when the user did not answer it. When you asked nothing, reply with only the word "none".`;
 
@@ -820,8 +716,7 @@ const readDecisionLines = (answer: string) =>
 const settleQuestions = (
   request: RecapRequest,
   decisionLines: string
-): RecapRequest =>
-  request.action === "recap" ? { ...request, decisionLines } : request;
+): RecapRequest => ({ ...request, decisionLines });
 
 const askConversationForQuestions = (
   engine: EngineInterface,
@@ -841,9 +736,6 @@ const deliverRecap = async (
   recapText: string,
   isRecapOnScreen: boolean
 ) => {
-  if (request.action === "each") {
-    return savePlanHandoffs(engine, recapText, request.focus);
-  }
   const saveOutcome = await saveSessionHandoff(
     engine,
     recapText,
@@ -862,10 +754,7 @@ const deliverRecap = async (
     };
   }
   if (saveFailure) showToast(engine, saveFailure);
-  if (!request.isNewSession) {
-    return offerRecapInThisSession(engine, recapText, isRecapOnScreen);
-  }
-  return startNewSessionWithRecap(engine, recapText, true);
+  return offerRecapInThisSession(engine, recapText, isRecapOnScreen);
 };
 
 const buildResumeBox = async (
@@ -953,8 +842,7 @@ const resumeSavedHandoff = async (
   const { recap } = await readHandoff(engine, chosenFile);
   return startNewSessionWithRecap(
     engine,
-    appendExtraContext(recap, extraContext),
-    false
+    appendExtraContext(recap, extraContext)
   );
 };
 
@@ -1028,7 +916,6 @@ const shouldAskQuestionsFirst = (
 ) =>
   progress.canAskInConversation &&
   progress.writer !== CONVERSATION_WRITER &&
-  request.action === "recap" &&
   request.decisionLines === undefined;
 
 const deliverWithProgress = async (
@@ -1052,7 +939,7 @@ const runRecap = async (
   request: RecapRequest
 ): Promise<{ text: string }> => {
   if (shouldAskQuestionsFirst(progress, request)) {
-    const recentMessages = await describeRecentMessages(engine, false);
+    const recentMessages = await describeRecentMessages(engine);
     if (!recentMessages) return { text: NO_RECAP_MESSAGE };
     progress.awaitedRecap = askConversationForQuestions(engine, request);
     showStatus(engine, ASKING_QUESTIONS_MESSAGE);
@@ -1281,9 +1168,8 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: "handoff",
       description:
-        "Summarize the session into a prompt that resumes the work. new: continue it in a fresh session; save: only save it; each: one handoff per suggested plan; list: this project's handoffs; resume [id] [extra context]: continue the latest or a chosen one",
-      argumentHint:
-        "[new | save | each] [focus] | list | resume [id] [extra context]",
+        "Record the session as background context for a later session. save: only save it; list: this project's handoffs; resume [id] [extra context]: load the latest or a chosen one",
+      argumentHint: "[save] [focus] | list | resume [id] [extra context]",
     });
     await resumePendingHandoff($);
 
@@ -1313,7 +1199,7 @@ export const register: Register = (on, options) => {
     }
     const isBareRecapAction =
       handoffArguments.action === "recap" &&
-      (handoffArguments.isNewSession || handoffArguments.isSaveOnly) &&
+      handoffArguments.isSaveOnly &&
       !handoffArguments.focus;
     if (
       isBareRecapAction &&

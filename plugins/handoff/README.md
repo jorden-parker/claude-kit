@@ -1,6 +1,6 @@
 # handoff
 
-`/handoff [focus]` summarizes the current session into a prompt a fresh session can pick up (goal, what is done, what is left, files and commands mentioned, open questions), then fills it into the composer so you can edit it or press Enter. Every handoff is also saved as a Markdown file, filed by project, so it can be picked up later.
+`/handoff [focus]` records the current session as background context for a later session (goal, what is done, what is still open, files and commands mentioned, open questions), then fills it into the composer so you can edit it or press Enter. It is a note to read, never a task or a plan. Every handoff is also saved as a Markdown file, filed by project, so it can be loaded later.
 
 ## Usage
 
@@ -9,45 +9,41 @@ The first word picks the action. Anything else is the focus, which centers the r
 | Command                                | What it does                                                                       |
 | -------------------------------------- | ---------------------------------------------------------------------------------- |
 | `/handoff [focus]`                     | Recap the session into the composer                                                |
-| `/handoff new [focus]`                 | Recap, then continue in a fresh session                                            |
 | `/handoff save [focus]`                | Only save the recap                                                                |
-| `/handoff each [focus]`                | Save one handoff per plan suggested in the conversation                            |
 | `/handoff list`                        | Show this project's handoffs, newest first                                         |
 | `/handoff resume [id] [extra context]` | Put a saved handoff into the composer of a fresh session: the latest, or one by id |
 
 Typing `/handoff ` suggests the actions.
 
 - `/handoff the failing test` centers the recap on the failing test
-- `/handoff new` builds the recap, runs `/clear`, then submits the recap as the first prompt of the fresh session. The recap is parked until it is submitted; if the process ends before that, the next session finds it and fills it into the composer instead. If the session cannot be cleared, the recap is filled into the composer as `/handoff` would
 - `/handoff save the auth change` leaves the composer alone and prints the handoff's id and file path
-- `/handoff each` is for after Claude proposes several options, such as a ranked list of ideas: each becomes its own handoff, and `/handoff resume <id>` starts a fresh session on any one of them. The latest assistant message is sent whole so long lists are not cut off
 - `/handoff resume 3` runs `/clear`, then fills recap #3 into the composer of the fresh session. Nothing is sent until you press Enter, so you can read and edit it first. Words after the id are extra context: `/handoff resume 3 start with the failing test` fills `The user's request: start with the failing test` as the task, with recap #3 below it as background only, so the session does what you asked instead of carrying on with the recap's remaining work. Without an id the words go to the latest handoff. The saved file is not changed. If the composer cannot be filled, the recap is copied to the clipboard and shown instead
 - `/handoff list` shows the ten newest: id, time (UTC) and the recap's first line
 
-The old dashed forms (`--new`, `--save`, `--each`, `--list`, `--resume`) still work as the first word.
+The old dashed forms (`--save`, `--list`, `--resume`) still work as the first word.
 
 ## Boxes
 
-`/handoff new`, `/handoff save` and `/handoff resume` with nothing after them open a small box in the band above the prompt instead of running at once. The box takes the keyboard, so you can type straight away.
+`/handoff save` and `/handoff resume` with nothing after them open a small box in the band above the prompt instead of running at once. The box takes the keyboard, so you can type straight away.
 
-- **Notes box** (`new`, `save`): a three-line field for notes to the next session. Enter hands off; an empty field means no notes. The notes are guidance for whoever writes the recap, not text to include: a direction to take, or extra requests. The writer works out what they mean and writes that into the recap in its own words, so the notes do not appear word for word in the prompt or in the saved file. The recap is only written after you press Enter
+- **Notes box** (`save`): a three-line field for notes to the next session. Enter hands off; an empty field means no notes. The notes are guidance for whoever writes the recap, not text to include: a direction to take, or extra requests. The writer works out what they mean and writes that into the recap in its own words, so the notes do not appear word for word in the prompt or in the saved file. The recap is only written after you press Enter
 - **Resume box** (`resume`): the same notes field, then a list of this project's ten newest handoffs. Enter in the field resumes the latest. Tab to the list, pick another with the arrows, and Enter resumes that one. The recap is already written, so the notes become the request, with the recap below it as background, in the composer where you can edit them
 - Each box has a button for the same action and a Cancel button. Esc only hands the keys back to the prompt; Cancel closes the box. Either way nothing is written and the session is left alone
-- Typing anything after the action skips the box: `/handoff new the auth change`, `/handoff save the parser`, `/handoff resume 3`, `/handoff resume start with the tests`
-- VS Code draws no band, so there the box opens in a side pane. Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), the command runs at once: `new` and `save` without notes, `resume` on the latest handoff
+- Typing anything after the action skips the box: `/handoff save the parser`, `/handoff resume 3`, `/handoff resume start with the tests`
+- VS Code draws no band, so there the box opens in a side pane. Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), the command runs at once: `save` without notes, `resume` on the latest handoff
 
 While a handoff runs, the band shows a small progress panel: a spinner, the current step (asking, writing, saving) and the steps done and still to come. It goes away when the handoff ends or is cancelled.
 
 ## Open questions
 
-A handoff can hinge on decisions only you can make. Before the recap is written, `/handoff` has the session's own model judge that: in a short normal turn it asks you each such decision in Claude Code's own question dialog, then passes your answers to the recap writer. With `/handoff save` or `/handoff new` this comes after the notes box.
+A handoff can hinge on decisions only you can make. Before the recap is written, `/handoff` has the session's own model judge that: in a short normal turn it asks you each such decision in Claude Code's own question dialog, then passes your answers to the recap writer. With `/handoff save` this comes after the notes box.
 
 - The session's own model judges because it sees the whole session, where the recap writer gets the last 40 messages. Its turn stays short: it asks, then replies with one line per question
-- An answer goes to the writer as a decision. The writer puts it into the recap in its own words, where it belongs (the goal, a constraint, a next step), so the handoff holds no question-and-answer lines
+- An answer goes to the writer as a decision. The writer puts it into the recap in its own words, where it belongs (the goal, or as context or a constraint), so the handoff holds no question-and-answer lines
 - A question you do not answer stays under `Open questions for the user:`
 - Interrupting that turn cancels the handoff
 - With Recap writer set to `conversation`, the session's own model asks and writes the recap in one turn
-- `/handoff each` asks nothing. Neither does a host without conversation turns (Qwen Code, pi, OpenCode): there the recap lists what is open
+- A host without conversation turns (Qwen Code, pi, OpenCode) asks nothing: there the recap lists what is open
 
 ## Where handoffs live
 
@@ -71,13 +67,13 @@ Run `claude-notes` in a terminal to browse every saved note in the browser. See 
 
 The recap uses the last 40 messages of the conversation. Nothing beyond the conversation is added. With no messages it says "Nothing to recap yet."
 
-When the composer cannot take the text (a headless run, or a dialog holding the keys), the recap is copied to the clipboard and printed instead. The recap is also handed to the model as hidden context, so a follow-up like "continue from that" refers to the recap.
+When the composer cannot take the text (a headless run, or a dialog holding the keys), the recap is copied to the clipboard and printed instead. The recap is also handed to the model as hidden context, so a follow-up question about it refers to the recap.
 
 The recap is written by a subagent on Haiku, which gets the last 40 messages. A subagent runs as part of the session, so it also works behind an API proxy that refuses background requests while subagents and normal turns get through.
 
 With Recap writer set to `haiku`, Haiku is asked in the background first, which skips the subagent's start-up where the API allows it. A rate-limited, overloaded or failing API is retried after 1, 2 and 4 seconds. If Haiku still returns an API error, `/handoff` says so (`Haiku could not write the recap (API error 429, rate_limit). A subagent is writing the recap…`) and starts the subagent with the same last 40 messages.
 
-Nothing is saved until the subagent ends, so wait for it before closing the session: the status line under the prompt says `A subagent is writing the recap…` until then. When the subagent ends, its answer is saved, filled or handed off as the command asked; a toast reports the result, and the status line keeps it (`Saved as handoff #3. …`) until the next prompt. The subagent's report is dropped before it reaches the conversation (`Prompt dropped by a hook: The handoff subagent finished; its result is in the status line.`), so the session's own model takes no turn and the recap stays out of the transcript.
+Nothing is saved until the subagent ends, so wait for it before closing the session: the status line under the prompt says `A subagent is writing the recap…` until then. When the subagent ends, its answer is saved or filled as the command asked; a toast reports the result, and the status line keeps it (`Saved as handoff #3. …`) until the next prompt. The subagent's report is dropped before it reaches the conversation (`Prompt dropped by a hook: The handoff subagent finished; its result is in the status line.`), so the session's own model takes no turn and the recap stays out of the transcript.
 
 If the subagent cannot start, or ends with no answer, the conversation writes the recap instead: `/handoff` submits the recap rules as a normal turn, the session's own model answers, and the result is printed beneath that answer.
 

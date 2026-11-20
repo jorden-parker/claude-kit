@@ -37,7 +37,7 @@ Claude is told to load the `humanizer` skill before writing a debugging note and
 ~/.claude/project-notes/<project>/<category>/<date>-<slug>.md
 ```
 
-- `<project>` is the folder name of the session's project root. Claude can name another project when a note belongs elsewhere
+- `<project>` is the name of the repository the session is in, shared by its worktrees (also a deleted `<repo>/.claude/worktrees/<name>` one), or the project root's folder name outside git. Claude can name another project when a note belongs elsewhere
 - `<date>` is the day the note was written (UTC), or for a filed session note the day that session started; `<slug>` comes from the title
 - A second note with the same title on the same day gets `-2`, `-3` and so on, so nothing is overwritten
 - Each file starts with front matter: `title`, `category`, `project`, `created`, and `source` for a filed session note
@@ -56,6 +56,15 @@ Run `claude-notes` in a terminal to browse every saved note in the browser. See 
 - A note that records a bug investigation becomes a `debugging` note with all six sections; a section the old note says nothing about reads "Not recorded."
 - A filed note keeps its source id in its front matter (`source:`). A session note whose id is somewhere in the notes folder is not listed again; delete the filed note and it is listed once more
 - The session notes themselves are left as they are
+
+## Auditing where notes are saved
+
+`/project-notes audit` checks the folders of every store under `~/.claude` (`handoffs`, `project-notes`, `small-plans`, `brainstorm`, each moved by its `*_DIR` variable) for project folders named after a worktree instead of the repository. Claude calls `audit_note_folders`, which changes nothing and reports:
+
+- Misplaced folders, with the repository each belongs to. The evidence is a handoff's `cwd:` line (resolved through git, or the `<repo>/.claude/worktrees/<name>` path when git no longer knows it) or a name in this repository's `git worktree list`. A folder name tied to a repository in one store is mapped the same way in the others
+- Folders it cannot tie to a repository, such as a temporary folder; Claude asks you where each belongs
+
+Claude then calls `move_note_folder` (store, from, to) per folder. A move never overwrites: a taken name gets `-2`, moved handoffs are renumbered after the target's newest, and each Markdown file's `project:` line is rewritten. The emptied folder is removed.
 
 ## Install
 

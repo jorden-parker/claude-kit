@@ -1,4 +1,12 @@
 import type { EngineInterface, Register } from "claude-code";
+import {
+  auditNoteFolders,
+  moveNoteFolder,
+  NOTE_STORES,
+  QUALIFIED_MOVE_TOOL_NAME,
+  resolveRepositoryFolder,
+  toProjectName,
+} from "./note-folders";
 
 type LegacySession = {
   sessionId: string;
@@ -34,7 +42,17 @@ const SUBCOMMAND_SUGGESTIONS = [
     text: "organise",
     description: "File the existing session notes as project notes",
   },
+  {
+    text: "audit",
+    description:
+      "Move notes, handoffs, plans and brainstorms saved under a worktree's name to the repository's name",
+  },
 ];
+const AUDIT_TOOL_NAME = "audit_note_folders";
+const QUALIFIED_AUDIT_TOOL_NAME = `mcp__project-notes__${AUDIT_TOOL_NAME}`;
+const MOVE_TOOL_NAME = "move_note_folder";
+const STORE_NAMES = NOTE_STORES.map((store) => store.name);
+const AUDIT_INSTRUCTION = `Call ${QUALIFIED_AUDIT_TOOL_NAME}. Show the user its report. For each misplaced folder, call ${QUALIFIED_MOVE_TOOL_NAME} with its store, from and to. For each folder with no repository found, ask the user which repository it belongs to, or whether to leave it, and move it only on their answer. Reply with one line per move made.`;
 const WRITE_TOOL_NAME = "write_project_note";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__project-notes__${WRITE_TOOL_NAME}`;
 const LIST_LEGACY_TOOL_NAME = "list_legacy_notes";
@@ -88,29 +106,8 @@ const toSlug = (text: string) =>
     .slice(0, MAX_SLUG_LENGTH)
     .replace(/-$/, "");
 
-const toProjectName = (folder: string) => {
-  const lastSegment = folder.split("/").filter(Boolean).pop() ?? "";
-  const projectName = lastSegment.replace(/[^A-Za-z0-9._-]+/g, "-");
-  return /[A-Za-z0-9]/.test(projectName) ? projectName : "";
-};
-
-const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
-
-const findRepositoryFolder = async (engine: EngineInterface) => {
-  const folder = await engine.session.root();
-  const commonGitFolder = await engine.process
-    .run([
-      "git",
-      "-C",
-      folder,
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-    ])
-    .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
-    .catch(() => "");
-  return commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") || folder;
-};
+const findRepositoryFolder = async (engine: EngineInterface) =>
+  resolveRepositoryFolder(engine, await engine.session.root());
 
 const toCreatedTime = (requestedCreated: string) => {
   const createdTime = new Date(requestedCreated || Date.now());
@@ -249,11 +246,9 @@ const resolveLegacyProject = async (
   engine: EngineInterface,
   folder: string
 ) => {
-  const gitRoot = await engine.process
-    .run(["git", "-C", folder, "rev-parse", "--show-toplevel"])
-    .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
-    .catch(() => "");
-  return toProjectName(gitRoot || folder) || "unknown";
+  return (
+    toProjectName(await resolveRepositoryFolder(engine, folder)) || "unknown"
+  );
 };
 
 const listLegacyNotes = async (engine: EngineInterface) => {
@@ -281,7 +276,7 @@ const askClaude = (engine: EngineInterface, instruction: string) => {
 };
 
 const VIEWER_HINT =
-  "Run claude-notes in a terminal to browse every project note. /project-notes organise files existing session notes as project notes.";
+  "Run claude-notes in a terminal to browse every project note. /project-notes organise files existing session notes as project notes. /project-notes audit moves notes saved under a worktree's name to the repository's name.";
 
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
@@ -294,8 +289,8 @@ export const register: Register = (on) => {
     await $.command.register({
       name: "project-notes",
       description:
-        "/project-notes organise files existing session notes as project notes",
-      argumentHint: "organise",
+        "/project-notes organise files existing session notes as project notes; /project-notes audit moves notes saved under a worktree's name to the repository's name",
+      argumentHint: "organise | audit",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
@@ -307,6 +302,32 @@ export const register: Register = (on) => {
       name: LIST_LEGACY_TOOL_NAME,
       description: `Lists the session notes (from the session-notes plugin) not yet filed as project notes, ${LEGACY_BATCH_SIZE} at a time, each with a source id, project and date. Call it when the user asks to organise or migrate existing notes, then file each with ${WRITE_TOOL_NAME}.`,
       inputSchema: { type: "object", properties: {} },
+      isDeferred: false,
+    });
+    await $.tool.register({
+      name: AUDIT_TOOL_NAME,
+      description: `Audits the saved ${STORE_NAMES.join(", ")} folders under ~/.claude and reports each project folder named after a worktree or other folder instead of its git repository, with the repository it belongs to, plus folders it cannot tie to a repository. Changes nothing. Call it when the user asks to audit, check or tidy where notes, handoffs, plans or brainstorms are saved.`,
+      inputSchema: { type: "object", properties: {} },
+      isDeferred: false,
+    });
+    await $.tool.register({
+      name: MOVE_TOOL_NAME,
+      description: `Moves every file of one project folder in a store into another project folder of the same store, keeping both files when a name is taken, renumbering moved handoffs after the target's newest, and rewriting each Markdown file's project: line. Call it for each misplaced folder ${AUDIT_TOOL_NAME} reports, or one the user names.`,
+      inputSchema: {
+        type: "object",
+        properties: {
+          store: { type: "string", enum: STORE_NAMES },
+          from: {
+            type: "string",
+            description: "The misplaced project folder's name.",
+          },
+          to: {
+            type: "string",
+            description: "The repository's name to move it under.",
+          },
+        },
+        required: ["store", "from", "to"],
+      },
       isDeferred: false,
     });
     return next(e);
@@ -325,6 +346,12 @@ export const register: Register = (on) => {
   });
 
   on("command.run", { command: "project-notes" }, async ($, e) => {
+    if (/^audit$/i.test(e.args.trim())) {
+      askClaude($, AUDIT_INSTRUCTION);
+      return {
+        text: "Auditing where notes, handoffs, plans and brainstorms are saved…",
+      };
+    }
     if (!/^organi[sz]e$/i.test(e.args.trim())) return { text: VIEWER_HINT };
     askClaude($, ORGANISE_INSTRUCTION);
     return { text: "Filing the existing session notes as project notes…" };
@@ -336,6 +363,10 @@ export const register: Register = (on) => {
       return writeProjectNote($, toolInput);
     if (e.tool === (QUALIFIED_LIST_LEGACY_TOOL_NAME as string))
       return listLegacyNotes($);
+    if (e.tool === (QUALIFIED_AUDIT_TOOL_NAME as string))
+      return { result: await auditNoteFolders($) };
+    if (e.tool === (QUALIFIED_MOVE_TOOL_NAME as string))
+      return moveNoteFolder($, toolInput);
     if (e.tool === "Skill" && /humanizer/i.test(String(toolInput.skill)))
       isHumanizerLoaded = true;
     return next(e);

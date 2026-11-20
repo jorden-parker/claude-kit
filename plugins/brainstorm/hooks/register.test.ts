@@ -56,12 +56,13 @@ const mockEngine = (
   on: On,
   openExitCodes: Record<string, number> = {},
   commonGitFolder = "",
-  environment: Record<string, string> = {}
+  environment: Record<string, string> = {},
+  sessionFolder = "/repo"
 ) => {
   const writes: FileWrite[] = [];
   const ranCommands: string[][] = [];
   mockHome(on, environment);
-  on("session.cwd", () => ({ value: "/repo" }));
+  on("session.cwd", () => ({ value: sessionFolder }));
   on("clock.now", () => ({ value: NOVEMBER_NINTH_NOON }));
   on("fs.write", (_, e) => {
     writes.push({ path: e.path, text: e.text });
@@ -238,6 +239,22 @@ test("the brainstorm is saved outside the project, so nothing but the page and i
 
 test("a worktree saves its brainstorm under the main repository's name", async ($, on) => {
   const { writes } = mockEngine(on, {}, "/work/acme/.git\n");
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  expect(findPage(writes)?.path).toBe(
+    "/home/tester/.claude/brainstorm/acme/brainstorm-2026-11-09-1200.html"
+  );
+});
+
+test("a deleted worktree saves its brainstorm under the main repository's name", async ($, on) => {
+  const { writes } = mockEngine(
+    on,
+    { git: 128 },
+    "",
+    {},
+    "/work/acme/.claude/worktrees/feature-x"
+  );
 
   await renderBrainstorm($, VALID_INPUT);
 

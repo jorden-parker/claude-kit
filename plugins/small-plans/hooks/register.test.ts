@@ -52,7 +52,9 @@ type Recorded = {
 
 const mockEngine = (
   on: On,
-  seededFiles: Record<string, string> = {}
+  seededFiles: Record<string, string> = {},
+  commonGitFolder = "/work/claude-kit/.git\n",
+  sessionRoot = "/work/claude-kit"
 ): Recorded => {
   const recorded: Recorded = {
     files: new Map(Object.entries(seededFiles)),
@@ -62,7 +64,7 @@ const mockEngine = (
   on("env.get", (_, e) => ({
     value: { HOME: "/home/tester" }[e.name],
   }));
-  on("session.root", () => ({ value: "/work/claude-kit" }));
+  on("session.root", () => ({ value: sessionRoot }));
   on("fs.exists", (_, e) => ({ value: recorded.files.has(e.path) }));
   on("fs.write", (_, e) => {
     recorded.files.set(e.path, e.text);
@@ -85,10 +87,11 @@ const mockEngine = (
   });
   on("process.run", (_, e) => {
     recorded.commands.push([...e.argv]);
+    const isFailedGit = e.argv[0] === "git" && !commonGitFolder;
     return {
       value: {
-        exitCode: 0,
-        stdout: e.argv[0] === "git" ? "/work/claude-kit/.git\n" : "",
+        exitCode: isFailedGit ? 128 : 0,
+        stdout: e.argv[0] === "git" ? commonGitFolder : "",
         stderr: "",
         isStdoutTruncated: false,
         isStderrTruncated: false,
@@ -410,4 +413,19 @@ test("later words, other words and other commands get no /small-plans suggestion
   expect(suggestedTexts(workReply)).toEqual([]);
   expect(suggestedTexts(otherReply)).toEqual([]);
   expect(suggestedTexts(commandReply)).toEqual([]);
+});
+
+test("a plan written in a deleted worktree is saved under the main repository's name", async ($, on) => {
+  const { files } = mockEngine(
+    on,
+    {},
+    "",
+    "/work/claude-kit/.claude/worktrees/feature-x"
+  );
+
+  await callTool($, WRITE_TOOL, { ...VALID_PLAN, order: 1 });
+
+  expect(
+    [...files.keys()].some((path) => path.startsWith(`${PROJECT_FOLDER}/`))
+  ).toBe(true);
 });

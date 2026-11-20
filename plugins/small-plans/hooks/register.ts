@@ -20,6 +20,7 @@ const MAX_ORDER = 99;
 const ORDER_WIDTH = 2;
 const MAX_SLUG_LENGTH = 60;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
+const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
 const HANDOFF_FILE_NAME = /^\d+-.*\.md$/;
 const SET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const CODE_FENCE = /```[\s\S]*?```/g;
@@ -125,7 +126,9 @@ const resolveProjectName = async (engine: EngineInterface) => {
     .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
     .catch(() => "");
   return toProjectName(
-    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") || folder
+    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") ||
+      folder.match(CLAUDE_WORKTREE_PATH)?.[1] ||
+      folder
   );
 };
 

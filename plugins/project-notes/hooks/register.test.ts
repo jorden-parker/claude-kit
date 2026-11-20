@@ -431,13 +431,13 @@ const autocomplete = ($: Engine, text: string) =>
 const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
   reply.suggestions.map((suggestion) => suggestion.text);
 
-test("typing the first word after /project-notes suggests organise", async ($, on) => {
+test("typing the first word after /project-notes suggests organise and audit", async ($, on) => {
   on("prompt.autocomplete", () => ({ suggestions: [] }));
 
   const emptyReply = await autocomplete($, "/project-notes ");
   const partReply = await autocomplete($, "/project-notes org");
 
-  expect(suggestedTexts(emptyReply)).toEqual(["organise"]);
+  expect(suggestedTexts(emptyReply)).toEqual(["organise", "audit"]);
   expect(suggestedTexts(partReply)).toEqual(["organise"]);
   expect(emptyReply.suggestions[0]!.description).toContain("session notes");
 });
@@ -454,4 +454,227 @@ test("later words, /project-note topics and other commands get no /project-notes
   expect(suggestedTexts(topicReply)).toEqual([]);
   expect(suggestedTexts(otherReply)).toEqual([]);
   expect(suggestedTexts(commandReply)).toEqual([]);
+});
+
+const AUDIT_TOOL = "mcp__project-notes__audit_note_folders";
+const MOVE_TOOL = "mcp__project-notes__move_note_folder";
+const CLAUDE_ROOT = "/home/tester/.claude";
+const WORKTREE_FOLDER = "/work/claude-kit/.claude/worktrees/feature-x";
+
+type StoreMock = { files: Map<string, string>; commands: string[][] };
+
+const commandResult = (exitCode: number, stdout = "") => ({
+  value: {
+    exitCode,
+    stdout,
+    stderr: "",
+    isStdoutTruncated: false,
+    isStderrTruncated: false,
+  },
+});
+
+const mockStores = (
+  on: On,
+  seededFiles: Record<string, string>,
+  commonGitFolders: Record<string, string> = {},
+  worktreeList = "",
+  sessionRoot = "/work/claude-kit"
+): StoreMock => {
+  const recorded: StoreMock = {
+    files: new Map(Object.entries(seededFiles)),
+    commands: [],
+  };
+  on("env.get", (_, e) => ({ value: { HOME: "/home/tester" }[e.name] }));
+  on("session.root", () => ({ value: sessionRoot }));
+  on("fs.exists", (_, e) => ({
+    value: [...recorded.files.keys()].some(
+      (path) => path === e.path || path.startsWith(`${e.path}/`)
+    ),
+  }));
+  on("fs.write", (_, e) => {
+    recorded.files.set(e.path, e.text);
+    return { value: undefined };
+  });
+  on("fs.read", (_, e) => ({ value: recorded.files.get(e.path) ?? "" }));
+  on("fs.list", (_, e) => {
+    const childNames = new Map<string, "file" | "dir">();
+    for (const path of recorded.files.keys()) {
+      if (!path.startsWith(`${e.path}/`)) continue;
+      const [childName, ...deeper] = path.slice(e.path.length + 1).split("/");
+      childNames.set(childName ?? "", deeper.length ? "dir" : "file");
+    }
+    return {
+      value: [...childNames].map(([name, kind]) => ({
+        name,
+        kind,
+        size: 0,
+        mtimeMs: 0,
+        isLink: false,
+      })),
+    };
+  });
+  on("process.run", (_, e) => {
+    const argv = [...e.argv];
+    recorded.commands.push(argv);
+    if (argv[0] === "mv") {
+      const [fromPath = "", toPath = ""] = argv.slice(-2);
+      recorded.files.set(toPath, recorded.files.get(fromPath) ?? "");
+      recorded.files.delete(fromPath);
+      return commandResult(0);
+    }
+    if (argv[0] !== "git") return commandResult(0);
+    if (argv.includes("worktree")) return commandResult(0, worktreeList);
+    const commonGitFolder = commonGitFolders[argv[2] ?? ""];
+    return commonGitFolder
+      ? commandResult(0, `${commonGitFolder}\n`)
+      : commandResult(128);
+  });
+  on("tool.call", () => ({ result: {} }));
+  return recorded;
+};
+
+const handoffFile = (cwd: string, project: string) =>
+  `---\ntitle: Resume\nproject: ${project}\ncreated: 2026-11-19T10:00:00.000Z\ncwd: ${cwd}\n---\n\nResume.\n`;
+
+test("a note written in a deleted worktree is filed under the main repository's name", async ($, on) => {
+  const { files } = mockStores(on, {}, {}, "", WORKTREE_FOLDER);
+
+  await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Gone",
+    body: "B.",
+    created: "2026-11-19",
+  });
+
+  expect(files.has(`${NOTES_ROOT}/claude-kit/fact/2026-11-19-gone.md`)).toBe(
+    true
+  );
+});
+
+test("the audit names a worktree folder's real repository from a handoff's cwd", async ($, on) => {
+  mockStores(
+    on,
+    {
+      [`${CLAUDE_ROOT}/handoffs/feature-x/001-resume.md`]: handoffFile(
+        WORKTREE_FOLDER,
+        "feature-x"
+      ),
+      [`${CLAUDE_ROOT}/project-notes/feature-x/fact/2026-11-19-a.md`]: "A",
+      [`${CLAUDE_ROOT}/project-notes/claude-kit/fact/2026-11-19-b.md`]: "B",
+    },
+    { "/work/claude-kit": "/work/claude-kit/.git" }
+  );
+
+  const { result } = await callTool($, AUDIT_TOOL);
+
+  expect(result).toContain("handoffs/feature-x -> claude-kit");
+  expect(result).toContain("project-notes/feature-x -> claude-kit");
+  expect(result).not.toContain("project-notes/claude-kit ->");
+});
+
+test("the audit maps folders named after this repository's worktrees", async ($, on) => {
+  mockStores(
+    on,
+    { [`${CLAUDE_ROOT}/brainstorm/other-tree/brainstorm-1.json`]: "{}" },
+    { "/work/claude-kit": "/work/claude-kit/.git" },
+    "worktree /work/claude-kit\nHEAD abc\n\nworktree /work/trees/other-tree\nHEAD def\n"
+  );
+
+  const { result } = await callTool($, AUDIT_TOOL);
+
+  expect(result).toContain("brainstorm/other-tree -> claude-kit");
+});
+
+test("the audit lists folders it cannot tie to a repository", async ($, on) => {
+  mockStores(on, {
+    [`${CLAUDE_ROOT}/handoffs/tmp.abc/001-x.md`]: handoffFile(
+      "/tmp/tmp.abc",
+      "tmp.abc"
+    ),
+  });
+
+  const { result } = await callTool($, AUDIT_TOOL);
+
+  expect(result).toContain("No repository found");
+  expect(result).toContain("handoffs/tmp.abc");
+});
+
+test("moving a handoff folder renumbers after the target's handoffs and rewrites the project", async ($, on) => {
+  const { files } = mockStores(on, {
+    [`${CLAUDE_ROOT}/handoffs/claude-kit/001-first.md`]: handoffFile(
+      "/work/claude-kit",
+      "claude-kit"
+    ),
+    [`${CLAUDE_ROOT}/handoffs/claude-kit/002-second.md`]: handoffFile(
+      "/work/claude-kit",
+      "claude-kit"
+    ),
+    [`${CLAUDE_ROOT}/handoffs/feature-x/001-resume.md`]: handoffFile(
+      WORKTREE_FOLDER,
+      "feature-x"
+    ),
+  });
+
+  const { result } = await callTool($, MOVE_TOOL, {
+    store: "handoffs",
+    from: "feature-x",
+    to: "claude-kit",
+  });
+
+  expect(result).toContain("Moved 1 file");
+  expect(files.has(`${CLAUDE_ROOT}/handoffs/feature-x/001-resume.md`)).toBe(
+    false
+  );
+  expect(
+    files.get(`${CLAUDE_ROOT}/handoffs/claude-kit/003-resume.md`)
+  ).toContain("project: claude-kit\n");
+});
+
+test("moving keeps both files when a name is taken", async ($, on) => {
+  const { files } = mockStores(on, {
+    [`${CLAUDE_ROOT}/small-plans/claude-kit/set/01-a.md`]:
+      "project: claude-kit\n",
+    [`${CLAUDE_ROOT}/small-plans/feature-x/set/01-a.md`]:
+      "project: feature-x\n",
+  });
+
+  await callTool($, MOVE_TOOL, {
+    store: "small-plans",
+    from: "feature-x",
+    to: "claude-kit",
+  });
+
+  expect(files.get(`${CLAUDE_ROOT}/small-plans/claude-kit/set/01-a-2.md`)).toBe(
+    "project: claude-kit\n"
+  );
+});
+
+test("a move outside the stores or between unsafe names is refused", async ($, on) => {
+  mockStores(on, {});
+
+  const unknownStore = await callTool($, MOVE_TOOL, {
+    store: "etc",
+    from: "a",
+    to: "b",
+  });
+  const unsafeName = await callTool($, MOVE_TOOL, {
+    store: "handoffs",
+    from: "../x",
+    to: "b",
+  });
+
+  expect(unknownStore.deny).toBeDefined();
+  expect(unsafeName.deny).toBeDefined();
+});
+
+test("/project-notes audit asks Claude to audit the note folders", async ($, on) => {
+  const { submittedPrompts } = await runCommand(
+    $,
+    on,
+    "project-notes",
+    "audit"
+  );
+
+  expect(submittedPrompts[0]).toContain(AUDIT_TOOL);
+  expect(submittedPrompts[0]).toContain(MOVE_TOOL);
 });

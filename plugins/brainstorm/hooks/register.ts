@@ -40,6 +40,7 @@ const QUALIFIED_STATUS_TOOL_NAME = `mcp__brainstorm__${STATUS_TOOL_NAME}`;
 const LEGACY_BRAINSTORM_FOLDER = ".claude/brainstorm";
 const PLANS_FOLDER_NAME = "plans";
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
+const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
 const RUN_FILE_TOOLS = ["Read", "Write", "Edit"];
 const OWN_FOLDER_REASON =
   "The file is in the brainstorm plugin's own folder under ~/.claude/brainstorm.";
@@ -691,7 +692,9 @@ const resolveProjectName = async (engine: EngineInterface) => {
     .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
     .catch(() => "");
   return toProjectName(
-    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") || folder
+    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") ||
+      folder.match(CLAUDE_WORKTREE_PATH)?.[1] ||
+      folder
   );
 };
 

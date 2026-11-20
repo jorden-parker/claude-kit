@@ -2317,3 +2317,22 @@ testWithSession(
     expect(recapSystemPrompts[0]).toContain("Open questions for the user:");
   }
 );
+
+test(
+  "a deleted worktree files its handoffs under the main repository's name",
+  { options: { writer: "haiku" } },
+  async ($, on) => {
+    on("session.cwd", () => ({ value: "/repo/.claude/worktrees/feature-x" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    mockStore(on);
+    answerRecap(on);
+    const handoffFiles = mockHandoffFiles(on, "");
+
+    await $.command.run(handoff("save"));
+
+    expect([...handoffFiles.keys()]).toEqual([
+      handoffPath(1, "resume-prompt", "repo"),
+    ]);
+  }
+);

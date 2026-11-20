@@ -32,7 +32,8 @@ Four plugins save Markdown, and they follow one layout:
 | Small plans | `~/.claude/small-plans/<project>/<YYYY-MM-DD-HHMM-slug>/` | `NN-<slug>.md` |
 | Brainstorm plans | `~/.claude/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/` | `NN-<slug>/plan.md` |
 
-- `<project>` is the name of the folder that holds the repository, shared by its git worktrees, or the working folder's name outside git
+- `<project>` is the name of the folder that holds the repository, shared by its git worktrees, or the working folder's name outside git. A session in a Claude Code worktree that git no longer knows (`<repo>/.claude/worktrees/<name>`) still files under `<repo>`
+- `/project-notes audit` finds notes, handoffs, plans and brainstorms saved under a worktree's or other folder's name and moves them under the repository's name
 - A slug is the title in lowercase letters, digits and hyphens, 60 characters at most
 - Handoffs, project notes and small plans start with front matter: `title`, `project`, `created` (UTC), then the fields of their kind. The title is a short name of the work
 - Brainstorm plans keep their own format, a `# Plan:` heading with `- Status:` lines, an `index.md` per run and step files, because `check_brainstorm_plan` checks it

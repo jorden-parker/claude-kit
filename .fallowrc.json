@@ -12,6 +12,7 @@
     // readPlanFiles/readTemplateFiles are copied between brainstorm and draft-pr for the same reason.
     // formatFileStamp and escapeHtml are copied between brainstorm, draft-pr and design.
     // openInBrowser, describeError and resolveProjectPath are copied between brainstorm and design.
+    // resolveProjectName, toProjectName, trimText and toSlug are copied between handoff, small-plans, brainstorm and project-notes.
     "ignoredClones": [
       "dup:e67f2e0e:2",
       "dup:f469e6dc:2",
@@ -19,7 +20,10 @@
       "dup:6e0b87e8:3",
       "dup:af9f93b3:3",
       "dup:51f3f0ab:2",
-      "dup:62f2276b:2"
+      "dup:62f2276b:2",
+      "dup:45460fbd:3",
+      "dup:0f3df041:2",
+      "dup:efbf4a15:2"
     ]
   }
 }

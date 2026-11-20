@@ -58,6 +58,7 @@ const MAX_SLUG_LENGTH = 60;
 const HANDOFF_ID_WIDTH = 3;
 const HANDOFF_FILE_NAME = /^(\d+)-.*\.md$/;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
+const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
 const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n+/;
 const CREATED_FIELD = /^created: (.+)$/m;
 
@@ -257,7 +258,9 @@ const resolveProjectName = async (engine: EngineInterface, folder: string) => {
     .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
     .catch(() => "");
   return toProjectName(
-    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") || folder
+    commonGitFolder.replace(GIT_FOLDER_SUFFIX, "") ||
+      folder.match(CLAUDE_WORKTREE_PATH)?.[1] ||
+      folder
   );
 };
 

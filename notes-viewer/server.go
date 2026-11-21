@@ -391,6 +391,11 @@ func newViewerServer() http.Handler {
 		json.NewEncoder(writer).Encode(loadSections())
 	})
 
+	routes.HandleFunc("GET /api/tokens", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(writer).Encode(loadTokenSection())
+	})
+
 	routes.HandleFunc("PUT /api/notes/{section}/{path...}", func(writer http.ResponseWriter, request *http.Request) {
 		layout, notePath, isEntry := resolveEntryPath(request.PathValue("section"), request.PathValue("path"))
 		if !isEntry {

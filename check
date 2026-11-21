@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 cd "$(dirname "$0")"
 
 is_staged_only=false
-if [ "${1:-}" = "--staged" ]; then
-  is_staged_only=true
-fi
+changed_since=""
+case "${1:-}" in
+  --staged) is_staged_only=true ;;
+  --changed-since) changed_since="${2:?check --changed-since needs a git revision}" ;;
+esac
 
 should_check() {
+  if [ -n "$changed_since" ]; then
+    ! git diff --quiet "$changed_since" HEAD -- "$@"
+    return
+  fi
   [ "$is_staged_only" = false ] || ! git diff --cached --quiet -- "$@"
 }
 
@@ -24,6 +31,26 @@ run_outside_the_commit_hook() {
 is_missing_generated_types() {
   grep -qs "claude-plugin/types" "$1/tsconfig.json" && [ ! -d "$1/.claude-plugin/types" ]
 }
+
+list_plugins_missing_a_version_bump() {
+  git rev-parse --verify --quiet origin/main >/dev/null || return 0
+  local manifest plugin_folder released_version
+  for manifest in plugins/*/.claude-plugin/plugin.json; do
+    plugin_folder="${manifest%/.claude-plugin/plugin.json}"
+    git diff --quiet origin/main -- "$plugin_folder" && continue
+    released_version="$(git show "origin/main:$manifest" 2>/dev/null | jq -r .version)" || continue
+    if [ "$released_version" = "$(jq -r .version "$manifest")" ]; then
+      echo "$plugin_folder"
+    fi
+  done
+}
+
+plugins_missing_a_version_bump="$(list_plugins_missing_a_version_bump)"
+if [ -n "$plugins_missing_a_version_bump" ]; then
+  echo "check: these plugins changed since origin/main without a version bump in .claude-plugin/plugin.json:" >&2
+  echo "$plugins_missing_a_version_bump" >&2
+  exit 1
+fi
 
 for manifest in plugins/*/package.json; do
   plugin_folder="$(dirname "$manifest")"
@@ -61,6 +88,11 @@ done
 if should_check claude-kit-update tests/claude-kit-update.test.sh notes-viewer/claude-notes; then
   echo "check: tests/claude-kit-update.test.sh"
   run_outside_the_commit_hook bash tests/claude-kit-update.test.sh
+fi
+
+if should_check claude-kit-doctor tests/claude-kit-doctor.test.sh; then
+  echo "check: tests/claude-kit-doctor.test.sh"
+  run_outside_the_commit_hook bash tests/claude-kit-doctor.test.sh
 fi
 
 if should_check check tests/check.test.sh; then

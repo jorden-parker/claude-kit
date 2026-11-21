@@ -13,6 +13,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10.15.0
@@ -22,7 +24,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-go@v5
         with:
-          go-version-file: plugins/project-notes/web/go.mod
+          go-version-file: notes-viewer/go.mod
           cache: false
       - run: npm install --global @anthropic-ai/claude-code
       - run: |
@@ -31,4 +33,6 @@ jobs:
           done
       - run: bun install --frozen-lockfile
         working-directory: design-studio
-      - run: ./check
+      - run: ./check --changed-since "$CHANGED_SINCE"
+        env:
+          CHANGED_SINCE: ${{ github.event.pull_request.base.sha || github.event.before }}

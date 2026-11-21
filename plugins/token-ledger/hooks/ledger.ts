@@ -305,16 +305,53 @@ function describeTools(resultCharactersByTool: Record<string, number>) {
     : [];
 }
 
+const CAP_REPORTED_TOOLS = 10;
+const GUARDS_SHELL_TOOLS = ["Bash", "run_shell_command"];
+const GUARDS_SHELL_CAP = "bash-trim caps at 150 lines, 400 characters a line";
+const GUARDS_MCP_CAP =
+  "bash-trim caps at 300 lines (off when GUARDS_MCP_TRIM=0)";
+const GUARDS_READ_CAP = "read-guard caps at 300 lines";
+
+function describeGuardCap(toolName: string): string {
+  if (GUARDS_SHELL_TOOLS.includes(toolName)) return GUARDS_SHELL_CAP;
+  if (toolName === "Read") return GUARDS_READ_CAP;
+  if (toolName.startsWith("mcp__")) return GUARDS_MCP_CAP;
+  return "no guards cap";
+}
+
+function describeToolCaps(entries: LedgerEntry[]): string[] {
+  const charactersByTool: Record<string, number> = {};
+  for (const entry of entries)
+    for (const [toolName, characters] of Object.entries(
+      entry.resultCharactersByTool ?? {}
+    ))
+      charactersByTool[toolName] =
+        (charactersByTool[toolName] ?? 0) + characters;
+  const biggestTools = Object.entries(charactersByTool)
+    .sort(([, first], [, second]) => second - first)
+    .slice(0, CAP_REPORTED_TOOLS);
+  if (biggestTools.length === 0) return [];
+  return [
+    "",
+    "Biggest tool results across these sessions, beside the guards caps:",
+    ...biggestTools.map(
+      ([toolName, characters]) =>
+        `  ${toolName} ${inThousands(characters)} chars: ${describeGuardCap(toolName)}`
+    ),
+  ];
+}
+
 export function formatReport(entries: LedgerEntry[]): string {
   if (entries.length === 0) return "No sessions recorded yet.";
-  return entries
-    .flatMap((entry) => [
+  return [
+    ...entries.flatMap((entry) => [
       `${entry.updatedAt.slice(0, 16).replace("T", " ")}  ${entry.project}  context ${inThousands(entry.contextTokens)}  ${entry.session}`,
       ...describeModels("", entry.main),
       ...describeModels("subagents ", entry.subagents),
-      ...describeTools(entry.resultCharactersByTool),
-    ])
-    .join("\n");
+      ...describeTools(entry.resultCharactersByTool ?? {}),
+    ]),
+    ...describeToolCaps(entries),
+  ].join("\n");
 }
 
 export function readNewestEntries(

@@ -25,6 +25,10 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   (Haiku), sending independent work out in parallel. It also tells Claude to
   run checks itself rather than ask the user to run them. Off with
   `GUARDS_DELEGATE_GUARD=0`.
+- **ci-status** (SessionStart): in a repository whose `origin` is on GitHub,
+  asks `gh` for the latest run on `main` and shows one warning line when it
+  failed. Silent when `gh` is missing or signed out, when it takes over 10
+  seconds, and when the run passed.
 - **worker** (agent, Haiku): implements a fully specified change or runs a
   check, then replies DONE or BLOCKED with changed `path:line`s and the check's
   result line.
@@ -52,7 +56,8 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   and the error lines of Bash output over 150 lines, and the head and tail of
   an MCP text result over 300 lines. The full text is saved under
   `$TMPDIR/guards-output/` and the marker line names the file, so Claude greps
-  that file and does not run the command again. Leave MCP results alone with
+  that file and does not run the command again. Each time it saves a file it
+  first deletes saved files older than seven days. Leave MCP results alone with
   `GUARDS_MCP_TRIM=0`.
 - **browser-check** (Stop, off by default): blocks once when a UI file was
   edited after the last browser console read (`agent-browser console`,

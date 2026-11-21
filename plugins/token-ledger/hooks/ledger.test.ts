@@ -22,6 +22,53 @@ import {
   waitForLastReply,
 } from "./ledger.ts";
 
+const entryWithTools = (
+  session: string,
+  resultCharactersByTool: Record<string, number>
+): LedgerEntry => ({
+  session,
+  project: "shop",
+  updatedAt: "2026-01-02T03:04:05.000Z",
+  contextTokens: 1000,
+  lastNudgeTokens: 0,
+  main: {},
+  subagents: {},
+  resultCharactersByTool,
+});
+
+test("formatReport lists the biggest tools beside the guards caps", () => {
+  const report = formatReport([
+    entryWithTools("session-1", { Bash: 20_000, Read: 5000, Agent: 1000 }),
+    entryWithTools("session-2", {
+      Bash: 10_000,
+      mcp__notes__list: 8000,
+      run_shell_command: 2000,
+    }),
+  ]);
+  const shellCap = "bash-trim caps at 150 lines, 400 characters a line";
+  expect(report).toContain(
+    "Biggest tool results across these sessions, beside the guards caps:"
+  );
+  expect(report).toContain(`  Bash 30k chars: ${shellCap}`);
+  expect(report).toContain(`  run_shell_command 2k chars: ${shellCap}`);
+  expect(report).toContain(
+    "  mcp__notes__list 8k chars: bash-trim caps at 300 lines (off when GUARDS_MCP_TRIM=0)"
+  );
+  expect(report).toContain("  Read 5k chars: read-guard caps at 300 lines");
+  expect(report).toContain("  Agent 1k chars: no guards cap");
+  expect(report.indexOf("  Bash 30k")).toBeLessThan(
+    report.indexOf("  mcp__notes__list 8k")
+  );
+});
+
+test("formatReport reads an entry saved without tool results", () => {
+  const olderEntry = {
+    ...entryWithTools("session-3", {}),
+    resultCharactersByTool: undefined,
+  } as unknown as LedgerEntry;
+  expect(formatReport([olderEntry])).toContain("session-3");
+});
+
 const assistantLine = (
   messageId: string,
   model: string,

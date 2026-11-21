@@ -6,6 +6,11 @@
           {
             "type": "command",
             "command": "bun \"${CLAUDE_PLUGIN_ROOT}/hooks/run.ts\" delegation-rules"
+          },
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/hooks/run.ts\" ci-status",
+            "timeout": 10
           }
         ]
       }

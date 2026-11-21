@@ -1,4 +1,5 @@
 import type {
+  FsEntry,
   On,
   PromptAutocompleteInput,
   PromptAutocompleteResult,
@@ -418,9 +419,16 @@ test("earlier ideas whose files changed since that brainstorm show as done", asy
     writes.push({ path: e.path, text: e.text });
     return { value: undefined };
   });
-  on("fs.list", () => ({
-    value: [{ name: "brainstorm-2026-11-08-1500.json", kind: "file" }],
-  }));
+  const earlierFolderEntries: FsEntry[] = [
+    {
+      name: "brainstorm-2026-11-08-1500.json",
+      kind: "file",
+      size: 1,
+      mtimeMs: 1,
+      isLink: false,
+    },
+  ];
+  on("fs.list", () => ({ value: earlierFolderEntries }));
   on("fs.read", () => ({
     value: JSON.stringify({
       project: "repo",

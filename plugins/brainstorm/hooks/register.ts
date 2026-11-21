@@ -639,11 +639,17 @@ const numberIdeasByUrgency = (ideas: Idea[]): NumberedIdea[] =>
     .sort(compareUrgency)
     .map((idea, index) => ({ ...idea, number: index + 1 }));
 
-const renderBrainstormPage = ({
-  project,
-  summary,
-  ideas: sortedIdeas,
-}: SavedBrainstorm) => {
+const renderEarlierIdeas = (doneEarlierIdeas: Idea[]) =>
+  doneEarlierIdeas.length === 0
+    ? ""
+    : `<details class="earlier-ideas"><summary>Earlier ideas done since the last brainstorm (${doneEarlierIdeas.length})</summary><ul>${doneEarlierIdeas
+        .map((idea) => `<li>${escapeHtml(idea.title)}</li>`)
+        .join("")}</ul></details>`;
+
+const renderBrainstormPage = (
+  { project, summary, ideas: sortedIdeas }: SavedBrainstorm,
+  doneEarlierIdeas: Idea[] = []
+) => {
   const prioritySections = PRIORITIES_MOST_URGENT_FIRST.map((priority) =>
     renderPrioritySection(priority, sortedIdeas)
   ).join("\n");
@@ -666,6 +672,7 @@ ${renderStats(sortedIdeas)}
 ${renderStartHere(sortedIdeas)}
 ${renderToolbar(sortedIdeas)}
 ${prioritySections}
+${renderEarlierIdeas(doneEarlierIdeas)}
 </main>
 ${PLAN_PICKER}
 <script>${PAGE_SCRIPT}</script>
@@ -772,6 +779,11 @@ const writeBrainstormPage = async (
   );
   const pathWithoutExtension = `${brainstormFolder}/brainstorm-${formatFileStamp(await engine.clock.now())}`;
   const pagePath = `${pathWithoutExtension}.html`;
+  const doneEarlierIdeas = await listDoneEarlierIdeas(
+    engine,
+    brainstormFolder,
+    requestedFolder || (await engine.session.cwd())
+  );
   const savedBrainstorm: SavedBrainstorm = {
     ...brainstorm,
     ideas: numberIdeasByUrgency(brainstorm.ideas),
@@ -780,7 +792,10 @@ const writeBrainstormPage = async (
     `${pathWithoutExtension}.json`,
     `${JSON.stringify(savedBrainstorm, null, 2)}\n`
   );
-  await engine.fs.write(pagePath, renderBrainstormPage(savedBrainstorm));
+  await engine.fs.write(
+    pagePath,
+    renderBrainstormPage(savedBrainstorm, doneEarlierIdeas)
+  );
   return pagePath;
 };
 
@@ -821,6 +836,47 @@ const loadNewestBrainstorm = async (
   } catch {
     return undefined;
   }
+};
+
+const SAVED_BRAINSTORM_STAMP = new RegExp(
+  `brainstorm-(${FILE_STAMP_PATTERN})\\.json$`
+);
+
+const toStampTime = (stamp: string) =>
+  `${stamp.slice(0, 10)}T${stamp.slice(11, 13)}:${stamp.slice(13, 15)}:00Z`;
+
+const listDoneEarlierIdeas = async (
+  engine: EngineInterface,
+  brainstormFolder: string,
+  repositoryFolder: string
+): Promise<Idea[]> => {
+  const savedPaths = await listEntryPathsOldestFirst(
+    engine,
+    brainstormFolder,
+    isSavedBrainstorm
+  );
+  const stamp = savedPaths.at(-1)?.match(SAVED_BRAINSTORM_STAMP)?.[1];
+  const earlierBrainstorm = await loadNewestBrainstorm(
+    engine,
+    brainstormFolder
+  );
+  if (!stamp || !earlierBrainstorm) return [];
+  const gitLog = await engine.process
+    .run([
+      "git",
+      "-C",
+      repositoryFolder,
+      "log",
+      `--since=${toStampTime(stamp)}`,
+      "--name-only",
+      "--pretty=format:",
+    ])
+    .catch(() => undefined);
+  if (!gitLog || gitLog.exitCode !== 0) return [];
+  const changedFiles = new Set(gitLog.stdout.split("\n").filter(Boolean));
+  return earlierBrainstorm.ideas.filter((idea) =>
+    idea.files.some((file) => changedFiles.has(file))
+  );
 };
 
 const describeIdeaLine = (idea: NumberedIdea) =>

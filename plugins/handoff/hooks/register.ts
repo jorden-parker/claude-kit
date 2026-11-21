@@ -6,6 +6,7 @@ import type {
   RenderElement,
   RenderInput,
 } from "claude-code";
+import { findSecretKinds } from "./secret-patterns";
 
 const OPEN_QUESTIONS_HEADING = "Open questions for the user:";
 
@@ -736,6 +737,11 @@ const deliverRecap = async (
   recapText: string,
   isRecapOnScreen: boolean
 ) => {
+  const secretKinds = findSecretKinds(recapText);
+  if (secretKinds.length > 0)
+    return {
+      text: `The recap looks like it holds a secret (${secretKinds.join(", ")}), so it was not saved or handed on. Take the secret out of the conversation and run /handoff again.`,
+    };
   const saveOutcome = await saveSessionHandoff(
     engine,
     recapText,

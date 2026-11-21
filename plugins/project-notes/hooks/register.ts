@@ -8,6 +8,7 @@ import {
   resolveRepositoryFolder,
   toProjectName,
 } from "./note-folders";
+import { findSecretKinds } from "./secret-patterns";
 
 type LegacySession = {
   sessionId: string;
@@ -207,6 +208,11 @@ const writeProjectNote = async (
   if (!body) return { deny: "The note needs a body." };
   if (!projectName)
     return { deny: "The project name needs letters or digits." };
+  const secretKinds = findSecretKinds(`${title}\n${body}`);
+  if (secretKinds.length > 0)
+    return {
+      deny: `The note looks like it holds a secret (${secretKinds.join(", ")}). Take it out and call this tool again.`,
+    };
   const refusal =
     category === DEBUGGING_CATEGORY ? refuseDebuggingNote(body) : undefined;
   if (refusal) return { deny: refusal };

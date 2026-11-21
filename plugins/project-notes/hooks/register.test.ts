@@ -236,6 +236,21 @@ test("a note without a title or body is refused", async ($, on) => {
   expect(files.size).toBe(0);
 });
 
+test("a note holding a secret is refused by kind and nothing is written", async ($, on) => {
+  const { files } = mockEngine(on);
+  const secret = `ghp_${"a".repeat(36)}`;
+
+  const reply = await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Deploy token",
+    body: `The deploy uses ${secret} for pushes.`,
+  });
+
+  expect(reply.deny).toContain("GitHub token");
+  expect(reply.deny).not.toContain(secret);
+  expect(files.size).toBe(0);
+});
+
 test("a project name cannot leave the notes folder", async ($, on) => {
   const { files } = mockEngine(on);
 

@@ -1,5 +1,5 @@
 {
   "name": "guards",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Command guards: caps unbounded git log, diff and find, trims long Bash and MCP output and saves the full text to a file, blocks commits that skip hooks or fail the project's checks, limits Reads of large files, makes the main session an orchestrator that hands lookups, edits and checks to Haiku subagents and blocks its own project edits, forces context-heavy lookups onto the Haiku context-scout subagent, and, opted in, asks for a browser check after UI edits"
 }

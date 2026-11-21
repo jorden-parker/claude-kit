@@ -1,0 +1,5 @@
+{
+  "name": "money-minute",
+  "version": "0.1.0",
+  "description": "ADHD-friendly money check-ins on your Emma data: /money for a one-minute check-in with one next step, /money bills for what leaves your account in the next 14 days, /money week for spending against budgets, /money pause to park an impulse buy for 48 hours; the status line shows how long since you last looked"
+}

@@ -12,7 +12,7 @@ The main session's context is reread on every turn, so anything that stays in it
 
 ## Read
 
-1. Run `claude-ledger --text 40`. It prints the newest 40 sessions and, at the end, the biggest tool results beside the guards caps. If the command is missing, run `claude-kit-update` once and try again.
+1. Run `claude-ledger --text 40 > "${TMPDIR:-/tmp}/ledger-report.txt"`, then read that file with the Read tool. Reading the file keeps the output caps from hiding the middle of the report. It lists the newest 40 sessions and, at the end, the biggest tool results beside the guards caps. If the command is missing, run `claude-kit-update` once and try again.
 2. Look for where the tokens go: the sessions with the largest context, the tools that put the most characters into the main session, tools with no cap, subagents whose cache write is large next to their cache read (a subagent started for one small lookup), and long sessions that never handed off.
 3. Write at most five recommendations, largest saving first. Each one states the numbers from the report that support it, the exact change (a file and value in claude-kit, or a Claude Code setting such as a plugin or MCP server to turn off for a project), and which ledger number should move and in which direction.
 

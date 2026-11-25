@@ -3,4 +3,8 @@ set -euo pipefail
 
 script_path="$(realpath "$0")"
 plugin_folder="$(dirname "$(dirname "$script_path")")"
-exec bun "$plugin_folder/hooks/run.ts" report "$@"
+if [ "${1:-}" = "--text" ]; then
+  shift
+  exec bun "$plugin_folder/hooks/run.ts" report "$@"
+fi
+exec bun "$plugin_folder/hooks/run.ts" table "$@"

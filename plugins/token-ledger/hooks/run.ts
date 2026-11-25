@@ -1,4 +1,7 @@
-import { homedir } from "node:os";
+import { writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { composeLedgerPage } from "./ledger-page.ts";
 import {
   formatReport,
   readNewestEntries,
@@ -13,10 +16,18 @@ const LAST_REPLY_PAUSE_MILLISECONDS = 50;
 const LAST_REPLY_ATTEMPTS = 40;
 const userHome = process.env.HOME ?? homedir();
 const command = process.argv[2];
+const sessionCount = Number(process.argv[3]) || DEFAULT_REPORTED_SESSIONS;
 
 if (command === "report") {
-  const sessionCount = Number(process.argv[3]) || DEFAULT_REPORTED_SESSIONS;
   console.log(formatReport(readNewestEntries(userHome, sessionCount)));
+} else if (command === "table") {
+  const pagePath = join(tmpdir(), "claude-ledger.html");
+  writeFileSync(
+    pagePath,
+    composeLedgerPage(readNewestEntries(userHome, sessionCount))
+  );
+  Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", pagePath]);
+  console.log(pagePath);
 } else {
   try {
     const event = JSON.parse(await Bun.stdin.text());

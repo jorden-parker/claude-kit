@@ -119,13 +119,36 @@ test("composeLedgerPage highlights the cache read and write columns", () => {
   expect((firstRow.match(/<td class="number cache">/g) ?? []).length).toBe(2);
 });
 
-test("composeMarkdownTable writes a header, a separator and escaped body rows", () => {
+test("composeMarkdownTable aligns numeric columns right and text columns left", () => {
+  expect(
+    composeMarkdownTable([
+      ["Model", "Input Tokens", "Note"],
+      ["claude-fable-5-2", "56", "a|b"],
+      ["haiku", "1200", ""],
+    ])
+  ).toBe(
+    [
+      "| Model            | Input Tokens | Note |",
+      "| ---------------- | -----------: | --- |",
+      "| claude-fable-5-2 |           56 | a\\|b |",
+      "| haiku            |         1200 |  |",
+    ].join("\n")
+  );
+});
+
+test("composeMarkdownTable treats every column as text when there are no body rows", () => {
+  expect(composeMarkdownTable([["Model", "Input Tokens"]])).toBe(
+    "| Model | Input Tokens |\n| ----- | --- |"
+  );
+});
+
+test("composeMarkdownTable writes escaped body rows with padded columns", () => {
   expect(
     composeMarkdownTable([
       ["Model", "Input Tokens"],
       ["a|b", "12"],
     ])
-  ).toBe("| Model | Input Tokens |\n| --- | --- |\n| a\\|b | 12 |");
+  ).toBe("| Model | Input Tokens |\n| ----- | --: |\n| a\\|b  | 12 |");
 });
 
 test("composeLedgerPage script copies Markdown as plain text and HTML as a table", () => {
@@ -334,25 +357,45 @@ test("composeLedgerCopy puts a summary above the Markdown table", () => {
   };
   expect(composeLedgerCopy(rows, toolCharactersBySession)).toBe(
     [
-      "claude-ledger: tokens per session, scope and model. Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
-      "Context Tokens is the main session's context size, reread on every turn. Last Nudge Tokens is the context size when the session was last told to hand off and clear, 0 if never. Session Share is the row's part of its session's tokens: a high main share means the main agent did work its subagents could take. Main Tool Result Characters, on each session's first row, lists what each tool returned into the main agent's context. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
-      "Totals for 3 rows: input 1200, cache write 300, cache read 9000, output 450. Cache reads are 86% of prompt tokens. Flagged 1 of 3. Subagents used 29% of all tokens.",
-      "Largest tool results in the main agent's context, in characters: Read 120000, Bash 30000, Glob 4000, Edit 3000, Write 2000.",
+      "# claude-ledger usage",
       "",
+      "Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
+      "",
+      "## Totals",
+      "- Sessions: 2",
+      "- Rows: 3",
+      "- Input tokens: 1,200",
+      "- Cache write tokens: 300",
+      "- Cache read tokens: 9,000 (86% of prompt tokens)",
+      "- Output tokens: 450",
+      "- Flagged rows: 1 of 3",
+      "- Subagent share of all tokens: 29%",
+      "- Largest tool results in the main agent's context, in characters: Read 120,000; Bash 30,000; Glob 4,000; Edit 3,000; Write 2,000",
+      "",
+      "## Columns",
+      "- Context Tokens: the main session's context size, reread on every turn.",
+      "- Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
+      "- Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
+      "- Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
+      "- Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+      "",
+      "## Sessions",
       composeMarkdownTable(rows),
     ].join("\n")
   );
 });
 
-test("composeLedgerCopy says 1 row, omits the tool line and ends with the table", () => {
+test("composeLedgerCopy counts one row and omits the tool bullet without tool characters", () => {
   const rows = [
     ledgerHeader,
     ledgerRow("s1", "main", "OK", "1", "2", "3", "4"),
   ];
   const summary = composeLedgerCopy(rows, {});
-  expect(summary).toContain("Totals for 1 row: ");
+  expect(summary).toContain("- Rows: 1\n");
   expect(summary).not.toContain("Largest tool results");
-  expect(summary.endsWith("\n\n" + composeMarkdownTable(rows))).toBe(true);
+  expect(summary.endsWith("## Sessions\n" + composeMarkdownTable(rows))).toBe(
+    true
+  );
 });
 
 test("composeLedgerCopy reports 0% when every token cell is 0", () => {
@@ -362,8 +405,8 @@ test("composeLedgerCopy reports 0% when every token cell is 0", () => {
     ledgerRow("s1", "subagent", "Not cached", "0", "0", "0", "0"),
   ];
   const summary = composeLedgerCopy(rows, {});
-  expect(summary).toContain("Cache reads are 0% of prompt tokens.");
-  expect(summary).toContain("Subagents used 0% of all tokens.");
+  expect(summary).toContain("- Cache read tokens: 0 (0% of prompt tokens)");
+  expect(summary).toContain("- Subagent share of all tokens: 0%");
 });
 
 test("composeLedgerPage copies the summary and embeds the tool map for each session", () => {
@@ -554,4 +597,36 @@ test("labelProjects returns equal rows when there is no Project column", () => {
     ["fable", "12"],
   ];
   expect(labelProjects(rows, ["fable"])).toEqual(rows);
+});
+
+test("composeLedgerPage marks the repeated values on every row after a session's first", () => {
+  const [, firstRow = "", secondRow = ""] = rowsOf(
+    composeLedgerPage([toolEntry("session-repeat", {})])
+  );
+  const repeatedIndexes = [0, 1, 2, 5, 6];
+  const classesOf = (row: string) =>
+    (row.match(/<td[^>]*>/g) ?? []).map((cell) => cell.includes("repeated"));
+  expect(classesOf(firstRow).some(Boolean)).toBe(false);
+  expect(
+    classesOf(secondRow).flatMap((isRepeated, index) =>
+      isRepeated ? [index] : []
+    )
+  ).toEqual(repeatedIndexes);
+});
+
+test("composeLedgerPage styles a sticky header inside a scrollable table", () => {
+  const page = composeLedgerPage([sampleEntry]);
+  expect(page).toContain("thead th{position:sticky;top:0;z-index:1}");
+  expect(page).toContain("max-height:80vh");
+});
+
+test("composeLedgerPage intro counts the sessions that have rows", () => {
+  const page = composeLedgerPage([
+    sampleEntry,
+    { ...sampleEntry, session: "session-two" },
+  ]);
+  expect(page).toContain("Sessions shown: 2, newest first.");
+  expect(page).toContain(
+    "Each row is one model's tokens for a session's main agent or its subagents."
+  );
 });

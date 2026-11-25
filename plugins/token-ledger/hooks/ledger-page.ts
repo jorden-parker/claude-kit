@@ -47,18 +47,20 @@ button{font:inherit;min-height:44px;padding:0 16px;border:1px solid var(--border
 button:hover{background:color-mix(in srgb,CanvasText 8%,Canvas)}
 button:active{background:color-mix(in srgb,CanvasText 14%,Canvas)}
 button:focus-visible,.table-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+.table-scroll{max-height:80vh;overflow:auto;border:1px solid var(--border);border-radius:8px}
 table{border-collapse:collapse;width:100%;font-size:.875rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
 th{white-space:normal;vertical-align:bottom}
 td{vertical-align:top}
-td:nth-child(2),td:nth-child(3){white-space:normal;overflow-wrap:anywhere}
+tbody td{white-space:nowrap}
 th{background:color-mix(in srgb,CanvasText 6%,Canvas);font-weight:600}
+thead th{position:sticky;top:0;z-index:1}
+.repeated{color:color-mix(in srgb,CanvasText 60%,Canvas)}
 tbody tr:last-child td{border-bottom:0}
 tbody tr:hover{background:color-mix(in srgb,CanvasText 5%,Canvas)}
 .session-start td{border-top:2px solid color-mix(in srgb,CanvasText 35%,Canvas)}
 .number{text-align:right}
-.tool-results{white-space:normal;min-width:16em}
+.tool-results{white-space:normal;min-width:24em}
 .digit-group{margin-left:.25em}
 .legend{border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:16px}
 .legend h2{font-size:1rem;margin:0 0 4px}
@@ -67,19 +69,45 @@ tbody tr:hover{background:color-mix(in srgb,CanvasText 5%,Canvas)}
 .summary{font-weight:600;color:var(--good)}
 .summary.has-problem{color:var(--problem)}
 .cache{background:color-mix(in srgb,var(--accent) 10%,Canvas)}
-.cache-status{white-space:normal;font-weight:600;color:var(--good)}
+.cache-status{font-weight:600;color:var(--good)}
 .cache-status::before{content:"";display:inline-block;width:.5em;height:.5em;margin-right:6px;border-radius:50%;background:var(--good);vertical-align:middle}
 .cache-problem td.cache{background:color-mix(in srgb,var(--problem) 18%,Canvas);font-weight:600}
 .cache-problem .cache-status{color:var(--problem)}
 .cache-problem .cache-status::before{content:"!";width:1.25em;height:1.25em;line-height:1.25em;background:var(--problem);color:Canvas;text-align:center;font-weight:700}`;
 
 export function composeMarkdownTable(rows: string[][]): string {
+  const escapedRows = rows.map((cells) =>
+    cells.map((cell) => cell.replaceAll("|", "\\|"))
+  );
+  const [headerCells, ...bodyRows] = escapedRows;
+  const lastIndex = headerCells.length - 1;
+  const isNumericColumn = (index: number) =>
+    bodyRows.length > 0 &&
+    bodyRows.every((cells) => /^\d+%?$/.test(cells[index]));
+  const numericFlags = headerCells.map((cell, index) => isNumericColumn(index));
+  const widths = headerCells.map((cell, index) =>
+    escapedRows.reduce(
+      (longest, cells) => Math.max(longest, cells[index].length),
+      3
+    )
+  );
+  const padCell = (cell: string, index: number) => {
+    if (index === lastIndex) return cell;
+    return numericFlags[index]
+      ? cell.padStart(widths[index])
+      : cell.padEnd(widths[index]);
+  };
   const composeLine = (cells: string[]) =>
-    `| ${cells.map((cell) => cell.replaceAll("|", "\\|")).join(" | ")} |`;
-  const [headerCells, ...bodyRows] = rows;
+    `| ${cells.map(padCell).join(" | ")} |`;
+  const dividerCells = headerCells.map((cell, index) => {
+    if (index === lastIndex) return numericFlags[index] ? "--:" : "---";
+    return numericFlags[index]
+      ? "-".repeat(widths[index] - 1) + ":"
+      : "-".repeat(widths[index]);
+  });
   return [
     composeLine(headerCells),
-    composeLine(headerCells.map(() => "---")),
+    `| ${dividerCells.join(" | ")} |`,
     ...bodyRows.map(composeLine),
   ].join("\n");
 }
@@ -116,13 +144,6 @@ export function composeLedgerCopy(
   const subagentRows = bodyRows.filter(
     (row) => readColumn(row, "Scope") !== MAIN_SCOPE
   );
-  const rowCountText =
-    bodyRows.length === 1 ? "1 row" : `${bodyRows.length} rows`;
-  const totalsLine =
-    `Totals for ${rowCountText}: input ${input}, cache write ${cacheWrite}, cache read ${cacheRead}, output ${output}. ` +
-    `Cache reads are ${computePercent(cacheRead, promptTokens)}% of prompt tokens. ` +
-    `Flagged ${flaggedCount} of ${bodyRows.length}. ` +
-    `Subagents used ${computePercent(addUpTokens(subagentRows), addUpTokens(bodyRows))}% of all tokens.`;
 
   const characterTotals = new Map();
   const sessionNames = new Set(
@@ -143,21 +164,45 @@ export function composeLedgerCopy(
     .sort((left, right) => right[1] - left[1])
     .slice(0, 5);
 
+  const formatCount = (count: number) => count.toLocaleString("en-US");
   const lines = [
-    "claude-ledger: tokens per session, scope and model. Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
-    "Context Tokens is the main session's context size, reread on every turn. Last Nudge Tokens is the context size when the session was last told to hand off and clear, 0 if never. Session Share is the row's part of its session's tokens: a high main share means the main agent did work its subagents could take. Main Tool Result Characters, on each session's first row, lists what each tool returned into the main agent's context. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
-    totalsLine,
+    "# claude-ledger usage",
+    "",
+    "Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
+    "",
+    "## Totals",
+    `- Sessions: ${formatCount(sessionNames.size)}`,
+    `- Rows: ${formatCount(bodyRows.length)}`,
+    `- Input tokens: ${formatCount(input)}`,
+    `- Cache write tokens: ${formatCount(cacheWrite)}`,
+    `- Cache read tokens: ${formatCount(cacheRead)} (${computePercent(cacheRead, promptTokens)}% of prompt tokens)`,
+    `- Output tokens: ${formatCount(output)}`,
+    `- Flagged rows: ${formatCount(flaggedCount)} of ${formatCount(bodyRows.length)}`,
+    `- Subagent share of all tokens: ${computePercent(addUpTokens(subagentRows), addUpTokens(bodyRows))}%`,
   ];
   if (largestTools.length > 0) {
     lines.push(
-      "Largest tool results in the main agent's context, in characters: " +
+      "- Largest tool results in the main agent's context, in characters: " +
         largestTools
-          .map(([toolName, characters]) => `${toolName} ${characters}`)
-          .join(", ") +
-        "."
+          .map(
+            ([toolName, characters]) => `${toolName} ${formatCount(characters)}`
+          )
+          .join("; ")
     );
   }
-  return [...lines, "", composeMarkdownTable(rows)].join("\n");
+  lines.push(
+    "",
+    "## Columns",
+    "- Context Tokens: the main session's context size, reread on every turn.",
+    "- Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
+    "- Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
+    "- Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
+    "- Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+    "",
+    "## Sessions",
+    composeMarkdownTable(rows)
+  );
+  return lines.join("\n");
 }
 
 export function labelProjects(
@@ -259,8 +304,9 @@ function scopedModels(entry: LedgerEntry): ScopedModel[] {
   ];
 }
 
-function textCell(value: string): string {
-  return `<td>${escapeHtml(value)}</td>`;
+function textCell(value: string, className = ""): string {
+  const classAttribute = className ? ` class="${className}"` : "";
+  return `<td${classAttribute}>${escapeHtml(value)}</td>`;
 }
 
 function numberCell(count: number, className = "number"): string {
@@ -315,15 +361,20 @@ function composeRow(
   const toolResultsText = isSessionStart
     ? describeToolResults(entry.resultCharactersByTool)
     : "";
+  const addRepeatedClass = (className: string) =>
+    [className, isSessionStart ? "" : "repeated"].filter(Boolean).join(" ");
   return (
     (rowClasses ? `<tr class="${rowClasses}">` : "<tr>") +
-    textCell(entry.updatedAt.slice(0, 16).replace("T", " ")) +
-    textCell(entry.project) +
-    textCell(entry.session) +
+    textCell(
+      entry.updatedAt.slice(0, 16).replace("T", " "),
+      addRepeatedClass("")
+    ) +
+    textCell(entry.project, addRepeatedClass("")) +
+    textCell(entry.session, addRepeatedClass("")) +
     textCell(scoped.scope) +
     textCell(scoped.model) +
-    numberCell(entry.contextTokens) +
-    numberCell(entry.lastNudgeTokens) +
+    numberCell(entry.contextTokens, addRepeatedClass("number")) +
+    numberCell(entry.lastNudgeTokens, addRepeatedClass("number")) +
     numberCell(scoped.totals.input) +
     numberCell(scoped.totals.cacheWrite, "number cache") +
     numberCell(scoped.totals.cacheRead, "number cache") +
@@ -390,6 +441,9 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   if (rows.length === 0) {
     return `${head}<p>No sessions recorded yet.</p>${tail}`;
   }
+  const sessionCount = entries.filter(
+    (entry) => scopedModels(entry).length > 0
+  ).length;
   const toolCharactersJson = JSON.stringify(
     Object.fromEntries(
       entries.map((entry) => [
@@ -400,7 +454,7 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   ).replaceAll("<", "\\u003c");
   return (
     head +
-    "<p>Tokens per model for the newest sessions. Select rows and copy, or use Copy Table. It pastes as a short summary and a Markdown table in Claude Code and text editors, and as cells in a spreadsheet. Copied rows name projects as project 1, project 2 and so on, and never include tool output. A selection inside one cell copies just that text.</p>" +
+    `<p>Sessions shown: ${sessionCount}, newest first. Each row is one model's tokens for a session's main agent or its subagents. Select rows and copy, or use Copy Table. It pastes as a short summary and a Markdown table in Claude Code and text editors, and as cells in a spreadsheet. Copied rows name projects as project 1, project 2 and so on, and never include tool output. A selection inside one cell copies just that text.</p>` +
     composeLegend(rows.length, flaggedCount) +
     '<div class="toolbar"><button type="button" id="copy-table">Copy Table</button><span id="copy-status" role="status" aria-live="polite"></span></div>' +
     '<div class="table-scroll" tabindex="0" role="region" aria-labelledby="ledger-title"><table aria-labelledby="ledger-title">' +

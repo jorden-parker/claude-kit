@@ -1,34 +1,35 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-
 export const GRANT_MINUTES = 15;
 const GRANT_SECONDS = GRANT_MINUTES * 60;
 const MAX_GRANT_FILES = 20;
 const UNSAFE_PATH_CHARACTERS = /[\t\n]/;
 
-const defaultGrantsFile = () =>
-  join(homedir(), ".claude", "hook-bypass", "grants.tsv");
-
-const readLiveLines = (grantsFile: string, nowSeconds: number) => {
-  const text = existsSync(grantsFile) ? readFileSync(grantsFile, "utf8") : "";
-  return text
+const keepLiveLines = (existingText: string, nowSeconds: number) =>
+  existingText
     .split("\n")
     .filter((line) => Number(line.split("\t")[0]) > nowSeconds);
-};
 
 const assertGrantablePath = (filePath: string) => {
-  if (!isAbsolute(filePath) || UNSAFE_PATH_CHARACTERS.test(filePath))
+  if (!filePath.startsWith("/") || UNSAFE_PATH_CHARACTERS.test(filePath))
     throw new Error(
       `Hook bypass path must be absolute with no tab or newline: ${filePath}`
     );
 };
 
-export function recordGrants(
+const normalizeAbsolutePath = (filePath: string) => {
+  const segments: string[] = [];
+  for (const segment of filePath.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") segments.pop();
+    else segments.push(segment);
+  }
+  return `/${segments.join("/")}`;
+};
+
+export function mergeGrants(
+  existingText: string,
   filePaths: string[],
-  nowSeconds: number,
-  grantsFile = defaultGrantsFile()
-): number {
+  nowSeconds: number
+): { expiry: number; text: string } {
   if (filePaths.length < 1 || filePaths.length > MAX_GRANT_FILES)
     throw new Error(
       `Hook bypass takes 1 to ${MAX_GRANT_FILES} files, got ${filePaths.length}.`
@@ -36,10 +37,8 @@ export function recordGrants(
   filePaths.forEach(assertGrantablePath);
   const expiry = nowSeconds + GRANT_SECONDS;
   const newLines = filePaths.map(
-    (filePath) => `${expiry}\t${resolve(filePath)}`
+    (filePath) => `${expiry}\t${normalizeAbsolutePath(filePath)}`
   );
-  const lines = [...readLiveLines(grantsFile, nowSeconds), ...newLines];
-  mkdirSync(dirname(grantsFile), { recursive: true });
-  writeFileSync(grantsFile, lines.map((line) => `${line}\n`).join(""));
-  return expiry;
+  const lines = [...keepLiveLines(existingText, nowSeconds), ...newLines];
+  return { expiry, text: lines.map((line) => `${line}\n`).join("") };
 }

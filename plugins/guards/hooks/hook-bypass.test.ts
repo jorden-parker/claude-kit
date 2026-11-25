@@ -1,70 +1,80 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { GRANT_MINUTES, recordGrants } from "./hook-bypass.ts";
-
-const makeGrantsFile = () =>
-  join(mkdtempSync(join(tmpdir(), "guards-grants-")), "nested", "grants.tsv");
+import { readFileSync } from "node:fs";
+import { GRANT_MINUTES, mergeGrants } from "./hook-bypass.ts";
 
 const GRANT_SECONDS = GRANT_MINUTES * 60;
 
-test("recordGrants writes one expiry and path line per file", () => {
-  const grantsFile = makeGrantsFile();
-  const expiry = recordGrants(
+test("mergeGrants writes one expiry and path line per file", () => {
+  const { expiry, text } = mergeGrants(
+    "",
     ["/repo/a.json", "/repo/b.json"],
-    1000,
-    grantsFile
+    1000
   );
   expect(expiry).toBe(1000 + GRANT_SECONDS);
-  expect(readFileSync(grantsFile, "utf8")).toBe(
-    `${expiry}\t/repo/a.json\n${expiry}\t/repo/b.json\n`
+  expect(text).toBe(`${expiry}\t/repo/a.json\n${expiry}\t/repo/b.json\n`);
+});
+
+test("mergeGrants stores each path normalized like node path.resolve", () => {
+  const { expiry, text } = mergeGrants(
+    "",
+    ["/repo/./fixtures/../a.json"],
+    1000
+  );
+  expect(text).toBe(`${expiry}\t/repo/a.json\n`);
+});
+
+test("mergeGrants collapses repeated and trailing slashes and never climbs above root", () => {
+  const { expiry, text } = mergeGrants(
+    "",
+    ["/repo//nested/", "/../../etc/x.json"],
+    1000
+  );
+  expect(text).toBe(`${expiry}\t/repo/nested\n${expiry}\t/etc/x.json\n`);
+});
+
+test("mergeGrants rejects a relative path and names it", () => {
+  expect(() => mergeGrants("", ["relative/a.json"], 1000)).toThrow(
+    "Hook bypass path must be absolute with no tab or newline: relative/a.json"
   );
 });
 
-test("recordGrants stores each path normalized with path.resolve", () => {
-  const grantsFile = makeGrantsFile();
-  const expiry = recordGrants(["/repo/./fixtures/../a.json"], 1000, grantsFile);
-  expect(readFileSync(grantsFile, "utf8")).toBe(`${expiry}\t/repo/a.json\n`);
+test("mergeGrants rejects a path containing a tab", () => {
+  expect(() => mergeGrants("", ["/repo/a\tb.json"], 1000)).toThrow();
 });
 
-test("recordGrants rejects a relative path and names it", () => {
-  expect(() =>
-    recordGrants(["relative/a.json"], 1000, makeGrantsFile())
-  ).toThrow("relative/a.json");
+test("mergeGrants rejects a path containing a newline", () => {
+  expect(() => mergeGrants("", ["/repo/a\nb.json"], 1000)).toThrow();
 });
 
-test("recordGrants rejects a path containing a tab", () => {
-  expect(() =>
-    recordGrants(["/repo/a\tb.json"], 1000, makeGrantsFile())
-  ).toThrow("a\tb.json");
-});
-
-test("recordGrants rejects a path containing a newline", () => {
-  expect(() =>
-    recordGrants(["/repo/a\nb.json"], 1000, makeGrantsFile())
-  ).toThrow("a\nb.json");
-});
-
-test("recordGrants rejects an empty list and a list over twenty paths", () => {
+test("mergeGrants rejects an empty list and a list over twenty paths", () => {
   const twentyOne = Array.from(
     { length: 21 },
-    (item, index) => `/repo/${index}.json`
+    (_, index) => `/repo/${index}.json`
   );
-  expect(() => recordGrants([], 1000, makeGrantsFile())).toThrow();
-  expect(() => recordGrants(twentyOne, 1000, makeGrantsFile())).toThrow();
+  expect(() => mergeGrants("", [], 1000)).toThrow(
+    "Hook bypass takes 1 to 20 files, got 0."
+  );
+  expect(() => mergeGrants("", twentyOne, 1000)).toThrow(
+    "Hook bypass takes 1 to 20 files, got 21."
+  );
 });
 
-test("recordGrants drops expired lines and keeps live ones", () => {
-  const grantsFile = makeGrantsFile();
-  recordGrants(["/repo/expired.json"], 0, grantsFile);
-  recordGrants(["/repo/live.json"], 600, grantsFile);
-  const expiry = recordGrants(
-    ["/repo/new.json"],
-    GRANT_SECONDS + 1,
-    grantsFile
+test("mergeGrants drops expired lines and keeps live ones", () => {
+  const expired = mergeGrants("", ["/repo/expired.json"], 0);
+  const live = mergeGrants(expired.text, ["/repo/live.json"], expired.expiry);
+  expect(live.text).toBe(`${live.expiry}\t/repo/live.json\n`);
+  const merged = mergeGrants(live.text, ["/repo/third.json"], live.expiry - 1);
+  expect(merged.text).toBe(
+    `${live.expiry}\t/repo/live.json\n${merged.expiry}\t/repo/third.json\n`
   );
-  expect(readFileSync(grantsFile, "utf8")).toBe(
-    `${GRANT_SECONDS + 600}\t/repo/live.json\n${expiry}\t/repo/new.json\n`
-  );
+});
+
+test("hook-bypass.ts and register.ts import no node modules", () => {
+  for (const fileName of ["hook-bypass.ts", "register.ts"]) {
+    const source = readFileSync(
+      new URL(`./${fileName}`, import.meta.url),
+      "utf8"
+    );
+    expect(source).not.toMatch(/from\s+["']node:/);
+  }
 });

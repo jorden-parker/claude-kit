@@ -1,5 +1,5 @@
 import type { Register } from "claude-code";
-import { recordGrants } from "./hook-bypass.ts";
+import { mergeGrants } from "./hook-bypass.ts";
 
 const TOOL_NAME = "request_hook_bypass";
 const QUALIFIED_TOOL_NAME = `mcp__guards__${TOOL_NAME}`;
@@ -46,10 +46,19 @@ export const register: Register = (subscribe) => {
     const toolInput = event as unknown as Record<string, unknown>;
     const files = toolInput.files as string[];
     try {
-      const expiry = recordGrants(
+      const home = await engine.env.get("HOME");
+      if (!home)
+        throw new Error("Hook bypass needs HOME to find the grants file.");
+      const grantsFile = `${home}/.claude/hook-bypass/grants.tsv`;
+      const existingText = (await engine.fs.exists(grantsFile))
+        ? String(await engine.fs.read(grantsFile))
+        : "";
+      const { expiry, text } = mergeGrants(
+        existingText,
         files,
         Math.floor(Date.now() / SECONDS_PER_MILLISECOND)
       );
+      await engine.fs.write(grantsFile, text);
       return {
         result: `Granted until ${localClock(expiry)}: ${files.join(", ")}`,
       };

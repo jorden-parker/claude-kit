@@ -31,6 +31,15 @@ tdd_record_test_written() {
   return 0
 }
 
+tdd_claim_reminder() {
+  local state_directory
+  state_directory="$(tdd_state_directory "$1")"
+  mkdir -p "$state_directory" 2>/dev/null || return 0
+  grep -qxF -- "$2" "$state_directory/reminded-files" 2>/dev/null && return 1
+  printf '%s\n' "$2" >> "$state_directory/reminded-files" 2>/dev/null
+  return 0
+}
+
 tdd_test_written() {
   [ -f "$(tdd_state_directory "$1")/test-written" ]
 }

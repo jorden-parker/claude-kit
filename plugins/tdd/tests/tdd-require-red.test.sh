@@ -65,6 +65,20 @@ expect_stdout "reminds to add a test when editing without a failing run" "additi
 run_hook session-overwrite Write "$repository/src/account.py"
 expect_exit "allows rewriting an existing file" 0 $?
 
+printf 'class Invoice:\n    pass\n' > "$repository/src/invoice.py"
+run_hook session-reminder-once Edit "$repository/src/account.py"
+expect_stdout "reminds once when an existing implementation file is first edited" "TDD reminder"
+run_hook session-reminder-once Edit "$repository/src/account.py"
+expect_exit "allows a second edit of the same existing file" 0 $?
+if [ -s "$fixture_directory/stdout" ]; then
+  echo "FAIL: no repeated reminder for the same file in one session"
+  failures=$((failures + 1))
+else
+  echo "PASS: no repeated reminder for the same file in one session"
+fi
+run_hook session-reminder-once Edit "$repository/src/invoice.py"
+expect_stdout "reminds again for a different existing implementation file" "TDD reminder"
+
 run_hook session-new Write "$repository/src/ledger.py"
 expect_exit "blocks a new implementation file with no test" 2 $?
 

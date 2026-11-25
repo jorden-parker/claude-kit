@@ -25,6 +25,7 @@ tdd_detect_test_command "$project_directory" >/dev/null || exit 0
 tdd_test_written "$session_id" && exit 0
 
 if [ -f "$file_path" ]; then
+  tdd_claim_reminder "$session_id" "$relative_path" || exit 0
   reminder="TDD reminder: editing $relative_path without a failing test this session. If this adds or changes behaviour, write a failing test for it and run it before or right after this edit."
   jq -n --arg reminder "$reminder" \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $reminder}}'

@@ -214,4 +214,31 @@ status=$?
 expect "an unknown profile exits 2" [ "$status" -eq 2 ]
 expect "an unknown profile names the three profiles" grep -qF "web|code|notes" <<<"$output"
 
+home_moved="$sandbox/home-moved"
+mkdir -p "$home_moved/.claude/small-plans/alpha/set-one"
+echo "kept" > "$home_moved/.claude/small-plans/alpha/set-one/01-step.md"
+output="$(HOME="$home_moved" run_update)"
+expect "an old small-plans folder moves when the new one is absent" [ "$(cat "$home_moved/.local/share/small-plans/alpha/set-one/01-step.md" 2>/dev/null)" = kept ]
+expect "the old small-plans folder is gone after the move" [ ! -e "$home_moved/.claude/small-plans" ]
+expect "the move is reported" grep -qxF "Moved small plans to ~/.local/share/small-plans" <<<"$output"
+
+home_merge="$sandbox/home-merge"
+mkdir -p "$home_merge/.claude/small-plans/alpha/set-old" "$home_merge/.claude/small-plans/beta/set-two" "$home_merge/.local/share/small-plans/alpha/set-new"
+echo "old alpha" > "$home_merge/.claude/small-plans/alpha/set-old/01-step.md"
+echo "beta" > "$home_merge/.claude/small-plans/beta/set-two/01-step.md"
+echo "new alpha" > "$home_merge/.local/share/small-plans/alpha/set-new/01-step.md"
+output="$(HOME="$home_merge" run_update)"
+expect "a clashing project folder is left in the old folder" [ "$(cat "$home_merge/.claude/small-plans/alpha/set-old/01-step.md" 2>/dev/null)" = "old alpha" ]
+expect "the clashing project keeps the new folder's files" [ "$(cat "$home_merge/.local/share/small-plans/alpha/set-new/01-step.md")" = "new alpha" ]
+expect "a project folder with no clash moves into the new folder" [ "$(cat "$home_merge/.local/share/small-plans/beta/set-two/01-step.md" 2>/dev/null)" = beta ]
+expect "the clash is reported" grep -qF "Left ~/.claude/small-plans/alpha: already in ~/.local/share/small-plans" <<<"$output"
+expect "the old folder stays while it holds a clash" [ -d "$home_merge/.claude/small-plans" ]
+
+home_override="$sandbox/home-override"
+mkdir -p "$home_override/.claude/small-plans/alpha/set-one"
+echo "kept" > "$home_override/.claude/small-plans/alpha/set-one/01-step.md"
+HOME="$home_override" SMALL_PLANS_DIR="$sandbox/work-plans" run_update >/dev/null
+expect "SMALL_PLANS_DIR set leaves the old small-plans folder where it is" [ "$(cat "$home_override/.claude/small-plans/alpha/set-one/01-step.md")" = kept ]
+expect "SMALL_PLANS_DIR set creates no new small-plans folder" [ ! -e "$home_override/.local/share/small-plans" ]
+
 [ "$failures" -eq 0 ] || exit 1

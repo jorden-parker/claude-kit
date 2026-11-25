@@ -26,9 +26,17 @@ created: 2026-11-19T10:00:00.000Z
 <script>alert(1)</script>
 `
 
+func noteFilePath(relativePath string) string {
+	home := os.Getenv("HOME")
+	if strings.HasPrefix(relativePath, "small-plans/") {
+		return filepath.Join(home, ".local", "share", relativePath)
+	}
+	return filepath.Join(home, ".claude", relativePath)
+}
+
 func writeNoteFile(t *testing.T, relativePath string, text string) {
 	t.Helper()
-	notePath := filepath.Join(os.Getenv("HOME"), ".claude", relativePath)
+	notePath := noteFilePath(relativePath)
 	if err := os.MkdirAll(filepath.Dir(notePath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -216,6 +224,23 @@ func TestMissingFoldersListEmptySections(t *testing.T) {
 	}
 }
 
+func TestSectionsDefaultToTheirHomeFolders(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, rootVariable := range []string{"HANDOFFS_DIR", "SMALL_PLANS_DIR"} {
+		t.Setenv(rootVariable, "")
+	}
+	wantRoots := map[string]string{
+		"handoffs":    filepath.Join(home, ".claude", "handoffs"),
+		"small-plans": filepath.Join(home, ".local", "share", "small-plans"),
+	}
+	for _, layout := range sectionLayouts {
+		if wantRoot, isChecked := wantRoots[layout.Id]; isChecked && resolveSectionRoot(layout) != wantRoot {
+			t.Fatalf("%s root was %s, want %s", layout.Id, resolveSectionRoot(layout), wantRoot)
+		}
+	}
+}
+
 func TestPageUrlOpensTheNamedSection(t *testing.T) {
 	if pageUrl := buildPageUrl("47618", []string{"small-plans"}); pageUrl != "http://127.0.0.1:47618/#small-plans" {
 		t.Fatalf("url was %s", pageUrl)
@@ -244,7 +269,7 @@ func buildSmallPlan(order int, goal string) string {
 
 func readNoteFile(t *testing.T, relativePath string) (string, bool) {
 	t.Helper()
-	text, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".claude", relativePath))
+	text, err := os.ReadFile(noteFilePath(relativePath))
 	return string(text), err == nil
 }
 

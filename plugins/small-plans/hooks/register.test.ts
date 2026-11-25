@@ -7,7 +7,7 @@ import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const WRITE_TOOL = "mcp__small-plans__write_small_plan";
 const STATUS_TOOL = "mcp__small-plans__set_small_plan_status";
-const PLANS_FOLDER = "/home/tester/.claude/small-plans";
+const PLANS_FOLDER = "/home/tester/.local/share/small-plans";
 const PROJECT_FOLDER = `${PLANS_FOLDER}/claude-kit`;
 const HANDOFFS_FOLDER = "/home/tester/.claude/handoffs/claude-kit";
 const OLDER_HANDOFF = `${HANDOFFS_FOLDER}/001-add-the-viewer.md`;
@@ -157,6 +157,16 @@ test("a plan is saved under its project and set", async ($, on) => {
     )
   );
   expect(body).toBe(`${PLAN_BODY}\n`);
+});
+
+test("with no SMALL_PLANS_DIR a plan is saved under the local share folder", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  const reply = await callTool($, WRITE_TOOL, { ...VALID_PLAN, order: 1 });
+
+  const planPath = `/home/tester/.local/share/small-plans/claude-kit/${HANDOFF_SET}/01-clear-the-cached-token.md`;
+  expect(reply.result).toContain(planPath);
+  expect(files.has(planPath)).toBe(true);
 });
 
 test("a plan that a small model could not follow is refused with every problem", async ($, on) => {

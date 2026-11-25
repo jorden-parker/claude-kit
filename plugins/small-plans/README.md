@@ -47,9 +47,11 @@ The tool refuses a plan, and names every problem at once, when:
 ## Storage
 
 ```
-~/.claude/small-plans/<project>/<set>/<order>-<slug>.md
-~/.claude/small-plans/<project>/<set>/index.md
+~/.local/share/small-plans/<project>/<set>/<order>-<slug>.md
+~/.local/share/small-plans/<project>/<set>/index.md
 ```
+
+Plans used to live in `~/.claude/small-plans`; `claude-kit-update` moves that folder to `~/.local/share/small-plans` after updating plugins, leaving any project folder that already exists at the new path in place.
 
 - `<project>` is the repository the plan changes. Claude picks it from the work being planned, not from the folder the session started in, and asks you when more than one repository fits. The folder is named after the repository, shared by its worktrees (the name the handoff plugin uses too), also from a deleted `<repo>/.claude/worktrees/<name>` worktree. Build plans saved for another repository from a session in that repository
 - `<set>` groups the plans of one planning run: the date and time (UTC), then a slug of the work, such as `2026-11-19-1542-add-a-dark-mode-toggle`. A set planned from a handoff ends in `handoff-<handoff file name>`, such as `2026-11-19-1542-handoff-007-fix-login`

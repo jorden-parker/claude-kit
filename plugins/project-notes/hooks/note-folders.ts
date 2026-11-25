@@ -1,6 +1,6 @@
 import type { EngineInterface } from "claude-code";
 
-type NoteStore = { name: string };
+type NoteStore = { name: string; homeFolder?: string };
 type FolderVerdict = {
   label: string;
   fileCount: number;
@@ -11,7 +11,7 @@ type FolderVerdict = {
 export const NOTE_STORES: NoteStore[] = [
   { name: "handoffs" },
   { name: "project-notes" },
-  { name: "small-plans" },
+  { name: "small-plans", homeFolder: ".local/share/small-plans" },
   { name: "brainstorm" },
 ];
 
@@ -71,7 +71,7 @@ async function readStoreRootOverrides(engine: EngineInterface) {
 async function resolveStoreRoot(engine: EngineInterface, store: NoteStore) {
   return (
     (await readStoreRootOverrides(engine))[store.name] ??
-    `${(await engine.env.get("HOME")) ?? ""}/.claude/${store.name}`
+    `${(await engine.env.get("HOME")) ?? ""}/${store.homeFolder ?? `.claude/${store.name}`}`
   );
 }
 

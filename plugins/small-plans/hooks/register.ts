@@ -161,7 +161,7 @@ const readClaudeFolder = async (engine: EngineInterface) =>
 
 const resolvePlansRoot = async (engine: EngineInterface) =>
   (await engine.env.get("SMALL_PLANS_DIR")) ??
-  `${await readClaudeFolder(engine)}/small-plans`;
+  `${(await engine.env.get("HOME")) ?? ""}/.local/share/small-plans`;
 
 const resolveProjectFolder = async (engine: EngineInterface) =>
   `${await resolvePlansRoot(engine)}/${await resolveProjectName(engine)}`;
@@ -1080,7 +1080,7 @@ export const register: Register = (on) => {
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
-      description: `Saves one small plan as a Markdown file under ~/.claude/small-plans/<project>/<set>/, where <project> is the repository the plan changes, chosen from the work rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it once per plan when the user asks to break work into small plans that a weaker model can implement and review. ${PLAN_SHAPE}`,
+      description: `Saves one small plan as a Markdown file under ~/.local/share/small-plans/<project>/<set>/, where <project> is the repository the plan changes, chosen from the work rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it once per plan when the user asks to break work into small plans that a weaker model can implement and review. ${PLAN_SHAPE}`,
       inputSchema: WRITE_TOOL_SCHEMA,
       isDeferred: true,
     });

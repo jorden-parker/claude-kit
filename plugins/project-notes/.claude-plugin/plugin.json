@@ -1,5 +1,5 @@
 {
   "name": "project-notes",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Claude writes categorised project notes (fact, finding, decision, reference, debugging) as Markdown files under ~/.claude/project-notes/<project>/<category>/; debugging notes must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; /project-notes organise files existing session notes into the same structure; /project-notes audit moves notes, handoffs, plans and brainstorms saved under a worktree's name to the repository's name"
 }

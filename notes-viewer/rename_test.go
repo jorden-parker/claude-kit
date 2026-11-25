@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func isFolderPresent(relativePath string) bool {
-	folderInfo, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".claude", relativePath))
+	folderInfo, err := os.Stat(noteFilePath(relativePath))
 	return err == nil && folderInfo.IsDir()
 }
 

@@ -41,6 +41,7 @@ type sectionLayout struct {
 	Id                 string
 	Title              string
 	RootVariable       string
+	HomeFolder         string
 	EntryPattern       string
 	GroupSegment       int
 	HasEntryFolder     bool
@@ -52,7 +53,7 @@ type sectionLayout struct {
 var sectionLayouts = []sectionLayout{
 	{Id: "handoffs", Title: "Handoffs", RootVariable: "HANDOFFS_DIR", EntryPattern: "*/*.md", IsNewestEntryFirst: true},
 	{Id: "project-notes", Title: "Project notes", RootVariable: "PROJECT_NOTES_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestEntryFirst: true},
-	{Id: "small-plans", Title: "Small plans", RootVariable: "SMALL_PLANS_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true, HasEditableSets: true},
+	{Id: "small-plans", Title: "Small plans", RootVariable: "SMALL_PLANS_DIR", HomeFolder: ".local/share/small-plans", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true, HasEditableSets: true},
 	{Id: "brainstorm", Title: "Brainstorm plans", RootVariable: "BRAINSTORM_DIR", EntryPattern: "*/plans/*/*/plan.md", GroupSegment: 2, HasEntryFolder: true, IsNewestGroupFirst: true},
 }
 
@@ -143,6 +144,9 @@ func resolveSectionRoot(layout sectionLayout) string {
 		return sectionRoot
 	}
 	homeFolder, _ := os.UserHomeDir()
+	if layout.HomeFolder != "" {
+		return filepath.Join(homeFolder, layout.HomeFolder)
+	}
 	return filepath.Join(homeFolder, ".claude", layout.Id)
 }
 

@@ -17,6 +17,28 @@ has_claude_kit_marketplace() {
   claude plugin marketplace list --json | jq -e '.[] | select(.name == "claude-kit")' >/dev/null
 }
 
+move_small_plans_folder() {
+  local old="$HOME/.claude/small-plans" new="$HOME/.local/share/small-plans" project name
+  if [ -n "${SMALL_PLANS_DIR+x}" ] || [ ! -d "$old" ]; then
+    return 0
+  fi
+  if [ ! -e "$new" ]; then
+    mkdir -p "$HOME/.local/share" && mv "$old" "$new" || return 1
+    echo "Moved small plans to ~/.local/share/small-plans"
+    return 0
+  fi
+  for project in "$old"/*/; do
+    [ -d "$project" ] || continue
+    name="$(basename "$project")"
+    if [ -e "$new/$name" ]; then
+      echo "Left ~/.claude/small-plans/$name: already in ~/.local/share/small-plans"
+    else
+      mv "$project" "$new/" || return 1
+    fi
+  done
+  rmdir "$old" 2>/dev/null || true
+}
+
 link_command() {
   local command_path="$1"
   local link_path="$link_directory/$(basename "$command_path")"
@@ -84,6 +106,8 @@ while IFS=$'\t' read -r plugin_id plugin_scope; do
   fi
   echo "$update_output"
 done < <(claude plugin list --available --json | jq -r '.installed[] | select(.id | endswith("@claude-kit")) | [.id, .scope] | @tsv')
+
+move_small_plans_folder || failed_steps+=("move small plans")
 
 if [ "${#updated_items[@]}" -gt 0 ]; then
   ledger_command="${CLAUDE_KIT_LEDGER_COMMAND:-$repository_root/plugins/token-ledger/bin/claude-ledger}"

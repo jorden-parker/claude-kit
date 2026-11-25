@@ -474,6 +474,7 @@ test("later words, /project-note topics and other commands get no /project-notes
 const AUDIT_TOOL = "mcp__project-notes__audit_note_folders";
 const MOVE_TOOL = "mcp__project-notes__move_note_folder";
 const CLAUDE_ROOT = "/home/tester/.claude";
+const SMALL_PLANS_ROOT = "/home/tester/.local/share/small-plans";
 const WORKTREE_FOLDER = "/work/claude-kit/.claude/worktrees/feature-x";
 
 type StoreMock = { files: Map<string, string>; commands: string[][] };
@@ -669,10 +670,8 @@ test("moving a handoff folder renumbers after the target's handoffs and rewrites
 
 test("moving keeps both files when a name is taken", async ($, on) => {
   const { files } = mockStores(on, {
-    [`${CLAUDE_ROOT}/small-plans/claude-kit/set/01-a.md`]:
-      "project: claude-kit\n",
-    [`${CLAUDE_ROOT}/small-plans/feature-x/set/01-a.md`]:
-      "project: feature-x\n",
+    [`${SMALL_PLANS_ROOT}/claude-kit/set/01-a.md`]: "project: claude-kit\n",
+    [`${SMALL_PLANS_ROOT}/feature-x/set/01-a.md`]: "project: feature-x\n",
   });
 
   await callTool($, MOVE_TOOL, {
@@ -681,7 +680,7 @@ test("moving keeps both files when a name is taken", async ($, on) => {
     to: "claude-kit",
   });
 
-  expect(files.get(`${CLAUDE_ROOT}/small-plans/claude-kit/set/01-a-2.md`)).toBe(
+  expect(files.get(`${SMALL_PLANS_ROOT}/claude-kit/set/01-a-2.md`)).toBe(
     "project: claude-kit\n"
   );
 });
@@ -719,7 +718,7 @@ test("/project-notes audit asks Claude to audit the note folders", async ($, on)
 test("editing a saved note, handoff, plan or brainstorm needs no permission", async ($, on) => {
   mockEngine(on, {
     "/home/tester/.claude/handoffs/claude-kit/003-auth.md": "handoff",
-    "/home/tester/.claude/small-plans/claude-kit/set/01-a.md": "plan",
+    "/home/tester/.local/share/small-plans/claude-kit/set/01-a.md": "plan",
   });
   on("tool.check", () => ({ decision: "ask" }));
 
@@ -732,7 +731,7 @@ test("editing a saved note, handoff, plan or brainstorm needs no permission", as
   const planWrite = await $.tool.check({
     tool: "Write",
     input: {
-      file_path: "/home/tester/.claude/small-plans/claude-kit/set/01-a.md",
+      file_path: "/home/tester/.local/share/small-plans/claude-kit/set/01-a.md",
     },
   });
   const noteEdit = await $.tool.check({
@@ -743,6 +742,39 @@ test("editing a saved note, handoff, plan or brainstorm needs no permission", as
   expect(handoffEdit.decision).toBe("allow");
   expect(planWrite.decision).toBe("allow");
   expect(noteEdit.decision).toBe("allow");
+});
+
+test("the small-plans store defaults to ~/.local/share/small-plans", async ($, on) => {
+  mockEngine(on);
+  on("tool.check", () => ({ decision: "ask" }));
+
+  const defaultPlanEdit = await $.tool.check({
+    tool: "Edit",
+    input: {
+      file_path: "/home/tester/.local/share/small-plans/claude-kit/set/01-a.md",
+    },
+  });
+  const oldPlanEdit = await $.tool.check({
+    tool: "Edit",
+    input: {
+      file_path: "/home/tester/.claude/small-plans/claude-kit/set/01-a.md",
+    },
+  });
+
+  expect(defaultPlanEdit.decision).toBe("allow");
+  expect(oldPlanEdit.decision).toBe("ask");
+});
+
+test("SMALL_PLANS_DIR still overrides the small-plans store", async ($, on) => {
+  mockEngine(on, {}, { SMALL_PLANS_DIR: "/work/plans" });
+  on("tool.check", () => ({ decision: "ask" }));
+
+  const overriddenPlanEdit = await $.tool.check({
+    tool: "Edit",
+    input: { file_path: "/work/plans/claude-kit/set/01-a.md" },
+  });
+
+  expect(overriddenPlanEdit.decision).toBe("allow");
 });
 
 test("new files, index files and files outside the stores still ask", async ($, on) => {
@@ -756,7 +788,8 @@ test("new files, index files and files outside the stores still ask", async ($, 
   const indexEdit = await $.tool.check({
     tool: "Edit",
     input: {
-      file_path: "/home/tester/.claude/small-plans/claude-kit/set/index.md",
+      file_path:
+        "/home/tester/.local/share/small-plans/claude-kit/set/index.md",
     },
   });
   const settingsEdit = await $.tool.check({

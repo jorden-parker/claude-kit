@@ -9,6 +9,7 @@ const contextOf = (result: ReturnType<typeof decide>) =>
 
 afterEach(() => {
   delete process.env.GUARDS_DELEGATE_GUARD;
+  delete process.env.ANTHROPIC_BASE_URL;
 });
 
 test("adds the delegation rules as session context", () => {
@@ -30,5 +31,10 @@ test("adds the delegation rules as session context", () => {
 
 test("adds nothing when GUARDS_DELEGATE_GUARD is 0", () => {
   process.env.GUARDS_DELEGATE_GUARD = "0";
+  expect(decide(sessionStart)).toBeNull();
+});
+
+test("adds nothing when launched by claude-lite", () => {
+  process.env.ANTHROPIC_BASE_URL = "http://127.0.0.1:11434";
   expect(decide(sessionStart)).toBeNull();
 });

@@ -2,6 +2,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { transcriptTail } from "./browser-check.ts";
 import { GIT_OPTIONS, withoutQuotedText } from "./bash-guard.ts";
+import { isClaudeLiteSession } from "./claude-lite.ts";
 import { deny, type HookEvent, type HookResult } from "./types.ts";
 
 const LOOKUP_BUDGET = 20_000;
@@ -49,7 +50,9 @@ function isAgentCall(event: HookEvent): boolean {
 
 function isExempt(event: HookEvent): boolean {
   return (
-    process.env.GUARDS_DELEGATE_GUARD === "0" || event.agent_id !== undefined
+    process.env.GUARDS_DELEGATE_GUARD === "0" ||
+    isClaudeLiteSession(process.env.ANTHROPIC_BASE_URL) ||
+    event.agent_id !== undefined
   );
 }
 

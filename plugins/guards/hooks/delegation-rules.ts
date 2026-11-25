@@ -1,3 +1,4 @@
+import { isClaudeLiteSession } from "./claude-lite.ts";
 import type { HookEvent, HookResult } from "./types.ts";
 
 const DELEGATION_RULES = `# You are the orchestrator: plan, delegate, coordinate
@@ -21,6 +22,7 @@ Checks are yours, never the user's. When work needs tests, a typecheck, lint, a 
 
 export function decide(_event: HookEvent): HookResult {
   if (process.env.GUARDS_DELEGATE_GUARD === "0") return null;
+  if (isClaudeLiteSession(process.env.ANTHROPIC_BASE_URL)) return null;
   return {
     output: {
       hookSpecificOutput: {

@@ -24,7 +24,7 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   `guards:context-scout` and implementation and verification to `guards:worker`
   (Haiku), sending independent work out in parallel. It also tells Claude to
   run checks itself rather than ask the user to run them. Off with
-  `GUARDS_DELEGATE_GUARD=0`.
+  `GUARDS_DELEGATE_GUARD=0`, and also off when `ANTHROPIC_BASE_URL` is a loopback address on port 11434 or 8435 (a claude-lite launch).
 - **ci-status** (SessionStart): in a repository whose `origin` is on GitHub,
   asks `gh` for the latest run on `main` and shows one warning line when it
   failed. Silent when `gh` is missing or signed out, when it takes over 10
@@ -50,7 +50,7 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   It also denies Edit, Write, MultiEdit and NotebookEdit of any file outside
   `~/.claude` and the temp folders, and points Claude at `guards:worker`.
   Subagents are never limited. Claude Code only. Opt out with
-  `GUARDS_DELEGATE_GUARD=0`. Hooks load when a session starts, so a session
+  `GUARDS_DELEGATE_GUARD=0`, and also off when `ANTHROPIC_BASE_URL` is a loopback address on port 11434 or 8435 (a claude-lite launch). Hooks load when a session starts, so a session
   opened before the plugin was updated runs without this guard.
 - **bash-trim** (PostToolUse, Bash and MCP tools): keeps the head, the tail
   and the error lines of Bash output over 150 lines, and the head and tail of

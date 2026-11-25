@@ -259,6 +259,15 @@ test("allows everything when GUARDS_DELEGATE_GUARD is 0", () => {
   }
 });
 
+test("allows everything when launched by claude-lite", () => {
+  process.env.ANTHROPIC_BASE_URL = "http://127.0.0.1:11434";
+  try {
+    expect(decideDelegation(readEvent, overBudget)).toBeNull();
+  } finally {
+    delete process.env.ANTHROPIC_BASE_URL;
+  }
+});
+
 test("denies an Explore agent without a model", () => {
   const event = mainEvent("Agent", {
     subagent_type: "Explore",

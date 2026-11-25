@@ -4,6 +4,7 @@ import {
   composeLedgerPage,
   composeMarkdownTable,
   describeCacheStatus,
+  labelProjects,
 } from "./ledger-page.ts";
 import type { LedgerEntry } from "./ledger.ts";
 
@@ -293,9 +294,15 @@ test("composeLedgerPage copies the summary and embeds the tool map for each sess
     },
   ]);
   expect(page).toContain(
-    "composeLedgerCopy(copiedRows, toolCharactersBySession)"
+    "composeLedgerCopy(labelProjects(copiedRows, pageProjectNames), toolCharactersBySession)"
   );
-  expect(page).toContain('setData("text/html", buildPlainTable(copiedRows))');
+  expect(page).toContain(
+    'setData("text/html", buildPlainTable(labelProjects(copiedRows, pageProjectNames)))'
+  );
+  expect(page).toContain("labelProjects(copiedRows, pageProjectNames)");
+  expect(page).toContain(
+    "Copied rows name projects as project 1, project 2 and so on, and never include tool output."
+  );
   expect(page).toContain("const toolCharactersBySession = {");
   expect(page).toContain('{"session-tools":{"Tool\\u003cx>":5}}');
   expect(page).not.toContain('"Tool<x>"');
@@ -316,4 +323,106 @@ test("composeLedgerPage folds MCP tool names into one MCP tools key", () => {
   expect(page).toContain('"MCP tools":150');
   expect(page).toContain('"Read":30');
   expect(page).not.toContain("mcp__");
+});
+
+test("labelProjects numbers projects by page order and leaves other cells alone", () => {
+  const rows = [
+    ledgerHeader,
+    [
+      "2026-01-02 03:04",
+      "beta",
+      "s1",
+      "main",
+      "fable",
+      "1",
+      "2",
+      "3",
+      "4",
+      "OK",
+      "5",
+    ],
+    [
+      "2026-01-02 03:04",
+      "alpha",
+      "s2",
+      "main",
+      "fable",
+      "1",
+      "2",
+      "3",
+      "4",
+      "OK",
+      "6",
+    ],
+    [
+      "2026-01-02 03:04",
+      "beta",
+      "s3",
+      "main",
+      "fable",
+      "1",
+      "2",
+      "3",
+      "4",
+      "OK",
+      "7",
+    ],
+  ];
+  const snapshot = JSON.parse(JSON.stringify(rows));
+  const labeled = labelProjects(rows, ["alpha", "alpha", "beta", "beta"]);
+  expect(labeled[0]).toEqual(ledgerHeader);
+  expect(labeled.slice(1).map((row) => row[1])).toEqual([
+    "project 2",
+    "project 1",
+    "project 2",
+  ]);
+  expect(labeled[1].filter((_, index) => index !== 1)).toEqual(
+    rows[1].filter((_, index) => index !== 1)
+  );
+  expect(rows).toEqual(snapshot);
+});
+
+test("labelProjects numbers a project missing from the page after the known ones", () => {
+  const rows = [
+    ledgerHeader,
+    [
+      "2026-01-02 03:04",
+      "delta",
+      "s1",
+      "main",
+      "fable",
+      "1",
+      "2",
+      "3",
+      "4",
+      "OK",
+      "5",
+    ],
+    [
+      "2026-01-02 03:04",
+      "gamma",
+      "s2",
+      "main",
+      "fable",
+      "1",
+      "2",
+      "3",
+      "4",
+      "OK",
+      "5",
+    ],
+  ];
+  const labeled = labelProjects(rows, ["delta"]);
+  expect(labeled.slice(1).map((row) => row[1])).toEqual([
+    "project 1",
+    "project 2",
+  ]);
+});
+
+test("labelProjects returns equal rows when there is no Project column", () => {
+  const rows = [
+    ["Model", "Input Tokens"],
+    ["fable", "12"],
+  ];
+  expect(labelProjects(rows, ["fable"])).toEqual(rows);
 });

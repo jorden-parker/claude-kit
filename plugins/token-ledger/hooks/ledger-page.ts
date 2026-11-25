@@ -153,10 +153,35 @@ export function composeLedgerCopy(
   return [...lines, "", composeMarkdownTable(rows)].join("\n");
 }
 
+export function labelProjects(
+  rows: string[][],
+  pageProjectNames: string[]
+): string[][] {
+  const [headerCells, ...bodyRows] = rows;
+  const projectColumn = headerCells.indexOf("Project");
+  if (projectColumn === -1) return rows;
+  const knownNames = [
+    ...pageProjectNames,
+    ...bodyRows.map((row) => row[projectColumn]),
+  ];
+  const projectNumbers = new Map<string, number>();
+  for (const name of knownNames) {
+    if (!projectNumbers.has(name)) {
+      projectNumbers.set(name, projectNumbers.size + 1);
+    }
+  }
+  const labelRow = (row: string[]) =>
+    row.map((cell, index) =>
+      index === projectColumn ? `project ${projectNumbers.get(cell)}` : cell
+    );
+  return [headerCells, ...bodyRows.map(labelRow)];
+}
+
 const SCRIPT = String.raw`const table = document.querySelector("table");
 const copyStatus = document.getElementById("copy-status");
 ${composeMarkdownTable.toString()}
 ${composeLedgerCopy.toString()}
+${labelProjects.toString()}
 const readCellTexts = (row) => [...row.cells].map((cell) => cell.textContent);
 function hasSelectedText(row) {
   const selection = getSelection();
@@ -191,8 +216,10 @@ document.addEventListener("copy", (event) => {
     return;
   }
   const copiedRows = [table.tHead.rows[0], ...selectedRows].map(readCellTexts);
-  event.clipboardData.setData("text/plain", composeLedgerCopy(copiedRows, toolCharactersBySession));
-  event.clipboardData.setData("text/html", buildPlainTable(copiedRows));
+  const projectColumn = readCellTexts(table.tHead.rows[0]).indexOf("Project");
+  const pageProjectNames = [...table.tBodies[0].rows].map((row) => readCellTexts(row)[projectColumn]);
+  event.clipboardData.setData("text/plain", composeLedgerCopy(labelProjects(copiedRows, pageProjectNames), toolCharactersBySession));
+  event.clipboardData.setData("text/html", buildPlainTable(labelProjects(copiedRows, pageProjectNames)));
 });
 document.getElementById("copy-table").addEventListener("click", () => {
   getSelection().selectAllChildren(table);
@@ -324,7 +351,7 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   ).replaceAll("<", "\\u003c");
   return (
     head +
-    "<p>Tokens per model for the newest sessions. Select rows and copy, or use Copy Table. It pastes as a short summary and a Markdown table in Claude Code and text editors, and as cells in a spreadsheet. A selection inside one cell copies just that text.</p>" +
+    "<p>Tokens per model for the newest sessions. Select rows and copy, or use Copy Table. It pastes as a short summary and a Markdown table in Claude Code and text editors, and as cells in a spreadsheet. Copied rows name projects as project 1, project 2 and so on, and never include tool output. A selection inside one cell copies just that text.</p>" +
     composeLegend(rows.length, flaggedCount) +
     '<div class="toolbar"><button type="button" id="copy-table">Copy Table</button><span id="copy-status" role="status" aria-live="polite"></span></div>' +
     '<div class="table-scroll" tabindex="0" role="region" aria-labelledby="ledger-title"><table aria-labelledby="ledger-title">' +

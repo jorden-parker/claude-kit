@@ -300,3 +300,20 @@ test("composeLedgerPage copies the summary and embeds the tool map for each sess
   expect(page).toContain('{"session-tools":{"Tool\\u003cx>":5}}');
   expect(page).not.toContain('"Tool<x>"');
 });
+
+test("composeLedgerPage folds MCP tool names into one MCP tools key", () => {
+  const page = composeLedgerPage([
+    {
+      ...sampleEntry,
+      session: "session-mcp",
+      resultCharactersByTool: {
+        mcp__acme__search: 100,
+        mcp__acme__read: 50,
+        Read: 30,
+      },
+    },
+  ]);
+  expect(page).toContain('"MCP tools":150');
+  expect(page).toContain('"Read":30');
+  expect(page).not.toContain("mcp__");
+});

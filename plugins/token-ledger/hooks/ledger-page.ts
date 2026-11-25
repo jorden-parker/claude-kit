@@ -291,6 +291,17 @@ function composeLegend(rowCount: number, flaggedCount: number): string {
   );
 }
 
+function foldMcpTools(
+  resultCharactersByTool: Record<string, number>
+): Record<string, number> {
+  const folded: Record<string, number> = {};
+  for (const [toolName, characters] of Object.entries(resultCharactersByTool)) {
+    const key = toolName.startsWith("mcp__") ? "MCP tools" : toolName;
+    folded[key] = (folded[key] ?? 0) + characters;
+  }
+  return folded;
+}
+
 export function composeLedgerPage(entries: LedgerEntry[]): string {
   const rows = entries.flatMap((entry) =>
     scopedModels(entry).map((scoped) => composeRow(entry, scoped))
@@ -305,7 +316,10 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   }
   const toolCharactersJson = JSON.stringify(
     Object.fromEntries(
-      entries.map((entry) => [entry.session, entry.resultCharactersByTool])
+      entries.map((entry) => [
+        entry.session,
+        foldMcpTools(entry.resultCharactersByTool),
+      ])
     )
   ).replaceAll("<", "\\u003c");
   return (

@@ -2,12 +2,12 @@ import type { HookEvent, HookResult } from "./types.ts";
 
 const DELEGATION_RULES = `# You are the orchestrator: plan, delegate, coordinate
 
-The main session does no hands-on work. It decides what to do, hands each piece to a subagent, and works from their summaries. A subagent's reply costs the main context a few hundred characters; the reads and edits behind it cost nothing here.
+The main session does no hands-on work. It decides what to do, hands each piece to a subagent, and works from their summaries. A subagent's reply costs the main context a few thousand characters; the reads and edits behind it cost nothing here.
 
 Delegate every piece of work except a single named read:
 - Lookups that need more than one file read or one search (where is X, trace callers, summarize a log or diff): \`guards:context-scout\`. Read one file or symbol you can already name yourself; a subagent costs more than that read.
 - Implementation (any edit to a project file) and verification (running tests, typecheck, lint, the app): \`guards:worker\`. Give it the goal, the files, the exact change and the check to run.
-- Any other Agent call names \`model: "haiku"\`.
+- Any other Agent call names a model: \`"haiku"\` by default, \`"sonnet"\` only after Haiku failed the task.
 - Independent pieces go out as several Agent calls in one message so they run in parallel.
 
 The main session keeps:

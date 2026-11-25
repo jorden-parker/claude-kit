@@ -76,10 +76,25 @@ while read -r plugin_id; do
   claude plugin install "$plugin_id" || failed_steps+=("install $plugin_id")
 done < <(claude plugin list --available --json | jq -r '.available[] | select(.pluginId | endswith("@claude-kit")) | .pluginId')
 
+updated_items=()
+update_pattern='updated from ([^[:space:]]+) to ([^[:space:]]+)'
 while IFS=$'\t' read -r plugin_id plugin_scope; do
   echo "Updating $plugin_id"
-  claude plugin update "$plugin_id" --scope "$plugin_scope" || failed_steps+=("update $plugin_id")
+  if update_output="$(claude plugin update "$plugin_id" --scope "$plugin_scope" 2>&1)"; then
+    if [[ "$update_output" =~ $update_pattern ]]; then
+      updated_items+=("${plugin_id%@*} ${BASH_REMATCH[1]} to ${BASH_REMATCH[2]}")
+    fi
+  else
+    failed_steps+=("update $plugin_id")
+  fi
+  echo "$update_output"
 done < <(claude plugin list --available --json | jq -r '.installed[] | [.id, .scope] | @tsv')
+
+if [ "${#updated_items[@]}" -gt 0 ]; then
+  ledger_command="${CLAUDE_KIT_LEDGER_COMMAND:-$repository_root/plugins/token-ledger/bin/claude-ledger}"
+  joined_items="$(IFS=', '; echo "${updated_items[*]}")"
+  "$ledger_command" --fixed "claude-kit-update: $joined_items" || failed_steps+=("record the update")
+fi
 
 mkdir -p "$link_directory"
 link_command "$repository_root/notes-viewer/claude-notes"

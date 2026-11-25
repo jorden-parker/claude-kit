@@ -7,6 +7,7 @@ sandbox="$(mktemp -d)"
 trap 'rm -rf "$sandbox"' EXIT
 failures=0
 claude_calls="$sandbox/claude-calls"
+ledger_calls="$sandbox/ledger-calls"
 link_directory="$sandbox/links"
 
 mkdir -p "$sandbox/bin"
@@ -16,10 +17,24 @@ case "$*" in
   "plugin marketplace list --json") cat "$MARKETPLACES_JSON" ;;
   "plugin list --available --json") cat "$PLUGINS_JSON" ;;
   "plugin update broken@claude-kit --scope user") exit 1 ;;
+  "plugin update guards@claude-kit --scope user")
+    if [ -n "${GUARDS_UP_TO_DATE:-}" ]; then
+      echo 'Plugin "guards" is already at the latest version.'
+    else
+      echo 'Plugin "guards" updated from 0.8.0 to 0.11.1 for scope user. Restart to apply changes.'
+    fi ;;
+  "plugin update handoff@claude-kit --scope user"|"plugin update ponytail@ponytail --scope user")
+    echo "Plugin is already at the latest version." ;;
 esac
 exit 0
 STUB
 chmod +x "$sandbox/bin/claude"
+
+cat > "$sandbox/fake-ledger" <<'STUB'
+echo "$*" >> "$LEDGER_CALLS"
+[ -z "${LEDGER_FAILS:-}" ]
+STUB
+chmod +x "$sandbox/fake-ledger"
 
 cat > "$sandbox/bin/git" <<'STUB'
 echo "git $*" >> "$CLAUDE_CALLS"
@@ -31,7 +46,8 @@ cat > "$sandbox/plugins.json" <<'JSON'
 {
   "installed": [
     {"id": "handoff@claude-kit", "scope": "user"},
-    {"id": "ponytail@ponytail", "scope": "user"}
+    {"id": "ponytail@ponytail", "scope": "user"},
+    {"id": "guards@claude-kit", "scope": "user"}
   ],
   "available": [
     {"pluginId": "draft-pr@claude-kit", "marketplaceName": "claude-kit"},
@@ -44,8 +60,10 @@ JSON
 
 run_update() {
   : > "$claude_calls"
+  : > "$ledger_calls"
   PATH="$sandbox/bin:$PATH" CLAUDE_CALLS="$claude_calls" PLUGINS_JSON="$sandbox/plugins.json" \
     MARKETPLACES_JSON="$sandbox/marketplaces.json" CLAUDE_KIT_LINK_DIR="$link_directory" \
+    CLAUDE_KIT_LEDGER_COMMAND="$sandbox/fake-ledger" LEDGER_CALLS="$ledger_calls" \
     bash "$update_script" 2>&1
 }
 
@@ -114,6 +132,22 @@ status=$?
 expect "a failed pull exits 1" [ "$status" -eq 1 ]
 expect "the plugins are still updated after a failed pull" called "plugin update handoff@claude-kit --scope user"
 expect "the failed pull is named" grep -qF "Failed: pull $repository_root" <<<"$output"
+
+output="$(run_update)"
+status=$?
+expect "an updated plugin exits 0" [ "$status" -eq 0 ]
+expect "an updated plugin is recorded as a fix once" [ "$(grep -c '' "$ledger_calls")" -eq 1 ]
+expect "the fix names the update from and to versions" grep -qF -- "--fixed claude-kit-update: guards 0.8.0 to 0.11.1" "$ledger_calls"
+
+output="$(LEDGER_FAILS=1 run_update)"
+status=$?
+expect "a failed fix record exits 1" [ "$status" -eq 1 ]
+expect "a failed fix record is named" grep -qF "Failed: record the update" <<<"$output"
+
+output="$(GUARDS_UP_TO_DATE=1 run_update)"
+status=$?
+expect "a run with no plugin update exits 0" [ "$status" -eq 0 ]
+expect "a run with no plugin update records no fix" [ ! -s "$ledger_calls" ]
 
 run_profile() {
   local project_folder="$1" profile_name="$2"

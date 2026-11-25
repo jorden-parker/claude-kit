@@ -568,6 +568,10 @@ test("/small-plans build has the session review each plan and send fixes to a ne
     "new small-plans:small-plan-implementer"
   );
   expect(submittedPrompts[0]).toContain("3 fix rounds");
+  expect(submittedPrompts[0]).toContain("work out the root cause");
+  expect(submittedPrompts[0]).toContain("only the user can give");
+  expect(submittedPrompts[0]).toContain("look for a missing step");
+  expect(submittedPrompts[0]).toContain("Take the missing step first");
   expect(submittedPrompts[0]).not.toContain("small-plan-reviewer");
 });
 
@@ -651,6 +655,9 @@ test("/small-plans build builds each plan in its own worktree on a branch named 
   expect(submittedPrompts[0]).toContain("Never put it inside the repository");
   expect(submittedPrompts[0]).toContain("then a line `Worktree: <path>`");
   expect(submittedPrompts[0]).toContain("git push -u origin <branch>");
+  expect(submittedPrompts[0]).toContain("named after the plan slug alone");
+  expect(submittedPrompts[0]).toContain("bug for a fix");
+  expect(submittedPrompts[0]).not.toContain("<repository folder>-");
 });
 
 const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;

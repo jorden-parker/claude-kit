@@ -54,13 +54,15 @@ If there is no run folder, say so and suggest `/brainstorm plan`. If the request
 
 A `pending` plan starts at its first step. An `in-progress` or `blocked` plan was started by an earlier build: it carries on at its first unticked line.
 
+Before you start a plan, and again whenever a step or a failure shows it, look for a missing step: anything the plan needs that none of its steps provides, such as a dependency that is not installed, a migration, generated code, a config value, or a file or function that another plan creates. Do not build on and wait for it to fail. Take the missing step first: write its step file into the plan folder and add an unticked line for it in plan.md ahead of the step that needs it, so `brainstorm:step-implementer` does it, or, when another plan in the index provides it, build that plan first and base this plan's branch on it. Ask the user only when the missing step needs something only the user can give.
+
 1. Create or reuse the plan's worktree, as "Worktrees" says, and note its path and branch.
 2. Base: run `git -C <worktree> rev-parse HEAD` and keep that commit as this plan's base.
 3. Set the plan's status to `in-progress`.
 4. Build the unticked lines of plan.md, as "Build the steps" says.
 5. When every line is ticked, do the final review.
 
-Whenever these steps say the plan stops, set its status to `blocked`, keep its worktree so the next build carries on there, and go on with the next row of the index.
+Whenever these steps say the plan stops, do not stop there. Read the failing output, the plan and the code it touches, work out the root cause, and fix it: start a new `brainstorm:step-implementer` agent with the failure output and the cause you found, or correct the plan file when the plan itself is wrong, then run the checks and the final review again, as this skill says. Keep going while each attempt changes the failure. Set the plan's status to `blocked` only when the fix needs something only the user can give (a decision, a credential, access), or when two attempts in a row leave the failure unchanged; the reason then says what you tried and what is still needed. Keep its worktree so the next build carries on there, and go on with the next row of the index.
 
 ### Worktrees
 
@@ -68,7 +70,7 @@ Each plan is built in its own git worktree, on its own branch:
 
 - Branch name: read the repository's own rules first: CONTRIBUTING.md, CLAUDE.md, AGENTS.md, and the guides under .github/ and docs/, then the names `git branch -a --sort=-committerdate | head -n 20` shows. Where the repository states a convention, as a work repository does, follow it exactly, ticket number and all. Only when it states none, name the branch `<type>/<plan slug>`, the type from the plan's Kind in the index: feat for code, test, docs, or spike for a spike plan.
 - Base: the branch of the plan it depends on, when it depends on one; otherwise the branch checked out where the build started.
-- Place: run `git rev-parse --git-common-dir`. When `git -C <that folder> rev-parse --is-bare-repository` prints true, the repository is bare: put the worktree beside the main worktree, as a sibling folder named after the branch with each `/` changed to `-`. In any other repository, put it beside the repository's top folder, named `<repository folder>-<branch with each / changed to ->`. Never put it inside the repository.
+- Place: run `git rev-parse --git-common-dir`. When `git -C <that folder> rev-parse --is-bare-repository` prints true, the repository is bare: put the worktree beside the main worktree, as a sibling folder. In any other repository, put it beside the repository's top folder. Either way the folder is named after the plan slug alone, such as `add-login` for the branch `feat/add-login`: no type, no repository name and no ticket prefix. When a folder of that name already exists and is not this plan's worktree, add `-2`. Never put it inside the repository.
 - Create it with `git worktree add -b <branch> <path> <base>`. When `git worktree list` already shows a worktree on that branch, left by an earlier build, reuse it.
 - Run every git command, check, lint, fallow and test of the plan in its worktree, as `cd <path> && ...` or `git -C <path> ...`.
 

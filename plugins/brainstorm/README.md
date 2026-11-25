@@ -77,12 +77,12 @@ The index table looks like this:
 
 A plan's status is in two places that always match: the `- Status:` line of its `plan.md`, and its row in `index.md`.
 
-| Status        | Means                                                            |
-| ------------- | ---------------------------------------------------------------- |
-| `pending`     | Written, not started.                                            |
-| `in-progress` | A build started it. Its ticked steps are done.                   |
-| `done`        | Every step is ticked and the final review approved it.           |
-| `blocked`     | The build stopped: a step could not be built, or fixes are open. |
+| Status        | Means                                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| `pending`     | Written, not started.                                                                                |
+| `in-progress` | A build started it. Its ticked steps are done.                                                       |
+| `done`        | Every step is ticked and the final review approved it.                                               |
+| `blocked`     | The build could not fix a failure itself: the fix needs the user, or two attempts left it unchanged. |
 
 The planner writes `pending` in both places. After that, every change goes through the `set_brainstorm_plan_status` tool, which writes the plan file and the index row in one call. The `check_brainstorm_plan` tool reports any plan whose two statuses differ.
 
@@ -100,7 +100,9 @@ For each run, the build:
 2. Takes the plans in index order. It leaves `done` plans alone, and skips a plan whose dependencies are not `done`.
 3. Sends each plan to one `step-implementer` subagent on Haiku, which builds the unticked steps in order and ticks each one. A blocked step is retried once on Sonnet, which also builds the steps after it, then `plan-reviewer` splits it into smaller steps.
 4. Ends each plan with a `plan-reviewer` review. Fixes come back as more steps of the same plan, for at most two rounds per build.
-5. Sets the plan to `done`, or to `blocked` with the reason in the report.
+5. Sets the plan to `done`, or, when a failure is left after the steps above, works out its root cause and keeps fixing, setting the plan to `blocked` with the reason only when the fix needs the user or two attempts in a row leave the failure unchanged.
+
+Before a plan starts, and again when a step or a failure shows one, the build looks for a missing step: something the plan needs that no step provides, such as an uninstalled dependency or a file another plan creates. It adds that step ahead of the one that needs it, or builds the plan that provides it first, and asks you only when only you can supply it.
 
 A stopped build is resumed by running `/brainstorm build` again: `done` plans are left alone and every other plan carries on at its first unticked step. Nothing is committed. The whole flow is written once, in `skills/build-plans/SKILL.md`.
 

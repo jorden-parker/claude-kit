@@ -70,7 +70,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 
 ## Set up and update
 
-`claude-kit-update` sets up a machine and brings every installed plugin up to date in one run. The first run, by its path, links it onto the PATH; after that `claude-kit-update` works from any terminal:
+`claude-kit-update` sets up a machine, installs every claude-kit plugin that is not installed yet, and brings every installed plugin up to date in one run. The first run, by its path, links it onto the PATH; after that `claude-kit-update` works from any terminal:
 
 ```
 ~/src/claude-kit/claude-kit-update

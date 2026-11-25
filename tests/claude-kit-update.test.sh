@@ -35,7 +35,9 @@ cat > "$sandbox/plugins.json" <<'JSON'
   ],
   "available": [
     {"pluginId": "draft-pr@claude-kit", "marketplaceName": "claude-kit"},
-    {"pluginId": "vercel@claude-plugins-official", "marketplaceName": "claude-plugins-official"}
+    {"pluginId": "vercel@claude-plugins-official", "marketplaceName": "claude-plugins-official"},
+    {"pluginId": "new-plugin@claude-kit", "marketplaceName": "claude-kit"},
+    {"pluginId": "other@claude-plugins-official", "marketplaceName": "claude-plugins-official"}
   ]
 }
 JSON
@@ -80,7 +82,8 @@ expect "every marketplace is updated after the add" \
 expect "plugins are updated after the marketplaces" \
   calls_in_order "plugin marketplace update" "plugin update handoff@claude-kit --scope user"
 expect "installed plugins of other marketplaces are updated" called "plugin update ponytail@ponytail --scope user"
-expect "plugins that are not installed stay uninstalled" not_called "plugin install"
+expect "an available claude-kit plugin that is not installed gets installed" called "plugin install new-plugin@claude-kit"
+expect "an available plugin of another marketplace is not installed" not_called "plugin install other@claude-plugins-official"
 expect "claude-notes is linked onto the PATH folder" links_to claude-notes "$repository_root/notes-viewer/claude-notes"
 expect "claude-ledger is linked onto the PATH folder" links_to claude-ledger "$repository_root/plugins/token-ledger/bin/claude-ledger"
 expect "claude-kit-update is linked onto the PATH folder" links_to claude-kit-update "$repository_root/claude-kit-update"

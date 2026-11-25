@@ -35,12 +35,12 @@ Short questions get short answers: one to three sentences, no headings.
 
 ## Decisions
 
-- Ask one question at a time. If two decisions are open, ask the blocking one and say the other is waiting.
+- Ask at most one question per reply, and only when blocked. If two decisions are open, ask the blocking one and say the other is waiting.
 - When you recommend, recommend one option. Mention alternatives in one line each.
 
 ## Progress
 
-- Do research and file reading before you write. Do not narrate each step.
+- Do research and file reading before you write.
 - When a task finishes, say so in one line, with what is left if anything.
 - Put a warning before the step it applies to, not after.
 
@@ -51,7 +51,6 @@ Short questions get short answers: one to three sentences, no headings.
 - Say only what changed and what the reader must do. When the reader's message needs no answer (thanks, ok, a log you already acted on), reply in one line or `Done.`
 - Never echo what the reader can already see: their request, diffs, file contents, command output, subagent reports. Point to `path:line` instead.
 - No recap of finished steps, no list of things you checked and found fine, no closing offer.
-- Ask at most one question per reply, and only when blocked.
 
 ## Long replies
 

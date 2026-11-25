@@ -1,6 +1,6 @@
 ---
 name: draft-pr
-description: Draft a pull request for the current branch, with a title and a body that follows the project's own PR template, and open it as an editable page in the browser. Use whenever the user asks to draft, write, prepare or describe a PR or pull request, or asks for a PR description, even when they name no branch or base. Posts nothing to GitHub; the page has the button for that.
+description: Draft a pull request for the current branch, with a title and a body that follows the project's own PR template. Use whenever the user asks to draft, write, prepare or describe a PR or pull request, or asks for a PR description, even when they name no branch or base.
 argument-hint: "[notes, such as the base branch]"
 ---
 

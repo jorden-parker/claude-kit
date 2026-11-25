@@ -1,12 +1,14 @@
 ---
 name: build-plans
-description: Implement brainstorm plans from ~/.claude/brainstorm/<project>/plans/. Each run folder (plan-YYYY-MM-DD-HHMM/) holds index.md, which lists every plan with its status and build order, and one folder per plan with its plan.md and step files. Use whenever the user asks to implement, build, run, resume or carry out a plan, "the plan", "the latest plan", several plans or a plan path, even when they give no path. Checks each run, delegates each plan's steps to one small-model subagent, has a strong-model subagent review the finished work, and records each plan's status in its plan.md and in the index.
+description: Implement brainstorm plans from ~/.claude/brainstorm/<project>/plans/. Use whenever the user asks to implement, build, run, resume or carry out a plan, "the plan", "the latest plan", several plans or a plan path, even when they give no path.
 user-invocable: false
 ---
 
 # Build brainstorm plans
 
 You coordinate the build. You do not write source code. You keep your own context small: pass paths between agents, never file contents.
+
+The steps go to `brainstorm:step-implementer` agents, which run on a small model, and the final review goes to the `brainstorm:plan-reviewer` agent, which runs on a strong model.
 
 Every agent you start makes this session re-read its whole context, so a long session makes every step cost more. When this session already holds the planning conversation or other long work, say so in one line before the first agent: `/clear`, then `/brainstorm build`, is cheaper. Then carry on with the build unless the user stops you.
 

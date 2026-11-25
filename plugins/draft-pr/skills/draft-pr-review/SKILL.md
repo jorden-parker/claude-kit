@@ -1,6 +1,6 @@
 ---
 name: draft-pr-review
-description: Draft a review of a GitHub pull request as Conventional Comments (label, optional decorations, subject, discussion) and open it as an editable page in the browser. Use whenever the user asks to review a PR or pull request, draft review comments, or give feedback on a PR, by number, URL, or for the current branch. Posts nothing to GitHub; the page has the button for that.
+description: Draft a review of a GitHub pull request as Conventional Comments (label, optional decorations, subject, discussion). Use whenever the user asks to review a PR or pull request, draft review comments, or give feedback on a PR, by number, URL, or for the current branch.
 argument-hint: "[PR number or URL] [focus]"
 ---
 

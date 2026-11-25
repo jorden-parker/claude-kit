@@ -1,6 +1,6 @@
 ---
 name: ui-design
-description: Design UI as themed mockups in the browser, built from the project's own colors, type, spacing and components, or audit the project's theme and components for consistency. Use whenever the user asks to design, mock up or sketch a new screen, page or component, to redesign, restyle or rethink existing UI, to audit or check the theme, design system, design tokens, hardcoded colors, typography or component consistency, or to apply, build or implement a design variant, or to fix audit findings. Changes no project code until the user picks a variant with apply, answers the go-ahead question after redesign, or names findings with fix.
+description: Design UI as themed browser mockups built from the project's own colors, type, spacing and components, or audit its theme and components for consistency. Use to design, mock up, redesign or restyle a screen, page or component, to audit the theme, design tokens or hardcoded colors, to apply a design variant, or to fix audit findings.
 user-invocable: false
 argument-hint: "new <brief> | redesign <target> [notes] | audit [scope] | apply [design] <letter> | fix <numbers, all or errors> | gallery"
 ---

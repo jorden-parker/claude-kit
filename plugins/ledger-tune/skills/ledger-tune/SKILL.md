@@ -1,7 +1,6 @@
 ---
 name: ledger-tune
 description: Read the token-ledger data, recommend changes that cut context, tokens and cost, apply the ones the user picks, and verify with ledger data that they worked. Use for /ledger-tune.
-user-invocable: false
 argument-hint: "[read|apply|verify] [since YYYY-MM-DD]"
 ---
 

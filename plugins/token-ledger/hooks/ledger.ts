@@ -1,4 +1,5 @@
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -192,6 +193,7 @@ export async function waitForLastReply(
 }
 
 const inThousands = (count: number) => `${Math.round(count / 1000)}k`;
+const minuteOf = (isoTime: string) => isoTime.slice(0, 16).replace("T", " ");
 
 export function composeNudge(
   contextTokens: number,
@@ -354,7 +356,7 @@ export function formatReport(entries: LedgerEntry[]): string {
   if (entries.length === 0) return "No sessions recorded yet.";
   return [
     ...entries.flatMap((entry) => [
-      `${entry.updatedAt.slice(0, 16).replace("T", " ")}  ${entry.project}  context ${inThousands(entry.contextTokens)}  ${entry.session}`,
+      `${minuteOf(entry.updatedAt)}  ${entry.project}  context ${inThousands(entry.contextTokens)}  ${entry.session}`,
       ...describeModels("", entry.main),
       ...describeModels("subagents ", entry.subagents),
       ...describeTools(entry.resultCharactersByTool ?? {}),
@@ -487,4 +489,138 @@ export function takeReplyNote(
       additionalContext,
     },
   };
+}
+
+export type Fix = { appliedAt: string; title: string };
+
+const fixesPath = (userHome: string) =>
+  join(userHome, ".cache/token-ledger/fixes.jsonl");
+
+export function recordFix(
+  userHome: string,
+  title: string,
+  now: Date = new Date()
+): void {
+  const path = fixesPath(userHome);
+  mkdirSync(dirname(path), { recursive: true });
+  appendFileSync(
+    path,
+    `${JSON.stringify({ appliedAt: now.toISOString(), title })}\n`
+  );
+}
+
+function parseFix(line: string): Fix | undefined {
+  try {
+    const fix = JSON.parse(line);
+    return typeof fix?.appliedAt === "string" && typeof fix?.title === "string"
+      ? fix
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function readFixes(userHome: string): Fix[] {
+  const path = fixesPath(userHome);
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .flatMap((line) => parseFix(line) ?? []);
+}
+
+export type SessionGroup = {
+  sessions: number;
+  medianContextTokens: number;
+  medianToolResultCharacters: number;
+  medianTokens: number;
+  cacheReadPercent: number;
+  nudgedSessions: number;
+};
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((first, second) => first - second);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+}
+
+const sumValues = (values: Record<string, number>) =>
+  Object.values(values).reduce((sum, value) => sum + value, 0);
+
+function describeGroup(entries: LedgerEntry[]): SessionGroup {
+  const groupTotals = entries.reduce(
+    (sum, entry) =>
+      addTotals(
+        sum,
+        addTotals(sumModels(entry.main), sumModels(entry.subagents))
+      ),
+    toTotals({})
+  );
+  const cacheBase =
+    groupTotals.input + groupTotals.cacheWrite + groupTotals.cacheRead;
+  return {
+    sessions: entries.length,
+    medianContextTokens: median(entries.map((entry) => entry.contextTokens)),
+    medianToolResultCharacters: median(
+      entries.map((entry) => sumValues(entry.resultCharactersByTool ?? {}))
+    ),
+    medianTokens: median(
+      entries.map((entry) => {
+        const totals = addTotals(
+          sumModels(entry.main),
+          sumModels(entry.subagents)
+        );
+        return (
+          totals.input + totals.cacheWrite + totals.cacheRead + totals.output
+        );
+      })
+    ),
+    cacheReadPercent:
+      cacheBase === 0
+        ? 0
+        : Math.round((groupTotals.cacheRead / cacheBase) * 100),
+    nudgedSessions: entries.filter((entry) => (entry.lastNudgeTokens ?? 0) > 0)
+      .length,
+  };
+}
+
+export function compareSessions(
+  entries: LedgerEntry[],
+  since: string
+): { before: SessionGroup; after: SessionGroup } {
+  return {
+    before: describeGroup(entries.filter((entry) => entry.updatedAt < since)),
+    after: describeGroup(entries.filter((entry) => entry.updatedAt >= since)),
+  };
+}
+
+const describeVerificationGroup = (label: string, group: SessionGroup) =>
+  `  ${label}: ${group.sessions} sessions, median context ${inThousands(group.medianContextTokens)}, median tool results ${inThousands(group.medianToolResultCharacters)} chars, median tokens ${inThousands(group.medianTokens)}, cache read ${group.cacheReadPercent}%, nudged ${group.nudgedSessions}`;
+
+const TOO_EARLY_SESSIONS = 5;
+
+function describeCheck(
+  entries: LedgerEntry[],
+  check: { title: string; since: string }
+): string {
+  const { before, after } = compareSessions(entries, check.since);
+  return [
+    `Fix: ${check.title} (applied ${minuteOf(check.since)})`,
+    describeVerificationGroup("before", before),
+    describeVerificationGroup("after", after),
+    ...(after.sessions < TOO_EARLY_SESSIONS
+      ? [
+          `  Fewer than ${TOO_EARLY_SESSIONS} sessions after the fix: too early to judge.`,
+        ]
+      : []),
+  ].join("\n");
+}
+
+export function formatVerification(
+  entries: LedgerEntry[],
+  checks: { title: string; since: string }[]
+): string {
+  return checks.map((check) => describeCheck(entries, check)).join("\n\n");
 }

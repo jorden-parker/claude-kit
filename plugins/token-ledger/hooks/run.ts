@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { composeLedgerPage } from "./ledger-page.ts";
 import {
   formatReport,
+  formatVerification,
+  readFixes,
   readNewestEntries,
+  recordFix,
   recordReplyMeter,
   recordSession,
   takeReplyNote,
@@ -19,6 +22,39 @@ const sessionCount = Number(process.argv[3]) || Infinity;
 
 if (command === "report") {
   console.log(formatReport(readNewestEntries(userHome, sessionCount)));
+} else if (command === "fixed") {
+  const title = process.argv[3];
+  if (!title) {
+    console.error('Usage: claude-ledger --fixed "<title>"');
+    process.exit(2);
+  }
+  recordFix(userHome, title);
+  console.log(`Recorded fix: ${title}`);
+} else if (command === "verify") {
+  const date = process.argv[3];
+  if (date === undefined) {
+    const fixes = readFixes(userHome);
+    console.log(
+      fixes.length === 0
+        ? "No fixes recorded. Pass a date: claude-ledger --verify YYYY-MM-DD"
+        : formatVerification(
+            readNewestEntries(userHome, Infinity),
+            fixes.map((fix) => ({ title: fix.title, since: fix.appliedAt }))
+          )
+    );
+  } else if (Number.isNaN(Date.parse(date))) {
+    console.error("Usage: claude-ledger --verify [YYYY-MM-DD]");
+    process.exit(2);
+  } else {
+    console.log(
+      formatVerification(readNewestEntries(userHome, Infinity), [
+        {
+          title: `Sessions before and after ${date}`,
+          since: new Date(date).toISOString(),
+        },
+      ])
+    );
+  }
 } else if (command === "table") {
   const pagePath = join(tmpdir(), "claude-ledger.html");
   writeFileSync(

@@ -11,12 +11,16 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  compareSessions,
   composeNudge,
   composeSummary,
   countLastReplyWords,
   formatReport,
+  formatVerification,
   type LedgerEntry,
+  readFixes,
   readNewestEntries,
+  recordFix,
   recordReplyMeter,
   recordSession,
   summarizeTranscript,
@@ -531,4 +535,193 @@ test("a reply within budget removes an old note", () => {
   recordReplyMeter(event, userHome);
   expect(existsSync(replyNotePath(userHome))).toBe(false);
   expect(takeReplyNote("session-1", userHome)).toBeNull();
+});
+
+const totals = (
+  input: number,
+  cacheWrite: number,
+  cacheRead: number,
+  output: number
+) => ({ input, cacheWrite, cacheRead, output });
+
+const dayEntry = (
+  updatedAt: string,
+  contextTokens: number,
+  resultCharactersByTool: Record<string, number>,
+  main: LedgerEntry["main"],
+  subagents: LedgerEntry["subagents"] = {},
+  lastNudgeTokens = 0
+): LedgerEntry => ({
+  session: `session-${updatedAt}`,
+  project: "claude-kit",
+  updatedAt,
+  contextTokens,
+  lastNudgeTokens,
+  main,
+  subagents,
+  resultCharactersByTool,
+});
+
+const verificationEntries: LedgerEntry[] = [
+  dayEntry(
+    "2026-11-20T10:00:00.000Z",
+    100000,
+    { Bash: 30000, Read: 10000 },
+    { "model-a": totals(1000, 2000, 7000, 1000) }
+  ),
+  dayEntry(
+    "2026-11-21T10:00:00.000Z",
+    60000,
+    { Bash: 5000 },
+    { "model-a": totals(500, 500, 3000, 0) },
+    { "model-b": totals(0, 0, 1000, 200) },
+    60000
+  ),
+  dayEntry(
+    "2026-11-22T10:00:00.000Z",
+    80000,
+    {},
+    { "model-a": totals(2000, 0, 2000, 500) }
+  ),
+  dayEntry(
+    "2026-11-25T08:00:00.000Z",
+    40000,
+    { Read: 20000, Bash: 1000 },
+    { "model-a": totals(1000, 0, 9000, 1000) }
+  ),
+  dayEntry(
+    "2026-11-25T09:00:00.000Z",
+    90000,
+    { Bash: 3000 },
+    { "model-a": totals(0, 0, 0, 0) },
+    { "model-b": totals(1000, 0, 0, 500) },
+    90000
+  ),
+  dayEntry(
+    "2026-11-25T10:00:00.000Z",
+    50000,
+    { Read: 7000 },
+    { "model-a": totals(500, 1500, 2000, 250) },
+    {},
+    50000
+  ),
+  dayEntry(
+    "2026-11-25T11:00:00.000Z",
+    70000,
+    {},
+    { "model-a": totals(2001, 0, 6000, 0) }
+  ),
+];
+
+test("compareSessions splits sessions by the fix time and gives each group's medians and shares", () => {
+  const { before, after } = compareSessions(
+    verificationEntries,
+    "2026-11-25T00:00:00.000Z"
+  );
+  expect(before).toEqual({
+    sessions: 3,
+    medianContextTokens: 80000,
+    medianToolResultCharacters: 5000,
+    medianTokens: 5200,
+    cacheReadPercent: 68,
+    nudgedSessions: 1,
+  });
+  expect(after).toEqual({
+    sessions: 4,
+    medianContextTokens: 60000,
+    medianToolResultCharacters: 5000,
+    medianTokens: 6126,
+    cacheReadPercent: 74,
+    nudgedSessions: 2,
+  });
+});
+
+test("compareSessions gives zeros for a group with no sessions", () => {
+  const noSessions = {
+    sessions: 0,
+    medianContextTokens: 0,
+    medianToolResultCharacters: 0,
+    medianTokens: 0,
+    cacheReadPercent: 0,
+    nudgedSessions: 0,
+  };
+  expect(compareSessions([], "2026-11-25T00:00:00.000Z")).toEqual({
+    before: noSessions,
+    after: noSessions,
+  });
+  expect(
+    compareSessions(verificationEntries, "2026-11-19T00:00:00.000Z").before
+  ).toEqual(noSessions);
+});
+
+test("formatVerification prints the before and after lines and the too-early line when fewer than five sessions came after", () => {
+  expect(
+    formatVerification(verificationEntries, [
+      { title: "Lower the nudge", since: "2026-11-25T10:00:00.000Z" },
+    ])
+  ).toBe(
+    [
+      "Fix: Lower the nudge (applied 2026-11-25 10:00)",
+      "  before: 5 sessions, median context 80k, median tool results 5k chars, median tokens 5k, cache read 73%, nudged 2",
+      "  after: 2 sessions, median context 60k, median tool results 4k chars, median tokens 6k, cache read 67%, nudged 1",
+      "  Fewer than 5 sessions after the fix: too early to judge.",
+    ].join("\n")
+  );
+});
+
+test("formatVerification leaves out the too-early line from five sessions after, and separates checks with a blank line", () => {
+  expect(
+    formatVerification(verificationEntries, [
+      { title: "Trim tool output", since: "2026-11-21T10:00:00.000Z" },
+      { title: "Lower the nudge", since: "2026-11-25T10:00:00.000Z" },
+    ])
+  ).toBe(
+    [
+      "Fix: Trim tool output (applied 2026-11-21 10:00)",
+      "  before: 1 sessions, median context 100k, median tool results 40k chars, median tokens 11k, cache read 70%, nudged 0",
+      "  after: 6 sessions, median context 65k, median tool results 4k chars, median tokens 5k, cache read 72%, nudged 3",
+      "",
+      "Fix: Lower the nudge (applied 2026-11-25 10:00)",
+      "  before: 5 sessions, median context 80k, median tool results 5k chars, median tokens 5k, cache read 73%, nudged 2",
+      "  after: 2 sessions, median context 60k, median tool results 4k chars, median tokens 6k, cache read 67%, nudged 1",
+      "  Fewer than 5 sessions after the fix: too early to judge.",
+    ].join("\n")
+  );
+});
+
+test("recordFix appends fixes that readFixes returns in the order they were recorded", () => {
+  const userHome = mkdtempSync(join(tmpdir(), "ledger-"));
+  recordFix(userHome, "first fix", new Date("2026-11-25T14:30:00.000Z"));
+  recordFix(userHome, "second fix", new Date("2026-11-25T15:00:00.000Z"));
+  expect(readFixes(userHome)).toEqual([
+    { appliedAt: "2026-11-25T14:30:00.000Z", title: "first fix" },
+    { appliedAt: "2026-11-25T15:00:00.000Z", title: "second fix" },
+  ]);
+});
+
+test("readFixes skips a line that is not a fix", () => {
+  const userHome = mkdtempSync(join(tmpdir(), "ledger-"));
+  const folder = join(userHome, ".cache/token-ledger");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(
+    join(folder, "fixes.jsonl"),
+    [
+      JSON.stringify({ appliedAt: "2026-11-25T14:30:00.000Z", title: "kept" }),
+      "{not json",
+      JSON.stringify({ title: "no time" }),
+      JSON.stringify({
+        appliedAt: "2026-11-25T15:00:00.000Z",
+        title: "also kept",
+      }),
+      "",
+    ].join("\n")
+  );
+  expect(readFixes(userHome)).toEqual([
+    { appliedAt: "2026-11-25T14:30:00.000Z", title: "kept" },
+    { appliedAt: "2026-11-25T15:00:00.000Z", title: "also kept" },
+  ]);
+});
+
+test("readFixes returns no fixes when none were recorded", () => {
+  expect(readFixes(mkdtempSync(join(tmpdir(), "ledger-")))).toEqual([]);
 });

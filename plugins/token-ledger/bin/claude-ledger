@@ -7,4 +7,13 @@ if [ "${1:-}" = "--text" ]; then
   shift
   exec bun "$plugin_folder/hooks/run.ts" report "$@"
 fi
+if [ "${1:-}" = "--fixed" ]; then
+  exec bun "$plugin_folder/hooks/run.ts" fixed "${2-}"
+fi
+if [ "${1:-}" = "--verify" ]; then
+  if [ $# -ge 2 ]; then
+    exec bun "$plugin_folder/hooks/run.ts" verify "$2"
+  fi
+  exec bun "$plugin_folder/hooks/run.ts" verify
+fi
 exec bun "$plugin_folder/hooks/run.ts" table "$@"

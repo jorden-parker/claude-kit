@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describePlugin } from "./host-tools";
-import { serveMcp } from "./mcp-server";
+import { createMcpConnection, serveMcp } from "./mcp-server";
 import {
   createPiExtension,
   startHostedPlugin,
@@ -26,18 +26,29 @@ const findPiStoreFolder = () =>
     STORE_FOLDER
   );
 
-export const serveQwenPlugin = async (plugin: BundledPlugin) =>
-  serveMcp(
-    await startHostedPlugin({ ...plugin, storeFolder: findQwenStoreFolder() })
+export const serveQwenPlugin = async (plugin: BundledPlugin) => {
+  const connection = createMcpConnection();
+  return serveMcp(
+    await startHostedPlugin({
+      ...plugin,
+      storeFolder: findQwenStoreFolder(),
+      askQuestion: connection.askQuestion,
+    }),
+    connection
   );
+};
 
-export const serveOpenCodePlugin = async (plugin: BundledPlugin) =>
-  serveMcp(
+export const serveOpenCodePlugin = async (plugin: BundledPlugin) => {
+  const connection = createMcpConnection();
+  return serveMcp(
     await startHostedPlugin({
       ...plugin,
       storeFolder: join(plugin.pluginRoot, "..", "..", STORE_FOLDER),
-    })
+      askQuestion: connection.askQuestion,
+    }),
+    connection
   );
+};
 
 export const createPiPluginExtension = (plugin: BundledPlugin) =>
   createPiExtension({ ...plugin, storeFolder: findPiStoreFolder() });

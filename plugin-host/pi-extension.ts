@@ -2,6 +2,7 @@ import { join } from "node:path";
 import {
   createPluginHost,
   qualifyToolName,
+  type AskQuestion,
   type Register,
 } from "./engine";
 import { callHostTool, listHostTools } from "./host-tools";
@@ -11,6 +12,7 @@ export type HostedPlugin = {
   pluginRoot: string;
   storeFolder: string;
   register: Register;
+  askQuestion?: AskQuestion;
 };
 
 type PiExtensionApi = { registerTool: (tool: any) => unknown };
@@ -20,6 +22,7 @@ export const startHostedPlugin = async ({
   pluginRoot,
   storeFolder,
   register,
+  askQuestion,
 }: HostedPlugin) => {
   const host = createPluginHost({
     pluginName,
@@ -27,6 +30,7 @@ export const startHostedPlugin = async ({
     workingDirectory: process.cwd(),
     storePath: join(storeFolder, `${pluginName}.json`),
     register,
+    askQuestion,
   });
   await host.start();
   return host;

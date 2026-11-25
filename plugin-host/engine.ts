@@ -58,7 +58,7 @@ const FILLED_PROMPT_LEAD =
 const NO_COMMANDS_AT_START =
   "process.run is not available while a plugin starts outside Claude Code.";
 const SUBMITTED_PROMPT_LEAD = "Now carry out these instructions:";
-const NO_QUESTION_PROMPT_REASON = "no question prompt outside Claude Code";
+export const NO_QUESTION_PROMPT_REASON ="no question prompt outside Claude Code";
 
 const startTurn = (modelReply?: string): Turn => ({
   modelReply,

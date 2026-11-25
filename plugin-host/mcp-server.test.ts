@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createPluginHost, type Register } from "./engine";
 import { describePlugin } from "./host-tools";
-import { answerRequest } from "./mcp-server";
+import { answerRequest, createMcpConnection, type McpConnection } from "./mcp-server";
 
 const registerGreeter: Register = (registerHook) => {
   registerHook("session.start", async ($, event, next) => {
@@ -186,4 +186,114 @@ test("describePlugin lists the tools and the commands", async () => {
       },
     ],
   });
+});
+
+const registerPicker: Register = (registerHook) => {
+  registerHook("command.run", { command: "pick" }, async (engine) => {
+    const answer = await engine.ui.ask("Which plan?", {
+      header: "Plans",
+      options: ["Alpha", "Beta"],
+    });
+    return { text: `chose ${answer}` };
+  });
+};
+
+const startPicker = (connection: McpConnection) =>
+  createPluginHost({
+    pluginName: "picker",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register: registerPicker,
+    askQuestion: connection.askQuestion,
+  });
+
+const initialize = (connection: McpConnection, capabilities: Record<string, unknown>) =>
+  answerRequest(
+    startPicker(connection),
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-06-18", capabilities },
+    },
+    connection
+  );
+
+test("ui.ask sends an elicitation form to a client that declares elicitation and returns the accepted choice", async () => {
+  const sent: any[] = [];
+  const connection = createMcpConnection((line) => sent.push(JSON.parse(line)));
+  const host = startPicker(connection);
+  await host.start();
+  await answerRequest(
+    host,
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-06-18", capabilities: { elicitation: {} } },
+    },
+    connection
+  );
+  const outcome = host.runCommand("pick", "");
+  while (sent.length === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(sent[0]).toEqual({
+    jsonrpc: "2.0",
+    id: sent[0].id,
+    method: "elicitation/create",
+    params: {
+      message: "Which plan?",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          choice: { type: "string", title: "Plans", enum: ["Alpha", "Beta"] },
+        },
+        required: ["choice"],
+      },
+    },
+  });
+  connection.receiveReply({
+    jsonrpc: "2.0",
+    id: sent[0].id,
+    result: { action: "accept", content: { choice: "Beta" } },
+  });
+  expect(await outcome).toEqual({ text: "chose Beta", isError: false });
+});
+
+test("ui.ask rejects when the user declines or cancels the elicitation", async () => {
+  const sent: any[] = [];
+  const connection = createMcpConnection((line) => sent.push(JSON.parse(line)));
+  await initialize(connection, { elicitation: {} });
+  const declined = connection.askQuestion("Which plan?", { header: "Plans", options: ["Alpha"] });
+  connection.receiveReply({ jsonrpc: "2.0", id: sent[0].id, result: { action: "decline" } });
+  await expect(declined).rejects.toThrow("The user declined the question.");
+  const cancelled = connection.askQuestion("Which plan?", { header: "Plans", options: ["Alpha"] });
+  connection.receiveReply({ jsonrpc: "2.0", id: sent[1].id, result: { action: "cancel" } });
+  await expect(cancelled).rejects.toThrow("The user cancelled the question.");
+});
+
+test("ui.ask rejects when the client answers with an error or an option that was not offered", async () => {
+  const sent: any[] = [];
+  const connection = createMcpConnection((line) => sent.push(JSON.parse(line)));
+  await initialize(connection, { elicitation: {} });
+  const failed = connection.askQuestion("Which plan?", { header: "Plans", options: ["Alpha"] });
+  connection.receiveReply({ jsonrpc: "2.0", id: sent[0].id, error: { code: -32000, message: "boom" } });
+  await expect(failed).rejects.toThrow("The question could not be asked: boom");
+  const invented = connection.askQuestion("Which plan?", { header: "Plans", options: ["Alpha"] });
+  connection.receiveReply({
+    jsonrpc: "2.0",
+    id: sent[1].id,
+    result: { action: "accept", content: { choice: "Gamma" } },
+  });
+  await expect(invented).rejects.toThrow("The client answered with an option that was not offered.");
+});
+
+test("a client without elicitation leaves ui.ask rejecting and sends no form", async () => {
+  const sent: any[] = [];
+  const connection = createMcpConnection((line) => sent.push(JSON.parse(line)));
+  await initialize(connection, { roots: {} });
+  await expect(
+    connection.askQuestion("Which plan?", { header: "Plans", options: ["Alpha"] })
+  ).rejects.toThrow("no question prompt outside Claude Code");
+  expect(sent).toEqual([]);
 });

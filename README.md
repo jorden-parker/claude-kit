@@ -70,7 +70,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 
 ## Set up and update
 
-`claude-kit-update` sets up a machine, installs every claude-kit plugin that is not installed yet, and brings every installed plugin up to date in one run. Each plugin update is recorded as a fix, so `/ledger-tune verify` can compare sessions before and after it. The first run, by its path, links it onto the PATH; after that `claude-kit-update` works from any terminal:
+`claude-kit-update` sets up a machine and brings every installed claude-kit plugin up to date in one run. It never installs a plugin you do not have; a new one is installed with `claude plugin install <plugin>@claude-kit --scope user`. Each plugin update is recorded as a fix, so `/ledger-tune verify` can compare sessions before and after it. The first run, by its path, links it onto the PATH; after that `claude-kit-update` works from any terminal:
 
 ```
 ~/src/claude-kit/claude-kit-update
@@ -79,7 +79,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 1. Pulls this checkout (`git pull --ff-only`)
 2. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
 3. Updates every marketplace
-4. Updates every installed plugin, from any marketplace, in its own scope
+4. Updates every installed claude-kit plugin in its own scope
 5. Links `claude-notes`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 
 It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not stop the others; the run ends by naming each failure and exits 1. Start a new Claude Code session afterwards to load the updated plugins.
@@ -343,7 +343,7 @@ plugin-host/                      runs register.ts plugins and command hooks out
 notes-viewer/                     claude-notes: the local web page for saved notes (Go)
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
-claude-kit-update                 sets up the marketplace, updates every installed plugin
+claude-kit-update                 sets up the marketplace, updates every installed claude-kit plugin
 claude-kit-update profile <name>  turns plugins on or off for the project in the current folder
 claude-kit-doctor                 compares each plugin's checkout version with the installed one
 check                             runs every test suite; --staged runs only staged ones (the pre-commit hook); --changed-since <rev> runs only the ones changed since that commit (CI); fails when a plugin changed since origin/main without a version bump

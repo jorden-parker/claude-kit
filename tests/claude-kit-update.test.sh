@@ -99,8 +99,9 @@ expect "every marketplace is updated after the add" \
   calls_in_order "plugin marketplace add $repository_root" "plugin marketplace update"
 expect "plugins are updated after the marketplaces" \
   calls_in_order "plugin marketplace update" "plugin update handoff@claude-kit --scope user"
-expect "installed plugins of other marketplaces are updated" called "plugin update ponytail@ponytail --scope user"
-expect "an available claude-kit plugin that is not installed gets installed" called "plugin install new-plugin@claude-kit"
+expect "installed plugins of other marketplaces are not updated" not_called "plugin update ponytail@ponytail"
+expect "an available claude-kit plugin that is not installed is not updated" not_called "plugin update new-plugin@claude-kit"
+expect "an available claude-kit plugin that is not installed is never installed" not_called "plugin install"
 expect "an available plugin of another marketplace is not installed" not_called "plugin install other@claude-plugins-official"
 expect "claude-notes is linked onto the PATH folder" links_to claude-notes "$repository_root/notes-viewer/claude-notes"
 expect "claude-ledger is linked onto the PATH folder" links_to claude-ledger "$repository_root/plugins/token-ledger/bin/claude-ledger"
@@ -123,7 +124,7 @@ sed -i.bak 's/"handoff@claude-kit"/"broken@claude-kit"/' "$sandbox/plugins.json"
 output="$(run_update)"
 status=$?
 expect "a failed plugin update exits 1" [ "$status" -eq 1 ]
-expect "the other plugins are still updated after a failure" called "plugin update ponytail@ponytail --scope user"
+expect "the other plugins are still updated after a failure" called "plugin update guards@claude-kit --scope user"
 expect "the failed plugin is named" grep -qF "broken@claude-kit" <<<"$output"
 
 sed -i.bak 's/"broken@claude-kit"/"handoff@claude-kit"/' "$sandbox/plugins.json"
@@ -148,6 +149,30 @@ output="$(GUARDS_UP_TO_DATE=1 run_update)"
 status=$?
 expect "a run with no plugin update exits 0" [ "$status" -eq 0 ]
 expect "a run with no plugin update records no fix" [ ! -s "$ledger_calls" ]
+
+cat > "$sandbox/plugins.json" <<'JSON'
+{
+  "installed": [
+    {"id": "guards@claude-kit", "scope": "user"},
+    {"id": "tdd@claude-kit", "scope": "user"}
+  ],
+  "available": [
+    {"pluginId": "code-style@claude-kit", "marketplaceName": "claude-kit"},
+    {"pluginId": "tdd@claude-kit", "marketplaceName": "claude-kit"},
+    {"pluginId": "quality-gates@claude-kit", "marketplaceName": "claude-kit"},
+    {"pluginId": "guards@claude-kit", "marketplaceName": "claude-kit"}
+  ]
+}
+JSON
+output="$(run_update)"
+status=$?
+expect "the claude-kit plugins claude-lite reads are updated only when installed" [ "$status" -eq 0 ]
+expect "claude-lite's installed guards plugin is updated" called "plugin update guards@claude-kit --scope user"
+expect "claude-lite's installed tdd plugin is updated" called "plugin update tdd@claude-kit --scope user"
+expect "claude-lite's uninstalled code-style plugin is not updated" not_called "plugin update code-style@claude-kit"
+expect "claude-lite's uninstalled quality-gates plugin is not updated" not_called "plugin update quality-gates@claude-kit"
+expect "claude-lite's uninstalled code-style plugin is not installed" not_called "plugin install code-style@claude-kit"
+expect "claude-lite's uninstalled quality-gates plugin is not installed" not_called "plugin install quality-gates@claude-kit"
 
 run_profile() {
   local project_folder="$1" profile_name="$2"

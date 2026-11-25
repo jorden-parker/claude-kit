@@ -14,6 +14,7 @@ It runs in three steps:
 - `/ledger-tune read` only reads the ledger and recommends
 - `/ledger-tune apply` only applies the picked recommendations
 - `/ledger-tune verify since 2026-11-25` only verifies, comparing fixes made since that date
+- Typing `/ledger-tune ` suggests `read`, `apply` and `verify`, and `verify ` suggests `since`
 
 ## Requirements
 

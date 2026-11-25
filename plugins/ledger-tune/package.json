@@ -1,0 +1,15 @@
+{
+  "name": "ledger-tune",
+  "version": "0.3.0",
+  "description": "Reads the token-ledger data, recommends changes that cut context, tokens and cost, applies the ones you pick and verifies them against later sessions.",
+  "scripts": {
+    "test": "claude plugin test .",
+    "typecheck": "tsc -p ."
+  },
+  "packageManager": "pnpm@10.15.0",
+  "devDependencies": {
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2"
+  }
+}

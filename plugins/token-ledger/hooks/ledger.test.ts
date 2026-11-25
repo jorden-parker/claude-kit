@@ -130,6 +130,16 @@ test("the context size is what the last message read and wrote", () => {
   expect(summary.contextTokens).toBe(2220);
 });
 
+test("the context size at the start is what the first message read and wrote", () => {
+  const summary = summarizeTranscript(
+    transcript(
+      assistantLine("msg_1", "fable", usage(10, 100, 1000, 5)),
+      assistantLine("msg_2", "fable", usage(20, 200, 2000, 5))
+    )
+  );
+  expect(summary.startContextTokens).toBe(1110);
+});
+
 const toolCallLine = JSON.stringify({
   type: "assistant",
   message: {
@@ -209,14 +219,19 @@ test("a broken line is skipped", () => {
 });
 
 test("no nudge under the threshold or right after one", () => {
-  expect(composeNudge(79_999, 0, 80_000)).toBeNull();
-  expect(composeNudge(110_000, 80_000, 80_000)).toBeNull();
+  expect(composeNudge(112_999, 0, 113_000, 73_000)).toBeNull();
+  expect(composeNudge(160_000, 113_000, 113_000, 73_000)).toBeNull();
 });
 
 test("a nudge at the threshold and again after 50,000 more tokens", () => {
-  expect(composeNudge(80_000, 0, 80_000)).toContain("80k tokens");
-  expect(composeNudge(80_000, 0, 80_000)).toContain("/handoff");
-  expect(composeNudge(130_000, 80_000, 80_000)).toContain("130k tokens");
+  expect(composeNudge(113_000, 0, 113_000, 73_000)).toContain("113k tokens");
+  expect(composeNudge(113_000, 0, 113_000, 73_000)).toContain(
+    "up from 73k at the start"
+  );
+  expect(composeNudge(113_000, 0, 113_000, 73_000)).toContain("/handoff");
+  expect(composeNudge(163_000, 113_000, 113_000, 73_000)).toContain(
+    "163k tokens"
+  );
 });
 
 function createSession(contextTokens: number) {
@@ -239,6 +254,18 @@ function createSession(contextTokens: number) {
     transcript_path: transcriptPath,
   };
   return { userHome, event };
+}
+
+function createGrowingSession(startTokens: number, contextTokens: number) {
+  const session = createSession(contextTokens);
+  writeFileSync(
+    session.event.transcript_path,
+    transcript(
+      assistantLine("msg_0", "fable", usage(0, 0, startTokens, 10)),
+      assistantLine("msg_1", "fable", usage(0, 0, contextTokens, 10))
+    )
+  );
+  return session;
 }
 
 const savedEntry = (userHome: string) =>
@@ -272,7 +299,7 @@ test("a recorded session holds the main and subagent totals", () => {
 });
 
 test("a large context shows the user a nudge once", () => {
-  const { userHome, event } = createSession(160_000);
+  const { userHome, event } = createGrowingSession(100_000, 160_000);
   const firstOutput = recordSession(event, userHome, new Date());
   expect(firstOutput?.systemMessage).toContain("160k tokens");
   expect(savedEntry(userHome).lastNudgeTokens).toBe(160_000);
@@ -281,21 +308,25 @@ test("a large context shows the user a nudge once", () => {
   expect(secondOutput?.systemMessage).not.toContain("/handoff");
 });
 
-test("the default threshold nudges at 80,000 tokens, not before", () => {
-  const belowThreshold = createSession(79_999);
+test("the default nudge waits for 40,000 tokens of growth since the first turn", () => {
+  const belowGrowth = createGrowingSession(73_000, 112_999);
   const belowOutput = recordSession(
-    belowThreshold.event,
-    belowThreshold.userHome,
+    belowGrowth.event,
+    belowGrowth.userHome,
     new Date()
   );
   expect(belowOutput?.systemMessage).not.toContain("/handoff");
-  const atThreshold = createSession(80_000);
-  const atOutput = recordSession(
-    atThreshold.event,
-    atThreshold.userHome,
+  const atGrowth = createGrowingSession(73_000, 113_000);
+  const atOutput = recordSession(atGrowth.event, atGrowth.userHome, new Date());
+  expect(atOutput?.systemMessage).toContain("113k tokens");
+  expect(atOutput?.systemMessage).toContain("up from 73k at the start");
+  const slowGrowth = createGrowingSession(73_000, 81_000);
+  const slowOutput = recordSession(
+    slowGrowth.event,
+    slowGrowth.userHome,
     new Date()
   );
-  expect(atOutput?.systemMessage).toContain("80k tokens");
+  expect(slowOutput?.systemMessage).not.toContain("/handoff");
 });
 
 test("a session with no subagents leaves them out of the summary", () => {
@@ -317,13 +348,19 @@ test("a session with no subagents leaves them out of the summary", () => {
   );
 });
 
-test("TOKEN_LEDGER_NUDGE_TOKENS moves the threshold", () => {
-  const { userHome, event } = createSession(1000);
+test("TOKEN_LEDGER_NUDGE_TOKENS moves the growth threshold", () => {
   process.env.TOKEN_LEDGER_NUDGE_TOKENS = "500";
   try {
-    expect(recordSession(event, userHome, new Date())?.systemMessage).toContain(
-      "1k tokens"
-    );
+    const belowGrowth = createGrowingSession(73_000, 73_499);
+    expect(
+      recordSession(belowGrowth.event, belowGrowth.userHome, new Date())
+        ?.systemMessage
+    ).not.toContain("/handoff");
+    const atGrowth = createGrowingSession(73_000, 73_500);
+    expect(
+      recordSession(atGrowth.event, atGrowth.userHome, new Date())
+        ?.systemMessage
+    ).toContain("/handoff");
   } finally {
     delete process.env.TOKEN_LEDGER_NUDGE_TOKENS;
   }

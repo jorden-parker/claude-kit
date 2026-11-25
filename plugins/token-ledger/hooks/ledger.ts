@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-const DEFAULT_NUDGE_TOKENS = 80_000;
+const DEFAULT_NUDGE_GROWTH_TOKENS = 40_000;
 const NUDGE_STEP_TOKENS = 50_000;
 const REPORTED_TOOLS = 3;
 
@@ -25,6 +25,7 @@ type TotalsByModel = Record<string, TokenTotals>;
 type TranscriptSummary = {
   byModel: TotalsByModel;
   contextTokens: number;
+  startContextTokens: number;
   resultCharactersByTool: Record<string, number>;
 };
 
@@ -107,6 +108,7 @@ type SummaryState = {
   usageByMessage: Map<string, { model: string; usage: ApiUsage }>;
   toolNames: Map<string, string>;
   resultCharactersByTool: Record<string, number>;
+  firstUsage?: ApiUsage;
   lastUsage: ApiUsage;
 };
 
@@ -116,8 +118,14 @@ function recordUsage(state: SummaryState, message: TranscriptMessage): void {
     model: message.model ?? "unknown",
     usage: message.usage,
   });
+  state.firstUsage ??= message.usage;
   state.lastUsage = message.usage;
 }
+
+const contextSize = (usage: ApiUsage): number => {
+  const totals = toTotals(usage);
+  return totals.input + totals.cacheWrite + totals.cacheRead;
+};
 
 function recordBlock(state: SummaryState, block: any): void {
   if (block?.type === "tool_use") {
@@ -144,15 +152,14 @@ export function summarizeTranscript(transcript: string): TranscriptSummary {
       recordBlock(state, block);
     }
   }
-  const lastTotals = toTotals(state.lastUsage);
   return {
     byModel: mergeByModel(
       [...state.usageByMessage.values()].map(({ model, usage }) => ({
         [model]: toTotals(usage),
       }))
     ),
-    contextTokens:
-      lastTotals.input + lastTotals.cacheWrite + lastTotals.cacheRead,
+    contextTokens: contextSize(state.lastUsage),
+    startContextTokens: contextSize(state.firstUsage ?? {}),
     resultCharactersByTool: state.resultCharactersByTool,
   };
 }
@@ -189,14 +196,15 @@ const inThousands = (count: number) => `${Math.round(count / 1000)}k`;
 export function composeNudge(
   contextTokens: number,
   lastNudgeTokens: number,
-  thresholdTokens: number
+  thresholdTokens: number,
+  startTokens: number
 ): string | null {
   const isDue =
     contextTokens >= thresholdTokens &&
     (lastNudgeTokens === 0 ||
       contextTokens >= lastNudgeTokens + NUDGE_STEP_TOKENS);
   return isDue
-    ? `Context is at ${inThousands(contextTokens)} tokens, and every turn reads all of it again. /handoff then /clear starts the next task small.`
+    ? `Context is at ${inThousands(contextTokens)} tokens, up from ${inThousands(startTokens)} at the start, and every turn reads all of it again. /handoff then /clear starts the next task small.`
     : null;
 }
 
@@ -223,9 +231,9 @@ function readSubagentTranscripts(transcriptPath: string): string[] {
     .map((fileName) => readFileSync(join(subagentFolder, fileName), "utf8"));
 }
 
-function nudgeThreshold(): number {
+function nudgeGrowth(): number {
   const configured = Number(process.env.TOKEN_LEDGER_NUDGE_TOKENS);
-  return configured > 0 ? configured : DEFAULT_NUDGE_TOKENS;
+  return configured > 0 ? configured : DEFAULT_NUDGE_GROWTH_TOKENS;
 }
 
 export function recordSession(
@@ -238,7 +246,7 @@ export function recordSession(
     return null;
   const entryPath = join(ledgerFolder(userHome), `${event.session_id}.json`);
   const mainSummary = summarizeTranscript(readFileSync(transcriptPath, "utf8"));
-  const thresholdTokens = nudgeThreshold();
+  const thresholdTokens = mainSummary.startContextTokens + nudgeGrowth();
   const lastNudgeTokens =
     mainSummary.contextTokens < thresholdTokens
       ? 0
@@ -246,7 +254,8 @@ export function recordSession(
   const nudge = composeNudge(
     mainSummary.contextTokens,
     lastNudgeTokens,
-    thresholdTokens
+    thresholdTokens,
+    mainSummary.startContextTokens
   );
   const entry: LedgerEntry = {
     session: event.session_id,

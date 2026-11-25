@@ -20,6 +20,7 @@ type TrimLimits = {
   headLines: number;
   tailLines: number;
   maxLineChars: number;
+  maxCharacters: number;
 };
 
 const SHELL_LIMITS: TrimLimits = {
@@ -27,6 +28,7 @@ const SHELL_LIMITS: TrimLimits = {
   headLines: 30,
   tailLines: 60,
   maxLineChars: 400,
+  maxCharacters: 6_000,
 };
 
 const MCP_LIMITS: TrimLimits = {
@@ -34,6 +36,20 @@ const MCP_LIMITS: TrimLimits = {
   headLines: 200,
   tailLines: 60,
   maxLineChars: Infinity,
+  maxCharacters: 8_000,
+};
+
+const capCharacters = (
+  text: string,
+  maxCharacters: number,
+  savedPath: string
+): string => {
+  if (text.length <= maxCharacters) return text;
+  const headCharacters = Math.floor(maxCharacters / 2);
+  const tailCharacters = maxCharacters - headCharacters;
+  const omitted = text.length - maxCharacters;
+  const marker = `[bash-trim: ${omitted} characters hidden from the middle; full output in ${savedPath}: grep it]`;
+  return `${text.slice(0, headCharacters)}\n${marker}\n${text.slice(text.length - tailCharacters)}`;
 };
 
 const clip = (line: string, maxLineChars: number) =>
@@ -128,11 +144,13 @@ export function decide(
       savedOutputFolder,
       `${event.session_id ?? "session"}-${event.tool_use_id ?? "output"}-${partName}.txt`
     );
-    const trimmedText = trimLines(text.split("\n"), limits, path)
+    const lineTrimmed = trimLines(text.split("\n"), limits, path)
       .map((line) => clip(line, limits.maxLineChars))
       .join("\n");
-    const hiddenHere = hiddenIn(trimmedText);
-    if (hiddenHere > 0) savedOutputs.push({ path, text });
+    const hiddenHere = hiddenIn(lineTrimmed);
+    const trimmedText = capCharacters(lineTrimmed, limits.maxCharacters, path);
+    if (hiddenHere > 0 || trimmedText !== lineTrimmed)
+      savedOutputs.push({ path, text });
     hiddenLines += hiddenHere;
     return trimmedText;
   };

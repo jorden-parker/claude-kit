@@ -17,7 +17,7 @@ Never edit, write, move or delete a file. Bash is for read-only commands (`git g
 
 ## Reply
 
-25 lines at most, no preamble:
+25 lines at most and 3,000 characters at most, no preamble:
 
 1. The answer, in one to three sentences.
 2. Evidence: one `path:line` per line, saying what is there. Quote code only when the caller asks for the exact text, 3 lines at most per reference.

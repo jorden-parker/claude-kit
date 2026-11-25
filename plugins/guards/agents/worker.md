@@ -17,7 +17,7 @@ Carry out the caller's task exactly as written. The caller orchestrates and neve
 
 ## Reply
 
-20 lines at most, no preamble:
+20 lines at most and 3,000 characters at most, no preamble:
 
 1. `DONE` or `BLOCKED`, then one sentence on the outcome.
 2. Changed: one `path:line` per line, saying what changed.

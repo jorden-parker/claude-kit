@@ -156,3 +156,43 @@ test("other tools are untouched", () =>
   expect(
     decide({ tool_name: "Read", tool_response: numberedLines(500) })
   ).toBeNull());
+
+test("an MCP result of one 50,000-character line is replaced and capped", () => {
+  const fullText = `start${"x".repeat(49_992)}end`;
+  const result = runMcp(fullText);
+  const trimmedText: string =
+    result.output.hookSpecificOutput.updatedToolOutput;
+  expect(trimmedText.length).toBeLessThanOrEqual(8_500);
+  expect(trimmedText.startsWith("start")).toBe(true);
+  expect(trimmedText.endsWith("end")).toBe(true);
+  expect(trimmedText).toContain(
+    "full output in /saved/session-output-text.txt"
+  );
+  expect(result.savedOutputs).toEqual([
+    { path: "/saved/session-output-text.txt", text: fullText },
+  ]);
+});
+
+test("a Bash result of 100 lines of 300 characters is replaced and capped", () => {
+  const fullText = Array.from({ length: 100 }, () => "y".repeat(300)).join(
+    "\n"
+  );
+  const trimmedText =
+    run(fullText).output.hookSpecificOutput.updatedToolOutput.stdout;
+  expect(trimmedText.length).toBeLessThanOrEqual(6_500);
+  expect(trimmedText).toContain("bash-trim:");
+});
+
+test("a Bash result of 20 lines of 250 characters is untouched", () => {
+  const fullText = Array.from({ length: 20 }, () => "z".repeat(250)).join("\n");
+  expect(run(fullText)).toBeNull();
+});
+
+test("GUARDS_MCP_TRIM=0 leaves a 50,000-character MCP line alone", () => {
+  process.env.GUARDS_MCP_TRIM = "0";
+  try {
+    expect(runMcp("x".repeat(50_000))).toBeNull();
+  } finally {
+    delete process.env.GUARDS_MCP_TRIM;
+  }
+});

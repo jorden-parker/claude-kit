@@ -54,7 +54,8 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   opened before the plugin was updated runs without this guard.
 - **bash-trim** (PostToolUse, Bash and MCP tools): keeps the head, the tail
   and the error lines of Bash output over 150 lines, and the head and tail of
-  an MCP text result over 300 lines. The full text is saved under
+  an MCP text result over 300 lines. Output still over 6,000 characters (MCP
+  8,000) after that is cut to its start and end. The full text is saved under
   `$TMPDIR/guards-output/` and the marker line names the file, so Claude greps
   that file and does not run the command again. Each time it saves a file it
   first deletes saved files older than seven days. Leave MCP results alone with
@@ -73,7 +74,7 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 ## Agent
 
 - **context-scout** (`agents/context-scout.md`, Haiku, read-only): reads and
-  searches the codebase and replies in 25 lines at most with the conclusion and
+  searches the codebase and replies in 25 lines and 3,000 characters at most with the conclusion and
   `path:line` references. delegate-guard sends Claude here.
 
 bash-guard and read-guard rewrite the call only in Claude Code. Qwen Code, pi,

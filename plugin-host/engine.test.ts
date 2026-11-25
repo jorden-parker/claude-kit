@@ -188,3 +188,77 @@ test("the plugin cannot run host commands while it starts, only when a tool or c
   ]);
   expect((await host.runCommand("check", "")).text).toBe("exit 0");
 });
+
+const registerPicker: Register = (registerHook) => {
+  registerHook("command.run", { command: "pick" }, async (engine) => {
+    const answer = await engine.ui.ask("Which plan?", {
+      header: "Plans",
+      options: ["Alpha", "Beta"],
+    });
+    return { text: `chose ${answer}` };
+  });
+};
+
+test("ui.ask hands the question and options to the asker and returns the chosen label", async () => {
+  const askedQuestions: unknown[] = [];
+  const host = createPluginHost({
+    pluginName: "picker",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register: registerPicker,
+    askQuestion: async (question, choices) => {
+      askedQuestions.push({ question, choices });
+      return "Beta";
+    },
+  });
+  await host.start();
+  expect(await host.runCommand("pick", "")).toEqual({
+    text: "chose Beta",
+    isError: false,
+  });
+  expect(askedQuestions).toEqual([
+    {
+      question: "Which plan?",
+      choices: { header: "Plans", options: ["Alpha", "Beta"] },
+    },
+  ]);
+});
+
+test("ui.ask is an error outcome outside Claude Code when no asker was given", async () => {
+  const host = createPluginHost({
+    pluginName: "picker",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register: registerPicker,
+  });
+  await host.start();
+  expect(await host.runCommand("pick", "")).toEqual({
+    text: "no question prompt outside Claude Code",
+    isError: true,
+  });
+});
+
+test("clock.every returns a timer that can be cancelled, and ui.place reports no card outside Claude Code", async () => {
+  const registerCardProbe: Register = (on) => {
+    on("command.run", { command: "card" }, async ($) => {
+      const timer = $.clock.every(1000, () => undefined);
+      const placed = await $.ui.place({ id: "card-1" });
+      timer.cancel();
+      return { result: `${typeof timer.cancel}; ${placed.reason}` };
+    });
+  };
+  const host = createPluginHost({
+    pluginName: "card",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register: registerCardProbe,
+  });
+  await host.start();
+  expect(await host.runCommand("card", "")).toEqual({
+    text: "function; no card surface outside Claude Code",
+    isError: false,
+  });
+});

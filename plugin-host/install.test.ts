@@ -219,7 +219,7 @@ const runCrushHook = async (
     stdin: new Blob([
       JSON.stringify({
         event: "PreToolUse",
-        session_id: "crush-session",
+        session_id: crypto.randomUUID(),
         cwd: workingDirectory,
         ...toolCall,
       }),
@@ -265,7 +265,7 @@ test("crush: the hooks of portable-hooks/crush.json run before the tools they ma
     "guards"
   );
   expect(await readCrushFile(targetHome, "claude-kit", "guards.crushrc")).toBe(
-    `hook add PreToolUse --matcher '^(bash|view)$' --command 'node "${join(installedFolder, "crush-hooks.mjs")}"' --name claude-kit-guards --timeout 605\n`
+    `mcp add guards --command node --args '${join(installedFolder, "plugin-host-server.mjs")}'\nhook add PreToolUse --matcher '^(bash|view)$' --command 'node "${join(installedFolder, "crush-hooks.mjs")}"' --name claude-kit-guards --timeout 605\n`
   );
 
   const denied = await runCrushHook(installedFolder, workingDirectory, {

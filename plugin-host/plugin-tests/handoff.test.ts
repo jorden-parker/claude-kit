@@ -112,7 +112,7 @@ for (const target of TARGET_NAMES) {
         modelReply: "Goal: continue later",
       });
       expect(outcome).toMatchObject({ isError: false });
-      expect(outcome.text).toContain("Run /handoff resume 1 to continue it in a new session.");
+      expect(outcome.text).toContain("Run /handoff resume 1 to load it into a new session.");
       expect((await readSavedHandoffs())[0]).toEndWith(
         "\n\nGoal: continue later\n"
       );
@@ -121,7 +121,7 @@ for (const target of TARGET_NAMES) {
     }
   });
 
-  test(`${target}: each stores one handoff per plan split by the separator`, async () => {
+  test(`${target}: each is no longer a split, so the whole reply is one recap and one handoff`, async () => {
     const plugin = await startPlugin(target, "handoff");
     try {
       const outcome = await plugin.callTool("run_handoff", {
@@ -130,11 +130,13 @@ for (const target of TARGET_NAMES) {
           "Parser plan\nGoal: faster parsing\n---handoff---\nDocs plan\nGoal: fix the README",
       });
       expect(outcome).toMatchObject({ isError: false });
-      expect(outcome.text).toContain("Saved 2 handoffs, one per suggested plan:");
+      expect(outcome.text).toContain("Recap filled into the composer.");
+      expect(outcome.text).toContain(
+        "Parser plan\nGoal: faster parsing\n---handoff---\nDocs plan\nGoal: fix the README"
+      );
       const savedHandoffs = await readSavedHandoffs();
-      expect(savedHandoffs).toHaveLength(2);
-      expect(savedHandoffs[0]).toEndWith("\n\nParser plan\nGoal: faster parsing\n");
-      expect(savedHandoffs[1]).toEndWith("\n\nDocs plan\nGoal: fix the README\n");
+      expect(savedHandoffs).toHaveLength(1);
+      expect(savedHandoffs[0]).toContain("Docs plan\nGoal: fix the README");
     } finally {
       await plugin.stop();
     }

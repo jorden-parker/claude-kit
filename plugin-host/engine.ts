@@ -28,6 +28,9 @@ export type CommandDefinition = {
 
 export type Outcome = { text: string; isError: boolean };
 
+export type AskChoices = { header: string; options: string[] };
+export type AskQuestion = (question: string, choices: AskChoices) => Promise<string>;
+
 export type PluginHostSettings = {
   pluginName: string;
   pluginRoot: string;
@@ -35,6 +38,7 @@ export type PluginHostSettings = {
   storePath: string;
   register: Register;
   options?: Record<string, unknown>;
+  askQuestion?: AskQuestion;
 };
 
 type RegisteredHook = { eventName: string; filter: HookFilter; hook: Hook };
@@ -54,6 +58,7 @@ const FILLED_PROMPT_LEAD =
 const NO_COMMANDS_AT_START =
   "process.run is not available while a plugin starts outside Claude Code.";
 const SUBMITTED_PROMPT_LEAD = "Now carry out these instructions:";
+const NO_QUESTION_PROMPT_REASON = "no question prompt outside Claude Code";
 
 const startTurn = (modelReply?: string): Turn => ({
   modelReply,
@@ -116,6 +121,7 @@ export const createPluginHost = ({
   storePath,
   register,
   options = {},
+  askQuestion,
 }: PluginHostSettings) => {
   const hooks: RegisteredHook[] = [];
   const tools: ToolDefinition[] = [];
@@ -149,6 +155,7 @@ export const createPluginHost = ({
       after: (_delayMs: number, callback: () => unknown) => {
         turn.scheduledWork.push(Promise.resolve().then(callback));
       },
+      every: () => ({ cancel: () => undefined }),
     },
     fs: {
       read: (filePath: string) => readFile(filePath, "utf8"),
@@ -210,6 +217,14 @@ export const createPluginHost = ({
       open: () => undefined,
       invalidate: () => undefined,
       selection: async () => undefined,
+      place: async () => ({
+        isPlaced: false,
+        reason: "no card surface outside Claude Code",
+      }),
+      ask: async (question: string, choices: AskChoices) => {
+        if (!askQuestion) throw new Error(NO_QUESTION_PROMPT_REASON);
+        return askQuestion(question, choices);
+      },
       copy: async () => ({
         isCopied: false,
         reason: "no clipboard outside Claude Code",

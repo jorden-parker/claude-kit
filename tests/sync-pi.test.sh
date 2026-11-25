@@ -51,13 +51,18 @@ expect "a prompt-only plugin ships its prompt template" test -f "$package_root/p
 expect "a prompt-only plugin says its commands run as prompt templates" output_has "prompt-optimizer: installed. Its slash commands run as prompt templates"
 expect "prompt templates use pi's arguments placeholder" grep -qF '$ARGUMENTS' "$package_root/prompt-optimizer/prompts/optimize.md"
 expect "node_modules are not copied" test ! -e "$package_root/brainstorm/node_modules"
-for hook_plugin in code-style guards quality-gates tdd; do
+for hook_plugin in code-style quality-gates tdd; do
   expect "$hook_plugin is installed as a local package" log_has "install $package_root/$hook_plugin"
   expect "$hook_plugin ships its command hooks extension" test -f "$package_root/$hook_plugin/pi-hooks-extension.js"
   expect "$hook_plugin names its command hooks extension in the manifest" manifest_has "$hook_plugin" '.pi.extensions == ["./pi-hooks-extension.js"]'
   expect "$hook_plugin keeps its hooks.json for the bridge" test -f "$package_root/$hook_plugin/hooks/hooks.json"
   expect "$hook_plugin is reported as running its hooks in an extension" output_has "$hook_plugin: installed. Its command hooks run in a pi extension"
 done
+expect "guards is installed as a local package" log_has "install $package_root/guards"
+expect "guards ships its command hooks extension" test -f "$package_root/guards/pi-hooks-extension.js"
+expect "guards names its tool and command hooks extensions in the manifest" manifest_has guards '.pi.extensions == ["./plugin-host-extension.js","./pi-hooks-extension.js"]'
+expect "guards keeps its hooks.json for the bridge" test -f "$package_root/guards/hooks/hooks.json"
+expect "guards is reported as running its tools and hooks in extensions" output_has "guards: installed. Its tools run in a pi extension"
 hook_events_match() {
   local probe="$sandbox/probe.mjs"
   cat > "$probe" <<'PROBE'

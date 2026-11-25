@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import {
   composeLedgerCopy,
   composeLedgerPage,
-  composeMarkdownTable,
   describeCacheStatus,
   labelProjects,
 } from "./ledger-page.ts";
@@ -119,42 +118,9 @@ test("composeLedgerPage highlights the cache read and write columns", () => {
   expect((firstRow.match(/<td class="number cache">/g) ?? []).length).toBe(2);
 });
 
-test("composeMarkdownTable aligns numeric columns right and text columns left", () => {
-  expect(
-    composeMarkdownTable([
-      ["Model", "Input Tokens", "Note"],
-      ["claude-fable-5-2", "56", "a|b"],
-      ["haiku", "1200", ""],
-    ])
-  ).toBe(
-    [
-      "| Model            | Input Tokens | Note |",
-      "| ---------------- | -----------: | --- |",
-      "| claude-fable-5-2 |           56 | a\\|b |",
-      "| haiku            |         1200 |  |",
-    ].join("\n")
-  );
-});
-
-test("composeMarkdownTable treats every column as text when there are no body rows", () => {
-  expect(composeMarkdownTable([["Model", "Input Tokens"]])).toBe(
-    "| Model | Input Tokens |\n| ----- | --- |"
-  );
-});
-
-test("composeMarkdownTable writes escaped body rows with padded columns", () => {
-  expect(
-    composeMarkdownTable([
-      ["Model", "Input Tokens"],
-      ["a|b", "12"],
-    ])
-  ).toBe("| Model | Input Tokens |\n| ----- | --: |\n| a\\|b  | 12 |");
-});
-
-test("composeLedgerPage script copies Markdown as plain text and HTML as a table", () => {
+test("composeLedgerPage script copies plain text only", () => {
   const page = composeLedgerPage([sampleEntry]);
-  expect(page).toContain("function composeMarkdownTable");
-  expect(page).toContain('setData("text/html"');
+  expect(page).not.toContain("text/html");
   expect(page).toContain('setData("text/plain"');
 });
 
@@ -336,7 +302,7 @@ const ledgerRow = (
   output,
 ];
 
-test("composeLedgerCopy puts a summary above the Markdown table", () => {
+test("composeLedgerCopy writes a plain text summary and one line per row", () => {
   const rows = [
     ledgerHeader,
     ledgerRow("s1", "main", "OK", "1000", "100", "6000", "200"),
@@ -357,45 +323,81 @@ test("composeLedgerCopy puts a summary above the Markdown table", () => {
   };
   expect(composeLedgerCopy(rows, toolCharactersBySession)).toBe(
     [
-      "# claude-ledger usage",
+      "claude-ledger usage report, 3 rows. The last line starts with END; if it is missing, the paste was cut short.",
       "",
-      "Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
+      "What this is: token usage from my Claude Code sessions, recorded by claude-ledger, a plugin in claude-kit, my repo of Claude Code plugins.",
+      "What I want: propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
       "",
-      "## Totals",
-      "- Sessions: 2",
-      "- Rows: 3",
-      "- Input tokens: 1,200",
-      "- Cache write tokens: 300",
-      "- Cache read tokens: 9,000 (86% of prompt tokens)",
-      "- Output tokens: 450",
-      "- Flagged rows: 1 of 3",
-      "- Subagent share of all tokens: 29%",
-      "- Largest tool results in the main agent's context, in characters: Read 120,000; Bash 30,000; Glob 4,000; Edit 3,000; Write 2,000",
+      "TOTALS",
+      "Sessions: 2",
+      "Rows: 3",
+      "Input tokens: 1,200",
+      "Cache write tokens: 300",
+      "Cache read tokens: 9,000 (86% of prompt tokens)",
+      "Output tokens: 450",
+      "Flagged rows: 1 of 3",
+      "Subagent share of all tokens: 29%",
+      "Largest tool results in the main agent's context, in characters: Read 120,000; Bash 30,000; Glob 4,000; Edit 3,000; Write 2,000",
       "",
-      "## Columns",
-      "- Context Tokens: the main session's context size, reread on every turn.",
-      "- Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
-      "- Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
-      "- Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
-      "- Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+      "COLUMNS",
+      "Context Tokens: the main session's context size, reread on every turn.",
+      "Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
+      "Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
+      "Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
+      "Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
       "",
-      "## Sessions",
-      composeMarkdownTable(rows),
+      "SESSIONS",
+      'One line per session, scope (main agent or subagents) and model. Cells are separated by " | ", the first line names the columns, and an empty cell is written as -.',
+      "Updated | Project | Session | Scope | Model | Context Tokens | Input Tokens | Cache Write Tokens | Cache Read Tokens | Cache Status | Output Tokens",
+      "2026-01-02 03:04 | proj | s1 | main | fable | 120000 | 1000 | 100 | 6000 | OK | 200",
+      "2026-01-02 03:04 | proj | s2 | main | fable | 120000 | 100 | 200 | 0 | Never read | 150",
+      "2026-01-02 03:04 | proj | s1 | subagent | fable | 120000 | 100 | 0 | 3000 | OK | 100",
+      "",
+      "END of claude-ledger usage report",
     ].join("\n")
   );
 });
 
-test("composeLedgerCopy counts one row and omits the tool bullet without tool characters", () => {
+test("composeLedgerCopy writes an empty cell as - and escapes a pipe", () => {
+  const rows = [
+    ledgerHeader,
+    [
+      "2026-01-02 03:04",
+      "proj",
+      "s1|x",
+      "main",
+      "",
+      "120000",
+      "1",
+      "2",
+      "3",
+      "OK",
+      "4",
+    ],
+  ];
+  expect(composeLedgerCopy(rows, {})).toContain(
+    "\n2026-01-02 03:04 | proj | s1\\|x | main | - | 120000 | 1 | 2 | 3 | OK | 4\n"
+  );
+});
+
+test("composeLedgerCopy counts one row and omits the tool line without tool characters", () => {
   const rows = [
     ledgerHeader,
     ledgerRow("s1", "main", "OK", "1", "2", "3", "4"),
   ];
   const summary = composeLedgerCopy(rows, {});
-  expect(summary).toContain("- Rows: 1\n");
+  expect(summary).toContain("\nRows: 1\n");
   expect(summary).not.toContain("Largest tool results");
-  expect(summary.endsWith("## Sessions\n" + composeMarkdownTable(rows))).toBe(
-    true
-  );
+  expect(
+    summary.endsWith(
+      "SESSIONS\n" +
+        'One line per session, scope (main agent or subagents) and model. Cells are separated by " | ", the first line names the columns, and an empty cell is written as -.\n' +
+        "Updated | Project | Session | Scope | Model | Context Tokens | Input Tokens | Cache Write Tokens | Cache Read Tokens | Cache Status | Output Tokens\n" +
+        "2026-01-02 03:04 | proj | s1 | main | fable | 120000 | 1 | 2 | 3 | OK | 4\n" +
+        "\n" +
+        "END of claude-ledger usage report"
+    )
+  ).toBe(true);
 });
 
 test("composeLedgerCopy reports 0% when every token cell is 0", () => {
@@ -405,8 +407,8 @@ test("composeLedgerCopy reports 0% when every token cell is 0", () => {
     ledgerRow("s1", "subagent", "Not cached", "0", "0", "0", "0"),
   ];
   const summary = composeLedgerCopy(rows, {});
-  expect(summary).toContain("- Cache read tokens: 0 (0% of prompt tokens)");
-  expect(summary).toContain("- Subagent share of all tokens: 0%");
+  expect(summary).toContain("Cache read tokens: 0 (0% of prompt tokens)");
+  expect(summary).toContain("Subagent share of all tokens: 0%");
 });
 
 test("composeLedgerPage copies the summary and embeds the tool map for each session", () => {
@@ -420,9 +422,7 @@ test("composeLedgerPage copies the summary and embeds the tool map for each sess
   expect(page).toContain(
     "composeLedgerCopy(labelProjects(copiedRows, pageProjectNames), toolCharactersBySession)"
   );
-  expect(page).toContain(
-    'setData("text/html", buildPlainTable(labelProjects(copiedRows, pageProjectNames)))'
-  );
+  expect(page).not.toContain("text/html");
   expect(page).toContain("labelProjects(copiedRows, pageProjectNames)");
   expect(page).toContain(
     "Copied rows name projects as project 1, project 2 and so on, and never include tool output."

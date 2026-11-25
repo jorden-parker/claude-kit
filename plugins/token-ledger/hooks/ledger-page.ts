@@ -75,43 +75,6 @@ tbody tr:hover{background:color-mix(in srgb,CanvasText 5%,Canvas)}
 .cache-problem .cache-status{color:var(--problem)}
 .cache-problem .cache-status::before{content:"!";width:1.25em;height:1.25em;line-height:1.25em;background:var(--problem);color:Canvas;text-align:center;font-weight:700}`;
 
-export function composeMarkdownTable(rows: string[][]): string {
-  const escapedRows = rows.map((cells) =>
-    cells.map((cell) => cell.replaceAll("|", "\\|"))
-  );
-  const [headerCells, ...bodyRows] = escapedRows;
-  const lastIndex = headerCells.length - 1;
-  const isNumericColumn = (index: number) =>
-    bodyRows.length > 0 &&
-    bodyRows.every((cells) => /^\d+%?$/.test(cells[index]));
-  const numericFlags = headerCells.map((cell, index) => isNumericColumn(index));
-  const widths = headerCells.map((cell, index) =>
-    escapedRows.reduce(
-      (longest, cells) => Math.max(longest, cells[index].length),
-      3
-    )
-  );
-  const padCell = (cell: string, index: number) => {
-    if (index === lastIndex) return cell;
-    return numericFlags[index]
-      ? cell.padStart(widths[index])
-      : cell.padEnd(widths[index]);
-  };
-  const composeLine = (cells: string[]) =>
-    `| ${cells.map(padCell).join(" | ")} |`;
-  const dividerCells = headerCells.map((cell, index) => {
-    if (index === lastIndex) return numericFlags[index] ? "--:" : "---";
-    return numericFlags[index]
-      ? "-".repeat(widths[index] - 1) + ":"
-      : "-".repeat(widths[index]);
-  });
-  return [
-    composeLine(headerCells),
-    `| ${dividerCells.join(" | ")} |`,
-    ...bodyRows.map(composeLine),
-  ].join("\n");
-}
-
 export function composeLedgerCopy(
   rows: string[][],
   toolCharactersBySession: Record<string, Record<string, number>>
@@ -165,24 +128,27 @@ export function composeLedgerCopy(
     .slice(0, 5);
 
   const formatCount = (count: number) => count.toLocaleString("en-US");
+  const composeSessionLine = (cells: string[]) =>
+    cells.map((cell) => cell.replaceAll("|", "\\|") || "-").join(" | ");
   const lines = [
-    "# claude-ledger usage",
+    `claude-ledger usage report, ${formatCount(bodyRows.length)} rows. The last line starts with END; if it is missing, the paste was cut short.`,
     "",
-    "Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
+    "What this is: token usage from my Claude Code sessions, recorded by claude-ledger, a plugin in claude-kit, my repo of Claude Code plugins.",
+    "What I want: propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
     "",
-    "## Totals",
-    `- Sessions: ${formatCount(sessionNames.size)}`,
-    `- Rows: ${formatCount(bodyRows.length)}`,
-    `- Input tokens: ${formatCount(input)}`,
-    `- Cache write tokens: ${formatCount(cacheWrite)}`,
-    `- Cache read tokens: ${formatCount(cacheRead)} (${computePercent(cacheRead, promptTokens)}% of prompt tokens)`,
-    `- Output tokens: ${formatCount(output)}`,
-    `- Flagged rows: ${formatCount(flaggedCount)} of ${formatCount(bodyRows.length)}`,
-    `- Subagent share of all tokens: ${computePercent(addUpTokens(subagentRows), addUpTokens(bodyRows))}%`,
+    "TOTALS",
+    `Sessions: ${formatCount(sessionNames.size)}`,
+    `Rows: ${formatCount(bodyRows.length)}`,
+    `Input tokens: ${formatCount(input)}`,
+    `Cache write tokens: ${formatCount(cacheWrite)}`,
+    `Cache read tokens: ${formatCount(cacheRead)} (${computePercent(cacheRead, promptTokens)}% of prompt tokens)`,
+    `Output tokens: ${formatCount(output)}`,
+    `Flagged rows: ${formatCount(flaggedCount)} of ${formatCount(bodyRows.length)}`,
+    `Subagent share of all tokens: ${computePercent(addUpTokens(subagentRows), addUpTokens(bodyRows))}%`,
   ];
   if (largestTools.length > 0) {
     lines.push(
-      "- Largest tool results in the main agent's context, in characters: " +
+      "Largest tool results in the main agent's context, in characters: " +
         largestTools
           .map(
             ([toolName, characters]) => `${toolName} ${formatCount(characters)}`
@@ -192,15 +158,18 @@ export function composeLedgerCopy(
   }
   lines.push(
     "",
-    "## Columns",
-    "- Context Tokens: the main session's context size, reread on every turn.",
-    "- Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
-    "- Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
-    "- Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
-    "- Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+    "COLUMNS",
+    "Context Tokens: the main session's context size, reread on every turn.",
+    "Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
+    "Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
+    "Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
+    "Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
     "",
-    "## Sessions",
-    composeMarkdownTable(rows)
+    "SESSIONS",
+    'One line per session, scope (main agent or subagents) and model. Cells are separated by " | ", the first line names the columns, and an empty cell is written as -.',
+    ...rows.map(composeSessionLine),
+    "",
+    "END of claude-ledger usage report"
   );
   return lines.join("\n");
 }
@@ -231,7 +200,6 @@ export function labelProjects(
 
 const SCRIPT = String.raw`const table = document.querySelector("table");
 const copyStatus = document.getElementById("copy-status");
-${composeMarkdownTable.toString()}
 ${composeLedgerCopy.toString()}
 ${labelProjects.toString()}
 const readCellTexts = (row) => [...row.cells].map((cell) => cell.textContent);
@@ -249,14 +217,6 @@ function hasSelectedText(row) {
   }
   return false;
 }
-function buildPlainTable(rows) {
-  const plainTable = document.createElement("table");
-  for (const cellTexts of rows) {
-    const plainRow = plainTable.insertRow();
-    for (const cellText of cellTexts) plainRow.insertCell().textContent = cellText;
-  }
-  return plainTable.outerHTML;
-}
 document.addEventListener("copy", (event) => {
   const selectedText = getSelection().toString().trim();
   if (!selectedText) return;
@@ -271,7 +231,6 @@ document.addEventListener("copy", (event) => {
   const projectColumn = readCellTexts(table.tHead.rows[0]).indexOf("Project");
   const pageProjectNames = [...table.tBodies[0].rows].map((row) => readCellTexts(row)[projectColumn]);
   event.clipboardData.setData("text/plain", composeLedgerCopy(labelProjects(copiedRows, pageProjectNames), toolCharactersBySession));
-  event.clipboardData.setData("text/html", buildPlainTable(labelProjects(copiedRows, pageProjectNames)));
 });
 document.getElementById("copy-table").addEventListener("click", () => {
   getSelection().selectAllChildren(table);
@@ -454,7 +413,7 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   ).replaceAll("<", "\\u003c");
   return (
     head +
-    `<p>Sessions shown: ${sessionCount}, newest first. Each row is one model's tokens for a session's main agent or its subagents. Select rows and copy, or use Copy Table. It pastes as a short summary and a Markdown table in Claude Code and text editors, and as cells in a spreadsheet. Copied rows name projects as project 1, project 2 and so on, and never include tool output. A selection inside one cell copies just that text.</p>` +
+    `<p>Sessions shown: ${sessionCount}, newest first. Each row is one model's tokens for a session's main agent or its subagents. Select rows and copy, or use Copy Table. It pastes as plain text, a short summary then one line per row, with no Markdown or HTML, so it stays intact through chat apps such as Slack and WhatsApp on the way to Claude. Copied rows name projects as project 1, project 2 and so on, and never include tool output. A selection inside one cell copies just that text.</p>` +
     composeLegend(rows.length, flaggedCount) +
     '<div class="toolbar"><button type="button" id="copy-table">Copy Table</button><span id="copy-status" role="status" aria-live="polite"></span></div>' +
     '<div class="table-scroll" tabindex="0" role="region" aria-labelledby="ledger-title"><table aria-labelledby="ledger-title">' +

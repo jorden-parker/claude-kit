@@ -897,7 +897,7 @@ run_audit() {
     else
       print_block_message
     fi
-    echo "fallow-gate: Spawn a subagent with the Agent tool to fix every failure above, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on." >&2
+    echo "fallow-gate: Spawn a subagent with the Agent tool to fix every failure above, including pre-existing ones this change did not introduce and ones in files no plan names. Name subagent_type guards:worker when it is listed, otherwise model haiku. If you have no Agent tool, or the fix is a few lines in one file that you may edit, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on." >&2
     exit 2
   fi
 

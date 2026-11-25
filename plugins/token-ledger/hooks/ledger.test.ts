@@ -109,6 +109,9 @@ const usage = (
 
 const transcript = (...lines: string[]) => lines.join("\n");
 
+const withTimestamp = (timestamp: string, line: string) =>
+  JSON.stringify({ timestamp, ...JSON.parse(line) });
+
 test("sums token use per model and counts a repeated message id once", () => {
   const summary = summarizeTranscript(
     transcript(
@@ -222,6 +225,30 @@ test("a broken line is skipped", () => {
   expect(summary.contextTokens).toBe(3);
 });
 
+test("startedAt is the timestamp of the first transcript line that has one", () => {
+  const summary = summarizeTranscript(
+    transcript(
+      JSON.stringify({ type: "summary" }),
+      withTimestamp(
+        "2026-11-25T09:00:00.000Z",
+        assistantLine("msg_1", "fable", usage(1, 0, 0, 1))
+      ),
+      withTimestamp(
+        "2026-11-25T09:05:00.000Z",
+        assistantLine("msg_2", "fable", usage(1, 0, 0, 1))
+      )
+    )
+  );
+  expect(summary.startedAt).toBe("2026-11-25T09:00:00.000Z");
+});
+
+test("startedAt is undefined when no transcript line has a timestamp", () => {
+  const summary = summarizeTranscript(
+    assistantLine("msg_1", "fable", usage(1, 0, 0, 1))
+  );
+  expect(summary.startedAt).toBeUndefined();
+});
+
 test("no nudge under the threshold or right after one", () => {
   expect(composeNudge(112_999, 0, 113_000, 73_000)).toBeNull();
   expect(composeNudge(160_000, 113_000, 113_000, 73_000)).toBeNull();
@@ -300,6 +327,19 @@ test("a recorded session holds the main and subagent totals", () => {
     subagents: { haiku: { input: 5, cacheWrite: 0, cacheRead: 0, output: 6 } },
     resultCharactersByTool: {},
   });
+});
+
+test("a recorded session keeps the time its transcript started", () => {
+  const { userHome, event } = createSession(1000);
+  writeFileSync(
+    event.transcript_path,
+    withTimestamp(
+      "2026-11-25T09:00:00.000Z",
+      assistantLine("msg_1", "fable", usage(0, 0, 1000, 10))
+    )
+  );
+  recordSession(event, userHome, new Date("2026-11-25T10:00:00Z"));
+  expect(savedEntry(userHome).startedAt).toBe("2026-11-25T09:00:00.000Z");
 });
 
 test("a large context shows the user a nudge once", () => {
@@ -555,6 +595,7 @@ const dayEntry = (
   session: `session-${updatedAt}`,
   project: "claude-kit",
   updatedAt,
+  startedAt: updatedAt,
   contextTokens,
   lastNudgeTokens,
   main,
@@ -648,6 +689,7 @@ test("compareSessions gives zeros for a group with no sessions", () => {
   expect(compareSessions([], "2026-11-25T00:00:00.000Z")).toEqual({
     before: noSessions,
     after: noSessions,
+    spanningSessions: 0,
   });
   expect(
     compareSessions(verificationEntries, "2026-11-19T00:00:00.000Z").before
@@ -666,6 +708,71 @@ test("formatVerification prints the before and after lines and the too-early lin
       "  after: 2 sessions, median context 60k, median tool results 4k chars, median tokens 6k, cache read 67%, nudged 1",
       "  Fewer than 5 sessions after the fix: too early to judge.",
     ].join("\n")
+  );
+});
+
+test("a session updated after the fix but started before it is spanning, not after", () => {
+  const started = {
+    ...dayEntry("2026-11-25T12:00:00.000Z", 50000, {}, {}),
+    startedAt: "2026-11-25T09:00:00.000Z",
+  };
+  const { before, after, spanningSessions } = compareSessions(
+    [started],
+    "2026-11-25T10:00:00.000Z"
+  );
+  expect(before.sessions).toBe(0);
+  expect(after.sessions).toBe(0);
+  expect(spanningSessions).toBe(1);
+});
+
+test("a session updated after the fix with no start time is spanning", () => {
+  const withoutStart = {
+    ...dayEntry("2026-11-25T12:00:00.000Z", 50000, {}, {}),
+    startedAt: undefined,
+  };
+  const { after, spanningSessions } = compareSessions(
+    [withoutStart],
+    "2026-11-25T10:00:00.000Z"
+  );
+  expect(after.sessions).toBe(0);
+  expect(spanningSessions).toBe(1);
+});
+
+test("a session started after the fix is in the after group", () => {
+  const started = dayEntry("2026-11-25T12:00:00.000Z", 50000, {}, {});
+  const { after, spanningSessions } = compareSessions(
+    [started],
+    "2026-11-25T10:00:00.000Z"
+  );
+  expect(after.sessions).toBe(1);
+  expect(spanningSessions).toBe(0);
+});
+
+test("formatVerification says how many sessions were left out as already running when the fix landed, and omits that line for none", () => {
+  const spanning = [
+    {
+      ...dayEntry("2026-11-25T12:00:00.000Z", 50000, {}, {}),
+      startedAt: "2026-11-25T09:00:00.000Z",
+    },
+    {
+      ...dayEntry("2026-11-25T13:00:00.000Z", 50000, {}, {}),
+      startedAt: "2026-11-25T08:00:00.000Z",
+    },
+  ];
+  const check = { title: "Lower the nudge", since: "2026-11-25T10:00:00.000Z" };
+  expect(
+    formatVerification([...verificationEntries, ...spanning], [check])
+  ).toBe(
+    [
+      "Fix: Lower the nudge (applied 2026-11-25 10:00)",
+      "  before: 5 sessions, median context 80k, median tool results 5k chars, median tokens 5k, cache read 73%, nudged 2",
+      "  after: 2 sessions, median context 60k, median tool results 4k chars, median tokens 6k, cache read 67%, nudged 1",
+      "  left out: 2 sessions that were already running when the fix landed",
+      "  Fewer than 5 sessions after the fix: too early to judge.",
+    ].join("\n")
+  );
+  expect(formatVerification(verificationEntries, [check])).not.toContain(
+    "left out"
   );
 });
 

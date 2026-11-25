@@ -28,12 +28,14 @@ type TranscriptSummary = {
   contextTokens: number;
   startContextTokens: number;
   resultCharactersByTool: Record<string, number>;
+  startedAt?: string;
 };
 
 export type LedgerEntry = {
   session: string;
   project: string;
   updatedAt: string;
+  startedAt?: string;
   contextTokens: number;
   lastNudgeTokens: number;
   main: TotalsByModel;
@@ -63,6 +65,11 @@ type TranscriptMessage = {
   content?: unknown;
 };
 
+type TranscriptLine = {
+  timestamp?: string;
+  message?: TranscriptMessage;
+};
+
 const toTotals = (usage: ApiUsage): TokenTotals => ({
   input: usage.input_tokens ?? 0,
   cacheWrite: usage.cache_creation_input_tokens ?? 0,
@@ -87,12 +94,16 @@ function mergeByModel(summaries: TotalsByModel[]): TotalsByModel {
   return merged;
 }
 
-function parseMessage(text: string): TranscriptMessage | undefined {
+function parseLine(text: string): TranscriptLine | undefined {
   try {
-    return JSON.parse(text).message;
+    return JSON.parse(text);
   } catch {
     return undefined;
   }
+}
+
+function parseMessage(text: string): TranscriptMessage | undefined {
+  return parseLine(text)?.message;
 }
 
 function resultSize(content: unknown): number {
@@ -111,6 +122,7 @@ type SummaryState = {
   resultCharactersByTool: Record<string, number>;
   firstUsage?: ApiUsage;
   lastUsage: ApiUsage;
+  startedAt?: string;
 };
 
 function recordUsage(state: SummaryState, message: TranscriptMessage): void {
@@ -146,7 +158,9 @@ export function summarizeTranscript(transcript: string): TranscriptSummary {
     lastUsage: {},
   };
   for (const text of transcript.split("\n")) {
-    const message = parseMessage(text);
+    const line = parseLine(text);
+    if (typeof line?.timestamp === "string") state.startedAt ??= line.timestamp;
+    const message = line?.message;
     if (!message) continue;
     recordUsage(state, message);
     for (const block of Array.isArray(message.content) ? message.content : []) {
@@ -162,6 +176,7 @@ export function summarizeTranscript(transcript: string): TranscriptSummary {
     contextTokens: contextSize(state.lastUsage),
     startContextTokens: contextSize(state.firstUsage ?? {}),
     resultCharactersByTool: state.resultCharactersByTool,
+    startedAt: state.startedAt,
   };
 }
 
@@ -263,6 +278,7 @@ export function recordSession(
     session: event.session_id,
     project: basename(event.cwd ?? ""),
     updatedAt: now.toISOString(),
+    startedAt: mainSummary.startedAt,
     contextTokens: mainSummary.contextTokens,
     lastNudgeTokens: nudge ? mainSummary.contextTokens : lastNudgeTokens,
     main: mainSummary.byModel,
@@ -589,10 +605,15 @@ function describeGroup(entries: LedgerEntry[]): SessionGroup {
 export function compareSessions(
   entries: LedgerEntry[],
   since: string
-): { before: SessionGroup; after: SessionGroup } {
+): { before: SessionGroup; after: SessionGroup; spanningSessions: number } {
+  const updatedAfter = entries.filter((entry) => entry.updatedAt >= since);
+  const after = updatedAfter.filter(
+    (entry) => entry.startedAt !== undefined && entry.startedAt >= since
+  );
   return {
     before: describeGroup(entries.filter((entry) => entry.updatedAt < since)),
-    after: describeGroup(entries.filter((entry) => entry.updatedAt >= since)),
+    after: describeGroup(after),
+    spanningSessions: updatedAfter.length - after.length,
   };
 }
 
@@ -605,11 +626,19 @@ function describeCheck(
   entries: LedgerEntry[],
   check: { title: string; since: string }
 ): string {
-  const { before, after } = compareSessions(entries, check.since);
+  const { before, after, spanningSessions } = compareSessions(
+    entries,
+    check.since
+  );
   return [
     `Fix: ${check.title} (applied ${minuteOf(check.since)})`,
     describeVerificationGroup("before", before),
     describeVerificationGroup("after", after),
+    ...(spanningSessions > 0
+      ? [
+          `  left out: ${spanningSessions} sessions that were already running when the fix landed`,
+        ]
+      : []),
     ...(after.sessions < TOO_EARLY_SESSIONS
       ? [
           `  Fewer than ${TOO_EARLY_SESSIONS} sessions after the fix: too early to judge.`,

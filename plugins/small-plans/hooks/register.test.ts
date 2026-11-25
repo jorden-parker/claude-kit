@@ -51,6 +51,14 @@ type Recorded = {
   commands: string[][];
 };
 
+const moveFolder = (files: Map<string, string>, from: string, to: string) => {
+  for (const [path, text] of [...files]) {
+    if (!path.startsWith(`${from}/`)) continue;
+    files.delete(path);
+    files.set(`${to}${path.slice(from.length)}`, text);
+  }
+};
+
 const mockEngine = (
   on: On,
   seededFiles: Record<string, string> = {},
@@ -88,6 +96,8 @@ const mockEngine = (
   });
   on("process.run", (_, e) => {
     recorded.commands.push([...e.argv]);
+    if (e.argv[0] === "mv")
+      moveFolder(recorded.files, e.argv[1] ?? "", e.argv[2] ?? "");
     const isFailedGit = e.argv[0] === "git" && !commonGitFolder;
     return {
       value: {
@@ -766,6 +776,81 @@ test("/small-plans build says so when no set matches", async ($, on) => {
   expect(submittedPrompts).toHaveLength(0);
 });
 
+const RENAMED_SET = "2026-11-18-0900-handoff-002-repair-the-login-refresh";
+const RENAMED_SET_FOLDER = `${PROJECT_FOLDER}/${RENAMED_SET}`;
+const FIX_LOGIN_PLAN_TEXT = `---\ntitle: Clear the cached token\nproject: claude-kit\nset: ${HANDOFF_SET}\norder: 1\nkind: fix\nstatus: pending\n---\n\nbody\n`;
+
+test("/small-plans rename gives a set a new name that keeps its timestamp and handoff id", async ($, on) => {
+  const { reply, files } = await runCommand(
+    $,
+    on,
+    "rename fix-login Repair the login refresh",
+    { [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT }
+  );
+
+  expect(reply.text).toContain(`${HANDOFF_SET} -> ${RENAMED_SET}`);
+  expect(
+    [...files.keys()].some((path) =>
+      path.startsWith(`${PROJECT_FOLDER}/${HANDOFF_SET}/`)
+    )
+  ).toBe(false);
+  expect(files.get(`${RENAMED_SET_FOLDER}/01-clear-the-cached-token.md`)).toBe(
+    FIX_LOGIN_PLAN_TEXT.replace(`set: ${HANDOFF_SET}`, `set: ${RENAMED_SET}`)
+  );
+  expect(files.get(`${RENAMED_SET_FOLDER}/index.md`)).toContain(
+    `# Plans: ${RENAMED_SET}`
+  );
+});
+
+test("/small-plans rename refuses a name another set of the project already has", async ($, on) => {
+  const { reply, files } = await runCommand(
+    $,
+    on,
+    "rename fix-login Repair the login refresh",
+    {
+      [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT,
+      [`${RENAMED_SET_FOLDER}/01-other.md`]: "saved elsewhere",
+    }
+  );
+
+  expect(reply.text).toContain(`${RENAMED_SET} already exists`);
+  expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
+});
+
+test("/small-plans rename lists every set its name matches and renames none", async ($, on) => {
+  const { reply, files } = await runCommand($, on, "rename 2026-11 Anything", {
+    [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT,
+    [STANDALONE_SET_PLAN]: "saved",
+  });
+
+  expect(reply.text).toContain(HANDOFF_SET);
+  expect(reply.text).toContain(STANDALONE_SET);
+  expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
+});
+
+test("/small-plans rename is refused while a build of that set runs", async ($, on) => {
+  const clock = mock.clock(on);
+  const recorded = mockEngine(on, THREE_PLAN_SET);
+  await $.command.run({
+    command: "small-plans",
+    args: "build dark-mode 2",
+  } as never);
+  await clock.settle();
+  await callTool($, STATUS_TOOL, {
+    path: BOARD_SET_PLAN,
+    status: "in-progress",
+  });
+  const reply = await $.command.run({
+    command: "small-plans",
+    args: "rename dark-mode Dark mode switch",
+  } as never);
+  await clock.settle();
+
+  expect(reply.text).toContain("is running");
+  expect(recorded.files.has(BOARD_SET_PLAN)).toBe(true);
+  expect(recorded.commands.some(([program]) => program === "mv")).toBe(false);
+});
+
 const autocompleteAt = (text: string) => {
   const start = text.search(/\S*$/);
   return { text, cursor: text.length, token: text.slice(start), start };
@@ -788,7 +873,12 @@ test("typing the first word after /small-plans suggests every action", async ($,
 
   const reply = await autocomplete($, "/small-plans ");
 
-  expect(suggestedTexts(reply)).toEqual(["handoff", "build", "board"]);
+  expect(suggestedTexts(reply)).toEqual([
+    "handoff",
+    "build",
+    "board",
+    "rename",
+  ]);
   expect(reply.suggestions[0]!.description).toContain("saved handoff");
 });
 

@@ -34,12 +34,18 @@ is_missing_generated_types() {
 
 list_plugins_missing_a_version_bump() {
   git rev-parse --verify --quiet origin/main >/dev/null || return 0
-  local manifest plugin_folder released_version
+  local manifest plugin_folder released_version current_version
   for manifest in plugins/*/.claude-plugin/plugin.json; do
     plugin_folder="${manifest%/.claude-plugin/plugin.json}"
-    git diff --quiet origin/main -- "$plugin_folder" && continue
+    if [ "$is_staged_only" = true ]; then
+      git diff --cached --quiet origin/main -- "$plugin_folder" && continue
+      current_version="$(git show ":$manifest" 2>/dev/null | jq -r .version)" || continue
+    else
+      git diff --quiet origin/main -- "$plugin_folder" && continue
+      current_version="$(jq -r .version "$manifest")"
+    fi
     released_version="$(git show "origin/main:$manifest" 2>/dev/null | jq -r .version)" || continue
-    if [ "$released_version" = "$(jq -r .version "$manifest")" ]; then
+    if [ "$released_version" = "$current_version" ]; then
       echo "$plugin_folder"
     fi
   done

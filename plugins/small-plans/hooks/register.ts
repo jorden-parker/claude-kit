@@ -26,6 +26,7 @@ const NUMBERED_MARKDOWN_FILE = /^\d+-.*\.md$/;
 const WHOLE_SET_OPTION = "Whole set";
 const MAX_FIX_ROUNDS = 3;
 const SET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const SET_PREFIX = /^(\d{4}-\d{2}-\d{2}-\d{4}(?:-handoff-\d+)?)-/;
 const CODE_FENCE = /```[\s\S]*?```/g;
 const NUMBERED_STEP = /^\d+\.\s/gm;
 const BACKTICKED_TEXT = /`[^`\n]+`/;
@@ -33,6 +34,7 @@ const EXPECT_LINE = /^-\s*Expect:\s*\S/m;
 const BUILD_OR_LINT_ONLY_COMMAND =
   /^`\s*(?:(?:npm|pnpm|yarn|bun|npx)\s+(?:run\s+)?)?(?:lint|build|typecheck|type-check|tsc|eslint|prettier|format|fallow|cargo\s+(?:build|check|clippy)|go\s+(?:build|vet)|ruff)\b[^`&;|]*`$/;
 const STATUS_LINE = /^status: .*$/m;
+const SET_LINE = /^set: .*$/m;
 const INDEX_FILE_NAME = "index.md";
 const FILE_EDITING_TOOLS = ["Edit", "Write", "MultiEdit"];
 const COMMAND_NAME = "small-plans";
@@ -51,6 +53,11 @@ const SUBCOMMAND_SUGGESTIONS = [
   {
     text: "board",
     description: "Show the build board again after hiding it",
+  },
+  {
+    text: "rename",
+    description:
+      "Give a saved set a new name, keeping its date or handoff prefix",
   },
 ];
 const WRITE_TOOL_NAME = "write_small_plan";
@@ -460,6 +467,73 @@ When every plan is handled, commit and push the leftover work too, in the checko
 
 Finish with one line per plan: order, title, status, branch and the fix rounds it took, with the reason for each plan that is blocked or still waiting.`;
 
+const renameSet = async (
+  engine: EngineInterface,
+  requestedSet: string,
+  newName: string
+) => {
+  if (!requestedSet || !newName)
+    return { text: `Usage: /${COMMAND_NAME} rename <set> <new name>` };
+  const projectFolder = await resolveProjectFolder(engine);
+  const matches = matchSetNames(
+    await listSetsNewestFirst(engine),
+    requestedSet
+  );
+  if (matches.length === 0)
+    return {
+      text: `No plans are saved for this project in a set named like "${requestedSet}".`,
+    };
+  if (matches.length > 1)
+    return {
+      text: `Several sets match "${requestedSet}": ${matches.join(", ")}. Name one of them exactly.`,
+    };
+  const setName = matches[0] ?? "";
+  const prefix = setName.match(SET_PREFIX)?.[1];
+  if (prefix === undefined)
+    return {
+      text: `${setName} has no date prefix to keep, so it cannot be renamed.`,
+    };
+  const newSlug = toSlug(newName);
+  if (!newSlug) return { text: "The new name needs letters or digits." };
+  const newSetName = `${prefix}-${newSlug}`;
+  if (newSetName === setName)
+    return { text: `The set is already named ${setName}.` };
+  if ((await listNames(engine, projectFolder)).includes(newSetName))
+    return {
+      text: `${newSetName} already exists, so ${setName} was not renamed.`,
+    };
+  const oldFolder = `${projectFolder}/${setName}`;
+  const newFolder = `${projectFolder}/${newSetName}`;
+  if (
+    board.setFolder === oldFolder &&
+    board.plans.some((plan) => stateOf(plan) === "running")
+  )
+    return {
+      text: `A build of set ${setName} is running. Rename it when the build finishes.`,
+    };
+  const moveOutcome = await engine.process.run(["mv", oldFolder, newFolder]);
+  if (moveOutcome.exitCode !== 0)
+    return {
+      text: `Could not rename ${setName}: ${moveOutcome.stderr.trim()}`,
+    };
+  const { planNames, planTexts } = await readSetPlans(engine, newFolder);
+  await Promise.all(
+    planNames.map((name, i) =>
+      engine.fs.write(
+        `${newFolder}/${name}`,
+        (planTexts[i] ?? "").replace(SET_LINE, `set: ${newSetName}`)
+      )
+    )
+  );
+  await writeSetIndex(engine, newFolder);
+  if (board.setFolder === oldFolder) {
+    board.setFolder = newFolder;
+    board.setLabel = labelSet(newSetName);
+    await engine.ui.invalidate("ui.render");
+  }
+  return { text: `Renamed set ${setName} -> ${newSetName}.` };
+};
+
 const planWork = (engine: EngineInterface, requestedWork: string) => {
   const setName = composeNewSetName(toSlug(requestedWork) || "plans");
   askClaude(
@@ -654,6 +728,13 @@ const pickPlanName = async (
     : findPlanName(planNames, pickedOption);
 };
 
+const matchSetNames = (setNames: string[], wantedName: string) => {
+  const exactNames = setNames.filter((name) => name === wantedName);
+  return exactNames.length > 0
+    ? exactNames
+    : setNames.filter((name) => name.includes(wantedName.trim()));
+};
+
 const buildPlans = async (
   engine: EngineInterface,
   requestedName: string,
@@ -686,9 +767,7 @@ const buildPlans = async (
     return {
       text: `No set was picked. Run /${COMMAND_NAME} build <set> with one of: ${setNames.join(", ")}.`,
     };
-  const setName =
-    setNames.find((name) => name === pickedName) ??
-    setNames.find((name) => name.includes(pickedName.trim()));
+  const setName = matchSetNames(setNames, pickedName)[0];
   if (!setName)
     return {
       text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
@@ -995,9 +1074,9 @@ export const register: Register = (on) => {
     await $.command.register({
       name: COMMAND_NAME,
       description:
-        "Plan work as small plans a weaker model can implement and review: name the work, or leave it out to plan what this conversation leaves; handoff [id] plans what a saved handoff leaves; build [set] [plan order] has small-model agents implement a whole set or one plan of it while this session reviews and sends back fixes",
+        "Plan work as small plans a weaker model can implement and review: name the work, or leave it out to plan what this conversation leaves; handoff [id] plans what a saved handoff leaves; build [set] [plan order] has small-model agents implement a whole set or one plan of it while this session reviews and sends back fixes; rename <set> <new name> gives a saved set a new name",
       argumentHint:
-        "[work to plan] | handoff [id] [extra context] | build [set] [plan order]",
+        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename <set> <new name>",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
@@ -1025,6 +1104,8 @@ export const register: Register = (on) => {
     )
       return buildPlans($, laterWords[0] ?? "", laterWords[1] ?? "");
     if (/^board$/i.test(requestedWork)) return showBoard($);
+    if (/^rename$/i.test(firstWord))
+      return renameSet($, laterWords[0] ?? "", laterWords.slice(1).join(" "));
     if (!/^handoff$/i.test(firstWord)) return planWork($, requestedWork);
     return /^\d+$/.test(laterWords[0] ?? "")
       ? splitHandoff($, laterWords[0] ?? "", laterWords.slice(1).join(" "))

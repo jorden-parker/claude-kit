@@ -4,13 +4,14 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 
 ## Usage
 
-| Command                                     | What it does                                                                               |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `/small-plans <work to plan>`               | Plans the work you name                                                                    |
-| `/small-plans`                              | Plans the work this conversation still leaves to do                                        |
-| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`  |
-| `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, the session reviews and sends back fixes |
-| `/small-plans board`                        | Shows the build board again after you hide it                                              |
+| Command                                     | What it does                                                                                 |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `/small-plans <work to plan>`               | Plans the work you name                                                                      |
+| `/small-plans`                              | Plans the work this conversation still leaves to do                                          |
+| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`    |
+| `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, the session reviews and sends back fixes   |
+| `/small-plans rename <set> <new name>`      | Gives a saved set a new name; its date or handoff prefix stays, and the rest is the new name |
+| `/small-plans board`                        | Shows the build board again after you hide it                                                |
 
 Typing `/small-plans ` suggests the actions.
 
@@ -93,6 +94,6 @@ claude plugin install small-plans@claude-kit --scope user
 ## Develop
 
 ```
-pnpm test        # claude plugin test . and go test in web/
+pnpm test        # claude plugin test .
 pnpm typecheck   # once Claude Code has laid .claude-plugin/types/
 ```

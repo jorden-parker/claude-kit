@@ -761,7 +761,9 @@ test("the planning prompt runs the checker and the step-reader clarity pass", as
   expect(instructions).not.toContain("For every step file, call the Agent");
   expect(instructions).toContain("QUESTIONS");
   expect(instructions).toContain("at most two rounds");
-  expect(instructions).toContain("Run /brainstorm build to implement it.");
+  expect(instructions).toContain(
+    "Run /clear first, then /brainstorm build to implement it, because the build re-reads the session on every step."
+  );
   expect(instructions).not.toContain("numberRanges");
 });
 

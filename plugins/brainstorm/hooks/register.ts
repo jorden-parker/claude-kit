@@ -1059,7 +1059,7 @@ Rules for every step file:
 
 6. Check. Call the ${QUALIFIED_CHECK_TOOL_NAME} tool with the run folder path. Fix every problem it returns, and call it again until it returns OK.
 7. Clarity pass. For every plan folder, call the Agent tool once with subagent_type "brainstorm:step-reader" and the plan folder's absolute path as its prompt. One call reads every step of that plan: never call it once per step. Send the calls for all plans in one message so they run in parallel. Rewrite each step a QUESTIONS reply names, then run the checker again. Do at most two rounds of this.
-8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run ${BUILD_INVOCATION} to implement it.`;
+8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run /clear first, then ${BUILD_INVOCATION} to implement it, because the build re-reads the session on every step.`;
 
 const describeRunsToBuild = (requestedRuns: string) =>
   requestedRuns

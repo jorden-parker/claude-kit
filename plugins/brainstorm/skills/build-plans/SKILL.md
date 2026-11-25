@@ -8,6 +8,8 @@ user-invocable: false
 
 You coordinate the build. You do not write source code. You keep your own context small: pass paths between agents, never file contents.
 
+Every agent you start makes this session re-read its whole context, so a long session makes every step cost more. When this session already holds the planning conversation or other long work, say so in one line before the first agent: `/clear`, then `/brainstorm build`, is cheaper. Then carry on with the build unless the user stops you.
+
 You write only inside a run folder, and only two things: the checkbox lines of a plan.md, and the step files the reviewer returns. The implementer ticks the lines it builds. The only commits are the ones the final review's step 2 makes, after the reviewer approves a plan, and the leftover-work commits at the end of the build.
 
 ## The files

@@ -79,7 +79,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 2. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
 3. Updates every marketplace
 4. Updates every installed plugin, from any marketplace, in its own scope
-5. Links `claude-notes`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
+5. Links `claude-notes`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 
 It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not stop the others; the run ends by naming each failure and exits 1. Start a new Claude Code session afterwards to load the updated plugins.
 

@@ -78,6 +78,7 @@ done < <(claude plugin list --available --json | jq -r '.installed[] | [.id, .sc
 
 mkdir -p "$link_directory"
 link_command "$repository_root/notes-viewer/claude-notes"
+link_command "$repository_root/plugins/token-ledger/bin/claude-ledger"
 link_command "$repository_root/claude-kit-update"
 link_command "$repository_root/claude-kit-doctor"
 

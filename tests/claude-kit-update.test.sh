@@ -82,6 +82,7 @@ expect "plugins are updated after the marketplaces" \
 expect "installed plugins of other marketplaces are updated" called "plugin update ponytail@ponytail --scope user"
 expect "plugins that are not installed stay uninstalled" not_called "plugin install"
 expect "claude-notes is linked onto the PATH folder" links_to claude-notes "$repository_root/notes-viewer/claude-notes"
+expect "claude-ledger is linked onto the PATH folder" links_to claude-ledger "$repository_root/plugins/token-ledger/bin/claude-ledger"
 expect "claude-kit-update is linked onto the PATH folder" links_to claude-kit-update "$repository_root/claude-kit-update"
 expect "claude-kit-doctor is linked onto the PATH folder" links_to claude-kit-doctor "$repository_root/claude-kit-doctor"
 

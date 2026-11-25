@@ -8,6 +8,8 @@ import {
 } from "./ledger-page.ts";
 import type { LedgerEntry } from "./ledger.ts";
 
+type ModelTotals = LedgerEntry["main"][string];
+
 const sampleEntry: LedgerEntry = {
   session: "session-abc",
   project: "<b>&co",
@@ -75,16 +77,16 @@ test("describeCacheStatus names the cache state of a model", () => {
   ).toBe("Not cached");
 });
 
-test("composeLedgerPage writes a flat table with eleven columns on every row", () => {
+test("composeLedgerPage writes a flat table with fourteen columns on every row", () => {
   const page = composeLedgerPage([sampleEntry]);
   const [headerRow = "", firstRow = "", secondRow = ""] = rowsOf(page);
   expect(rowsOf(page).length).toBe(3);
-  expect((headerRow.match(/<th/g) ?? []).length).toBe(11);
-  expect((firstRow.match(/<td/g) ?? []).length).toBe(11);
-  expect((secondRow.match(/<td/g) ?? []).length).toBe(11);
+  expect((headerRow.match(/<th/g) ?? []).length).toBe(14);
+  expect((firstRow.match(/<td/g) ?? []).length).toBe(14);
+  expect((secondRow.match(/<td/g) ?? []).length).toBe(14);
 });
 
-test("composeLedgerPage names the eleven columns in order", () => {
+test("composeLedgerPage names the fourteen columns in order", () => {
   const [headerRow = ""] = rowsOf(composeLedgerPage([sampleEntry]));
   expect(cellTextsOf(headerRow)).toEqual([
     "Updated",
@@ -93,11 +95,14 @@ test("composeLedgerPage names the eleven columns in order", () => {
     "Scope",
     "Model",
     "Context Tokens",
+    "Last Nudge Tokens",
     "Input Tokens",
     "Cache Write Tokens",
     "Cache Read Tokens",
     "Cache Status",
     "Output Tokens",
+    "Session Share",
+    "Main Tool Result Characters",
   ]);
 });
 
@@ -141,16 +146,20 @@ test("composeLedgerPage puts the session values in order, escaped and unpadded",
     "main",
     "fable",
     "120000",
+    "0",
     "1234567",
     "20000",
     "300000000",
     "OK",
     "4",
+    "100%",
+    "",
   ]);
   const subagentCells = cellTextsOf(secondRow);
   expect(subagentCells[3]).toBe("subagent");
   expect(subagentCells[4]).toBe("haiku");
-  expect(subagentCells[9]).toBe("Not cached");
+  expect(subagentCells[10]).toBe("Not cached");
+  expect(subagentCells[12]).toBe("0%");
 });
 
 test("composeLedgerPage flags only the rows whose cache is not working", () => {
@@ -158,13 +167,85 @@ test("composeLedgerPage flags only the rows whose cache is not working", () => {
   expect(
     composeLedgerPage([sampleEntry]).match(/<tr class="cache-problem">/g)
   ).toHaveLength(1);
-  expect(rows[1].startsWith("<tr>")).toBe(true);
+  expect(rows[1].startsWith('<tr class="session-start">')).toBe(true);
   expect(rows[2].startsWith('<tr class="cache-problem">')).toBe(true);
+});
+
+const shareEntry = (
+  session: string,
+  main: ModelTotals,
+  subagents: Record<string, ModelTotals>
+): LedgerEntry => ({
+  ...sampleEntry,
+  session,
+  main: { fable: main },
+  subagents,
+});
+
+const shareCells = (page: string) =>
+  rowsOf(page)
+    .slice(1)
+    .map((row) => cellTextsOf(row).at(-2));
+
+test("composeLedgerPage shows each row's part of its session's tokens", () => {
+  const page = composeLedgerPage([
+    shareEntry(
+      "session-share",
+      { input: 100, cacheWrite: 0, cacheRead: 100, output: 100 },
+      { haiku: { input: 100, cacheWrite: 0, cacheRead: 0, output: 0 } }
+    ),
+  ]);
+  expect(shareCells(page)).toEqual(["75%", "25%"]);
+});
+
+test("a session with one main row and no subagents shows 100%", () => {
+  const page = composeLedgerPage([
+    shareEntry(
+      "session-solo",
+      { input: 100, cacheWrite: 0, cacheRead: 100, output: 100 },
+      {}
+    ),
+  ]);
+  expect(shareCells(page)).toEqual(["100%"]);
+});
+
+test("a session whose totals are all zero shows 0%", () => {
+  const zero = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
+  const page = composeLedgerPage([
+    shareEntry("session-zero", zero, { haiku: zero }),
+  ]);
+  expect(shareCells(page)).toEqual(["0%", "0%"]);
+});
+
+test("composeLedgerPage starts each session on a row with a top border class", () => {
+  const healthy = { input: 100, cacheWrite: 0, cacheRead: 100, output: 0 };
+  const flagged = { input: 100, cacheWrite: 500, cacheRead: 0, output: 0 };
+  const page = composeLedgerPage([
+    shareEntry("session-a", flagged, { haiku: healthy }),
+    shareEntry("session-b", healthy, { haiku: healthy }),
+  ]);
+  const rows = rowsOf(page).slice(1);
+  expect(rows[0].startsWith('<tr class="cache-problem session-start">')).toBe(
+    true
+  );
+  expect(rows[1].startsWith("<tr>")).toBe(true);
+  expect(rows[2].startsWith('<tr class="session-start">')).toBe(true);
+  expect(rows[3].startsWith("<tr>")).toBe(true);
+  expect(page).toContain(".session-start td{border-top:2px solid");
 });
 
 test("composeLedgerPage shows the legend and a summary above the table", () => {
   const page = composeLedgerPage([sampleEntry]);
   expect(page).toContain("What Good Looks Like");
+  expect(page).toContain(
+    "<strong>Session Share</strong> is each row's part of its session's tokens."
+  );
+  expect(page).toContain(
+    "<li><strong>Last Nudge Tokens</strong> is the context size when the session was last told to hand off and clear. 0 means it never was. Context Tokens well above it means the session kept growing after the nudge.</li>"
+  );
+  expect(page).toContain(
+    "<li><strong>Main Tool Result Characters</strong> lists what each tool returned into the main agent's context, largest first, on each session's first row. MCP tools are grouped as one total.</li>"
+  );
   expect(page).toContain("1 of 2 rows flagged.");
   expect(page.indexOf('class="legend"')).toBeLessThan(page.indexOf("<table"));
 });
@@ -254,9 +335,9 @@ test("composeLedgerCopy puts a summary above the Markdown table", () => {
   expect(composeLedgerCopy(rows, toolCharactersBySession)).toBe(
     [
       "claude-ledger: tokens per session, scope and model. Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
-      "Context Tokens is the main session's context size, reread on every turn. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+      "Context Tokens is the main session's context size, reread on every turn. Last Nudge Tokens is the context size when the session was last told to hand off and clear, 0 if never. Session Share is the row's part of its session's tokens: a high main share means the main agent did work its subagents could take. Main Tool Result Characters, on each session's first row, lists what each tool returned into the main agent's context. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
       "Totals for 3 rows: input 1200, cache write 300, cache read 9000, output 450. Cache reads are 86% of prompt tokens. Flagged 1 of 3. Subagents used 29% of all tokens.",
-      "Largest tool results in characters: Read 120000, Bash 30000, Glob 4000, Edit 3000, Write 2000.",
+      "Largest tool results in the main agent's context, in characters: Read 120000, Bash 30000, Glob 4000, Edit 3000, Write 2000.",
       "",
       composeMarkdownTable(rows),
     ].join("\n")
@@ -323,6 +404,54 @@ test("composeLedgerPage folds MCP tool names into one MCP tools key", () => {
   expect(page).toContain('"MCP tools":150');
   expect(page).toContain('"Read":30');
   expect(page).not.toContain("mcp__");
+});
+
+const toolEntry = (
+  session: string,
+  resultCharactersByTool: Record<string, number>
+): LedgerEntry => ({
+  ...shareEntry(
+    session,
+    { input: 100, cacheWrite: 0, cacheRead: 100, output: 100 },
+    { haiku: { input: 100, cacheWrite: 0, cacheRead: 0, output: 0 } }
+  ),
+  lastNudgeTokens: 150000,
+  resultCharactersByTool,
+});
+
+const toolCellsOf = (page: string) =>
+  rowsOf(page)
+    .slice(1)
+    .map((row) => cellTextsOf(row).at(-1));
+
+test("composeLedgerPage repeats the last nudge tokens on every row of a session", () => {
+  const page = composeLedgerPage([toolEntry("session-nudge", {})]);
+  const nudgeCells = rowsOf(page)
+    .slice(1)
+    .map((row) => cellTextsOf(row)[6]);
+  expect(nudgeCells).toEqual(["150000", "150000"]);
+});
+
+test("composeLedgerPage lists each tool's result characters on the first row only", () => {
+  const page = composeLedgerPage([
+    toolEntry("session-tool-results", {
+      Read: 30,
+      Bash: 500,
+      mcp__acme__search: 100,
+      mcp__acme__read: 50,
+      ToolSearch: 0,
+    }),
+  ]);
+  expect(toolCellsOf(page)).toEqual([
+    "Bash 500, MCP tools 150, Read 30, ToolSearch 0",
+    "",
+  ]);
+  expect(page).not.toContain("mcp__");
+});
+
+test("composeLedgerPage leaves the tool cell empty when a session has no tools", () => {
+  const page = composeLedgerPage([toolEntry("session-no-tools", {})]);
+  expect(toolCellsOf(page)[0]).toBe("");
 });
 
 test("labelProjects numbers projects by page order and leaves other cells alone", () => {

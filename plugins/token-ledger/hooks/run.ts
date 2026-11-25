@@ -11,12 +11,11 @@ import {
   waitForLastReply,
 } from "./ledger.ts";
 
-const DEFAULT_REPORTED_SESSIONS = 10;
 const LAST_REPLY_PAUSE_MILLISECONDS = 50;
 const LAST_REPLY_ATTEMPTS = 40;
 const userHome = process.env.HOME ?? homedir();
 const command = process.argv[2];
-const sessionCount = Number(process.argv[3]) || DEFAULT_REPORTED_SESSIONS;
+const sessionCount = Number(process.argv[3]) || Infinity;
 
 if (command === "report") {
   console.log(formatReport(readNewestEntries(userHome, sessionCount)));

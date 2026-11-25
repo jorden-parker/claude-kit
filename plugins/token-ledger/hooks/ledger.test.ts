@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,6 +16,7 @@ import {
   countLastReplyWords,
   formatReport,
   type LedgerEntry,
+  readNewestEntries,
   recordReplyMeter,
   recordSession,
   summarizeTranscript,
@@ -347,6 +349,27 @@ test("the report lists the newest sessions with their totals and biggest tools",
   );
   expect(report).toContain("subagents haiku: in 50k");
   expect(report).toContain("Read 40k chars, Bash 9k chars, Agent 0k chars");
+});
+
+test("readNewestEntries returns every stored session for Infinity and the newest for a count", () => {
+  const userHome = mkdtempSync(join(tmpdir(), "ledger-"));
+  const sessionFolder = join(userHome, ".cache/token-ledger/sessions");
+  mkdirSync(sessionFolder, { recursive: true });
+  for (let index = 0; index < 12; index++) {
+    const name = `session-${index}`;
+    const path = join(sessionFolder, `${name}.json`);
+    writeFileSync(path, JSON.stringify(entryWithTools(name, {})));
+    const time = new Date(2026, 0, 1, 0, index);
+    utimesSync(path, time, time);
+  }
+  expect(readNewestEntries(userHome, Infinity)).toHaveLength(12);
+  expect(readNewestEntries(userHome, 5).map((entry) => entry.session)).toEqual([
+    "session-11",
+    "session-10",
+    "session-9",
+    "session-8",
+    "session-7",
+  ]);
 });
 
 const promptLine = (text: string) =>

@@ -15,19 +15,24 @@ const HEADER_NAMES = [
   "Scope",
   "Model",
   "Context Tokens",
+  "Last Nudge Tokens",
   "Input Tokens",
   "Cache Write Tokens",
   "Cache Read Tokens",
   "Cache Status",
   "Output Tokens",
+  "Session Share",
+  "Main Tool Result Characters",
 ];
 
 const NUMBER_HEADER_NAMES = [
   "Context Tokens",
+  "Last Nudge Tokens",
   "Input Tokens",
   "Cache Write Tokens",
   "Cache Read Tokens",
   "Output Tokens",
+  "Session Share",
 ];
 
 const CACHE_HEADER_NAMES = ["Cache Write Tokens", "Cache Read Tokens"];
@@ -51,7 +56,9 @@ td:nth-child(2),td:nth-child(3){white-space:normal;overflow-wrap:anywhere}
 th{background:color-mix(in srgb,CanvasText 6%,Canvas);font-weight:600}
 tbody tr:last-child td{border-bottom:0}
 tbody tr:hover{background:color-mix(in srgb,CanvasText 5%,Canvas)}
+.session-start td{border-top:2px solid color-mix(in srgb,CanvasText 35%,Canvas)}
 .number{text-align:right}
+.tool-results{white-space:normal;min-width:16em}
 .digit-group{margin-left:.25em}
 .legend{border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:16px}
 .legend h2{font-size:1rem;margin:0 0 4px}
@@ -138,12 +145,12 @@ export function composeLedgerCopy(
 
   const lines = [
     "claude-ledger: tokens per session, scope and model. Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
-    "Context Tokens is the main session's context size, reread on every turn. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+    "Context Tokens is the main session's context size, reread on every turn. Last Nudge Tokens is the context size when the session was last told to hand off and clear, 0 if never. Session Share is the row's part of its session's tokens: a high main share means the main agent did work its subagents could take. Main Tool Result Characters, on each session's first row, lists what each tool returned into the main agent's context. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
     totalsLine,
   ];
   if (largestTools.length > 0) {
     lines.push(
-      "Largest tool results in characters: " +
+      "Largest tool results in the main agent's context, in characters: " +
         largestTools
           .map(([toolName, characters]) => `${toolName} ${characters}`)
           .join(", ") +
@@ -275,20 +282,55 @@ function hasCacheProblem(totals: ModelTotals): boolean {
   return describeCacheStatus(totals) !== "OK";
 }
 
-function composeRow(entry: LedgerEntry, scoped: ScopedModel): string {
+function totalTokens(totals: ModelTotals): number {
+  return totals.input + totals.cacheWrite + totals.cacheRead + totals.output;
+}
+
+function describeShare(tokens: number, sessionTotal: number): string {
+  if (sessionTotal === 0) return "0%";
+  return `${Math.round((100 * tokens) / sessionTotal)}%`;
+}
+
+function describeToolResults(
+  resultCharactersByTool: Record<string, number>
+): string {
+  return Object.entries(foldMcpTools(resultCharactersByTool))
+    .sort((left, right) => right[1] - left[1])
+    .map(([toolName, characters]) => `${toolName} ${characters}`)
+    .join(", ");
+}
+
+function composeRow(
+  entry: LedgerEntry,
+  scoped: ScopedModel,
+  sessionTotal: number,
+  isSessionStart: boolean
+): string {
+  const rowClasses = [
+    hasCacheProblem(scoped.totals) ? "cache-problem" : "",
+    isSessionStart ? "session-start" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const toolResultsText = isSessionStart
+    ? describeToolResults(entry.resultCharactersByTool)
+    : "";
   return (
-    (hasCacheProblem(scoped.totals) ? '<tr class="cache-problem">' : "<tr>") +
+    (rowClasses ? `<tr class="${rowClasses}">` : "<tr>") +
     textCell(entry.updatedAt.slice(0, 16).replace("T", " ")) +
     textCell(entry.project) +
     textCell(entry.session) +
     textCell(scoped.scope) +
     textCell(scoped.model) +
     numberCell(entry.contextTokens) +
+    numberCell(entry.lastNudgeTokens) +
     numberCell(scoped.totals.input) +
     numberCell(scoped.totals.cacheWrite, "number cache") +
     numberCell(scoped.totals.cacheRead, "number cache") +
     `<td class="cache-status">${describeCacheStatus(scoped.totals)}</td>` +
     numberCell(scoped.totals.output) +
+    `<td class="number">${describeShare(totalTokens(scoped.totals), sessionTotal)}</td>` +
+    `<td class="tool-results">${escapeHtml(toolResultsText)}</td>` +
     "</tr>"
   );
 }
@@ -313,7 +355,7 @@ function composeLegend(rowCount: number, flaggedCount: number): string {
     : `All ${rowCount} rows OK.`;
   const summaryClass = hasProblem ? "summary has-problem" : "summary";
   return (
-    '<section class="legend" aria-labelledby="legend-title"><h2 id="legend-title">What Good Looks Like</h2><ul><li><strong>Cache Read Tokens</strong> should be well above Cache Write Tokens. The prompt is being reused instead of resent.</li><li><strong>Cache Write Tokens</strong> should stay at or below reads. A write only pays off when it is read back later.</li><li><strong>Cache Status</strong> says OK when that holds. Otherwise it names the fault: Writes exceed reads, Never read, or Not cached.</li></ul>' +
+    '<section class="legend" aria-labelledby="legend-title"><h2 id="legend-title">What Good Looks Like</h2><ul><li><strong>Cache Read Tokens</strong> should be well above Cache Write Tokens. The prompt is being reused instead of resent.</li><li><strong>Cache Write Tokens</strong> should stay at or below reads. A write only pays off when it is read back later.</li><li><strong>Cache Status</strong> says OK when that holds. Otherwise it names the fault: Writes exceed reads, Never read, or Not cached.</li><li><strong>Session Share</strong> is each row\'s part of its session\'s tokens. Rows of one session sit together, main agent first. A high main share next to a low subagent share means the main agent did work its subagents could take.</li><li><strong>Last Nudge Tokens</strong> is the context size when the session was last told to hand off and clear. 0 means it never was. Context Tokens well above it means the session kept growing after the nudge.</li><li><strong>Main Tool Result Characters</strong> lists what each tool returned into the main agent\'s context, largest first, on each session\'s first row. MCP tools are grouped as one total.</li></ul>' +
     `<p class="${summaryClass}" role="status">${summary}</p></section>`
   );
 }
@@ -330,9 +372,16 @@ function foldMcpTools(
 }
 
 export function composeLedgerPage(entries: LedgerEntry[]): string {
-  const rows = entries.flatMap((entry) =>
-    scopedModels(entry).map((scoped) => composeRow(entry, scoped))
-  );
+  const rows = entries.flatMap((entry) => {
+    const scopedRows = scopedModels(entry);
+    const sessionTotal = scopedRows.reduce(
+      (total, scoped) => total + totalTokens(scoped.totals),
+      0
+    );
+    return scopedRows.map((scoped, index) =>
+      composeRow(entry, scoped, sessionTotal, index === 0)
+    );
+  });
   const flaggedCount = entries
     .flatMap(scopedModels)
     .filter((scoped) => hasCacheProblem(scoped.totals)).length;

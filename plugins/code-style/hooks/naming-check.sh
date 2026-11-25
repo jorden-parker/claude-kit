@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+source "$(dirname "$0")/hook-bypass-lib.sh"
+
 payload=$(cat)
 file_path=$(printf '%s' "$payload" | /usr/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null) || exit 0
 working_directory=$(printf '%s' "$payload" | /usr/bin/jq -r '.cwd // empty' 2>/dev/null) || exit 0
@@ -14,6 +16,8 @@ case "$extension" in
   js|jsx|ts|tsx|py|go|rs|java|kt|swift|rb|cs|c|cpp|h) ;;
   *) exit 0 ;;
 esac
+
+hook_bypass_granted "$file_path" && exit 0
 
 allowlist_file="${working_directory}/.claude/naming-allowlist.txt"
 [ -f "$allowlist_file" ] || allowlist_file=""
@@ -60,8 +64,8 @@ violations=$(printf '%s\n' "$new_text" | EXTENSION="$extension" ALLOWLIST_FILE="
 
 [ -z "$violations" ] && exit 0
 
-readonly FULL_INSTRUCTIONS="Rename to a descriptive name; the Naming rules from session start list what passes. Spawn a subagent with the Agent tool to fix these names and every other failing name in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
-readonly REPEAT_INSTRUCTIONS="Rename each to a descriptive name, along with every other failing name in the file, then carry on; a failing check is never a reason to stop."
+readonly FULL_INSTRUCTIONS="Rename to a descriptive name; the Naming rules from session start list what passes. Spawn a subagent with the Agent tool to fix these names and every other failing name in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on. If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool."
+readonly REPEAT_INSTRUCTIONS="Rename each to a descriptive name, along with every other failing name in the file, then carry on; a failing check is never a reason to stop. If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool."
 
 instructions_for_session() {
   local session_id marker_directory marker_path

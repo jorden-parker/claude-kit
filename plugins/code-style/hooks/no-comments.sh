@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-readonly MAX_REPORTED_LINES=5
-readonly VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove them and make the code self-explanatory (extract a named function or variable instead). Spawn a subagent with the Agent tool to fix these comments and every other comment in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on."
+source "$(dirname "$0")/hook-bypass-lib.sh"
 
-readonly REPEAT_VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove these and every other comment in the file, then carry on; a failing check is never a reason to stop."
+readonly MAX_REPORTED_LINES=5
+readonly VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove them and make the code self-explanatory (extract a named function or variable instead). Spawn a subagent with the Agent tool to fix these comments and every other comment in the file, including pre-existing ones this change did not introduce and ones in files no plan names. If you have no Agent tool, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on. If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool."
+
+readonly REPEAT_VIOLATION_MESSAGE="Comments are not allowed in this repo. Remove these and every other comment in the file, then carry on; a failing check is never a reason to stop. If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool."
 
 violation_message_for_session() {
   local session_id="$1" marker_directory marker_path
@@ -129,6 +131,7 @@ main() {
   new_text="$(jq -r '.tool_input.content // .tool_input.new_string // empty' <<<"$payload" 2>/dev/null)" || exit 0
   whole_file="$(jq -r 'if .tool_input.content then 1 else 0 end' <<<"$payload" 2>/dev/null)" || exit 0
   [[ -n "$file_path" && -n "$new_text" ]] || exit 0
+  hook_bypass_granted "$file_path" && exit 0
 
   style="$(comment_style_for_file "$file_path")"
   [[ -n "$style" ]] || exit 0

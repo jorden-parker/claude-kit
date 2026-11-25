@@ -118,6 +118,20 @@ expect_message "a repeat violation still lists the line" present "note" "$second
 expect_message "a repeat violation leaves out the long instructions" absent "Spawn a subagent" "$second_message"
 expect_message "another session starts with the full instructions" present "Spawn a subagent" "$other_session_message"
 
+grant_home="$fixture_directory/home"
+mkdir -p "$grant_home/.claude/hook-bypass"
+granted_text=$'// note\nconst total = 1;'
+write_grant() {
+  printf '%s\t%s\n' "$1" "$2" > "$grant_home/.claude/hook-bypass/grants.tsv"
+}
+
+write_grant "$(( $(date +%s) + 600 ))" "$fixture_directory/granted.ts"
+HOME="$grant_home" expect_allowed "allows a comment in a file with a live bypass grant for its path" Write granted.ts "$granted_text"
+write_grant "$(( $(date +%s) - 1 ))" "$fixture_directory/granted.ts"
+HOME="$grant_home" expect_blocked "blocks a comment in a file with an expired bypass grant for its path" Write granted.ts "$granted_text"
+write_grant "$(( $(date +%s) + 600 ))" "$fixture_directory/other.ts"
+HOME="$grant_home" expect_blocked "blocks a comment in a file with a live bypass grant for another path" Write granted.ts "$granted_text"
+
 rm -rf "$fixture_directory"
 [ "$failures" -eq 0 ] || { echo "$failures failure(s)"; exit 1; }
 echo "all passed"

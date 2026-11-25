@@ -8,6 +8,7 @@ session_id="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)
 file_path="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)" || exit 0
 project_directory="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)" || exit 0
 [ -n "$session_id" ] && [ -n "$file_path" ] && [ -n "$project_directory" ] || exit 0
+hook_bypass_granted "$file_path" && exit 0
 
 relative_path="${file_path#"$project_directory"/}"
 
@@ -30,5 +31,5 @@ if [ -f "$file_path" ]; then
   exit 0
 fi
 
-echo "TDD: $relative_path is a new implementation file and no test has been written or failed this session. Write a test for it first (it does not need to run yet), then create the file. (Override once with TDD_SKIP=1 or pin behaviour in .claude/tdd.json with {\"enforce\": false}.)" >&2
+echo "TDD: $relative_path is a new implementation file and no test has been written or failed this session. Write a test for it first (it does not need to run yet), then create the file. (Override once with TDD_SKIP=1 or pin behaviour in .claude/tdd.json with {\"enforce\": false}.) If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool." >&2
 exit 2

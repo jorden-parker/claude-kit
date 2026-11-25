@@ -5,7 +5,8 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
-    "types": ["bun"],
+    "typeRoots": ["./node_modules/@types", "./.claude-plugin/types"],
+    "types": ["bun", "claude-code"],
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },

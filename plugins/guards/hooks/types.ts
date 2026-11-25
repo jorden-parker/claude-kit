@@ -36,6 +36,16 @@ export const deny = (
   },
 });
 
+export const ask = (reason: string): HookResult => ({
+  output: {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "ask",
+      permissionDecisionReason: reason,
+    },
+  },
+});
+
 const TOOLS_THAT_TAKE_A_REWRITE = ["Bash", "Read"];
 
 export const canRewriteInput = (event: HookEvent) =>

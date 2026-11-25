@@ -97,6 +97,22 @@ record_qwen_passed_test_run session-qwen-green
 run_hook session-qwen-green Write "$repository/src/ledger.py"
 expect_exit "Qwen Code: blocks a new implementation file after only a passing shell test run" 2 $?
 
+grant_home="$fixture_directory/home"
+mkdir -p "$grant_home/.claude/hook-bypass"
+write_grant() {
+  printf '%s\t%s\n' "$1" "$2" > "$grant_home/.claude/hook-bypass/grants.tsv"
+}
+
+write_grant "$(( $(date +%s) + 600 ))" "$repository/src/ledger.py"
+HOME="$grant_home" run_hook session-grant-live Write "$repository/src/ledger.py"
+expect_exit "allows a new implementation file with a live bypass grant for its path" 0 $?
+write_grant "$(( $(date +%s) - 1 ))" "$repository/src/ledger.py"
+HOME="$grant_home" run_hook session-grant-expired Write "$repository/src/ledger.py"
+expect_exit "blocks a new implementation file with an expired bypass grant for its path" 2 $?
+write_grant "$(( $(date +%s) + 600 ))" "$repository/src/other.py"
+HOME="$grant_home" run_hook session-grant-other Write "$repository/src/ledger.py"
+expect_exit "blocks a new implementation file with a live bypass grant for another path" 2 $?
+
 rm -rf "$fixture_directory"
 [ "$failures" -eq 0 ] || { echo "$failures failure(s)"; exit 1; }
 echo "all passed"

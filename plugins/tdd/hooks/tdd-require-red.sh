@@ -32,5 +32,5 @@ if [ -f "$file_path" ]; then
   exit 0
 fi
 
-echo "TDD: $relative_path is a new implementation file and no test has been written or failed this session. Write a test for it first (it does not need to run yet), then create the file. (Override once with TDD_SKIP=1 or pin behaviour in .claude/tdd.json with {\"enforce\": false}.) If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool." >&2
+echo "TDD: $relative_path is new and no test was written or failed. Write its test first, or pin {\"enforce\": false} in .claude/tdd.json. Not a fit? Ask the user via request_hook_bypass." >&2
 exit 2

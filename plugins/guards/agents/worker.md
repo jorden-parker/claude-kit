@@ -1,6 +1,6 @@
 ---
 name: worker
-description: Haiku worker for the orchestrating main session. Implements a fully specified change, runs a check, or verifies work, then replies with a short summary. Prompt it with the goal, the files, the exact change and the check to run.
+description: Haiku worker. Implements a fully specified change or runs a check, then replies with a short summary. Prompt it with the goal, the files, the exact change and the check to run.
 model: haiku
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---

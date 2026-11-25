@@ -36,7 +36,7 @@ export const register: Register = (subscribe) => {
       name: TOOL_NAME,
       description: TOOL_DESCRIPTION,
       inputSchema: TOOL_SCHEMA,
-      isDeferred: false,
+      isDeferred: true,
     });
     return next(event);
   });

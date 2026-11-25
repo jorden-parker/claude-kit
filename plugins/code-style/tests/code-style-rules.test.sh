@@ -26,8 +26,8 @@ expect_not_printed() {
 
 rules_output="$(cd / && "$hook_directory/print-code-style-rules.sh" 2>&1)"
 
-expect_printed "prints the comments rule" "Write no comments, docstrings or trailing comments" "$rules_output"
-expect_printed "prints the naming rule" "No identifiers under 3 characters" "$rules_output"
+expect_printed "prints the comments rule" "No comments or docstrings in code" "$rules_output"
+expect_printed "prints the naming rule" "Names: at least 3 characters" "$rules_output"
 expect_printed "prints the naming escape hatch" "naming-allowlist.txt" "$rules_output"
 expect_not_printed "leaves out the TDD rules" "## TDD" "$rules_output"
 

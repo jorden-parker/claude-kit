@@ -479,7 +479,7 @@ export function recordReplyMeter(event: StopEvent, userHome: string): void {
   mkdirSync(dirname(notePath), { recursive: true });
   writeFileSync(
     notePath,
-    `Your last reply ran ${finalWords} words (budget ${replyBudget}) with ${narrationWords} words of narration between tool calls (budget ${narrationBudget}). Say less: write nothing between tool calls, and keep the final reply under ${replyBudget} words unless the reader asked you to explain.`
+    `Last reply: ${finalWords} words (budget ${replyBudget}), ${narrationWords} narration words between tool calls (budget ${narrationBudget}). Stay under both unless asked to explain.`
   );
 }
 

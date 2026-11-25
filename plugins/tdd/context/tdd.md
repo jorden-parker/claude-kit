@@ -1,11 +1,9 @@
-# Coding rules: TDD (all code, any repo)
+# Coding rules: TDD
 
-Features and fixes follow red, green, refactor.
+Features and fixes go red, green, refactor:
 
-1. Red: write one failing test first and run it. Confirm it fails for the expected reason, not a typo or import error.
-2. Green: write the minimum implementation that makes that test pass. Run the tests.
-3. Refactor: clean up with the tests green, re-running after each change.
+1. Red: write one failing test, run it, and confirm it fails for the expected reason.
+2. Green: write the minimum code that passes it, then run the tests.
+3. Refactor with the tests green.
 
-- Never edit a test to make it pass; fix the code, or change the test only when the requirement itself changed.
-- Hooks enforce this: new implementation files are blocked until a test is written or fails, and finishing is blocked while tests fail.
-- The test command is detected from the repo. Pin it in `.claude/tdd.json` as `{"testCommand": "..."}`.
+Never write implementation before its test. Never edit a test to make it pass unless the requirement changed. Hooks enforce this. Pin the test command in `.claude/tdd.json` as `{"testCommand": "..."}`.

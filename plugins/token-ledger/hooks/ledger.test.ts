@@ -553,7 +553,7 @@ test("a reply over the word budget leaves a note that the next prompt reads", ()
   );
   recordReplyMeter(event, userHome);
   const note =
-    "Your last reply ran 160 words (budget 150) with 0 words of narration between tool calls (budget 40). Say less: write nothing between tool calls, and keep the final reply under 150 words unless the reader asked you to explain.";
+    "Last reply: 160 words (budget 150), 0 narration words between tool calls (budget 40). Stay under both unless asked to explain.";
   expect(readFileSync(replyNotePath(userHome), "utf8")).toBe(note);
   expect(takeReplyNote("session-1", userHome)).toEqual({
     hookSpecificOutput: {

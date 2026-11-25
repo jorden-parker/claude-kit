@@ -69,6 +69,6 @@ previous_block_count="$(cat "$block_count_file" 2>/dev/null || echo 0)"
 echo $((previous_block_count + 1)) > "$block_count_file" 2>/dev/null
 
 cat >&2 <<'MESSAGE'
-Verification required before reporting this task finished. This turn changed code, and nothing checked the result afterwards. Run a quick verification now: execute the tests or a command that exercises the change, or read back a changed file and confirm it is what the task asked for. Then state the verified result in your final message instead of assuming it worked. If verification fails, fix it and verify again.
+Verify-before-finish gate: this turn changed code and nothing checked it. Run a check now (tests, or read back a changed file), then state the verified result. If it fails, fix it and verify again.
 MESSAGE
 exit 2

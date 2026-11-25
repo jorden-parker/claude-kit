@@ -22,7 +22,9 @@ test("adds the delegation rules as session context", () => {
   expect(contextOf(result)).toContain("orchestrator");
   expect(contextOf(result)).toContain('names a model: `"haiku"` by default');
   expect(contextOf(result)).toContain("only after Haiku failed the task");
-  expect(contextOf(result)).toContain("a few thousand characters");
+  expect(contextOf(result)).toContain(
+    "Send independent pieces as several Agent calls in one message"
+  );
   expect(contextOf(result)).toContain("never the user's");
   expect(contextOf(result)).toContain(
     "Read one file or symbol you can already name yourself"

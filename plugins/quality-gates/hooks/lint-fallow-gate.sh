@@ -110,7 +110,7 @@ fi
 echo $((blocks_so_far + 1)) > "$block_count_file"
 
 {
-  echo "Lint and fallow must pass before finishing. Spawn a subagent with the Agent tool to fix every failure below, including pre-existing ones this change did not introduce and ones in files no plan names. Name subagent_type guards:worker when it is listed, otherwise model haiku. If you have no Agent tool, or the fix is a few lines in one file that you may edit, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on. Run the failing command again once it is fixed:"
+  echo "lint-fallow-gate: lint or fallow failed. If you have an Agent tool, spawn a subagent to fix the failures below (guards:worker if listed, else model haiku), then retry. Otherwise fix them yourself."
   echo
   printf '%s' "$failure_report"
   echo "Pin the commands in .claude/quality.json as {\"lintCommand\": \"...\", \"fallowCommand\": \"...\"} when the detected ones are wrong."

@@ -1,6 +1,6 @@
 ---
 name: mod-components
-description: Best practices for building custom UI components in Claude Code mods, the plugin hooks modules that draw through `ui.render` and `$.ui` (Box, Text, Button, Raster, Client). Covers choosing a function component or a custom `Client` region, structure, reuse and state, animation, mouse and keyboard, theme-key colouring, spacing, borders and typography, theming, fallbacks for surfaces and narrow terminals that can't draw something, a house "status pill" visual style, rendering the mod in a real terminal to look at it, testing, and limits. Use this whenever you write, restyle, review or debug a mod's pane, band (AbovePrompt), placed row, spinner, toast or Client widget, or the user asks how to make mod UI look good, what mod components can do, or how to make their own component, even if they don't say "mod".
+description: Best practices for custom UI in Claude Code mods, the plugin hooks modules that draw through `ui.render` and `$.ui`: components, state, animation, input, theming, fallbacks, testing and limits. Use whenever you write, restyle, review or debug a mod's pane, band, placed row, spinner, toast or Client widget, or the user asks how to build mod UI, even if they don't say "mod".
 ---
 
 # Custom components for Claude Code mods

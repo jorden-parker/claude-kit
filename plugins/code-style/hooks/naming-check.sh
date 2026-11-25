@@ -64,8 +64,8 @@ violations=$(printf '%s\n' "$new_text" | EXTENSION="$extension" ALLOWLIST_FILE="
 
 [ -z "$violations" ] && exit 0
 
-readonly FULL_INSTRUCTIONS="Rename to a descriptive name; the Naming rules from session start list what passes. Spawn a subagent with the Agent tool to fix these names and every other failing name in the file, including pre-existing ones this change did not introduce and ones in files no plan names. Name subagent_type guards:worker when it is listed, otherwise model haiku. If you have no Agent tool, or the fix is a few lines in one file that you may edit, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on. If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool."
-readonly REPEAT_INSTRUCTIONS="Rename each to a descriptive name, along with every other failing name in the file, then carry on; a failing check is never a reason to stop. If this check does not fit the file (seed data, fixtures, configuration), ask the user with the request_hook_bypass tool."
+readonly FULL_INSTRUCTIONS="Rename each failing name, including pre-existing ones. Spawn a subagent with the Agent tool to do it (subagent_type guards:worker when listed, else model haiku). Not a fit for this file (seed data, fixtures, config)? Ask the user with the request_hook_bypass tool."
+readonly REPEAT_INSTRUCTIONS="Rename every failing name in the file, then carry on. Not a fit? Ask the user with the request_hook_bypass tool."
 
 instructions_for_session() {
   local session_id marker_directory marker_path

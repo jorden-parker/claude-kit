@@ -1,6 +1,6 @@
 ---
 name: context-scout
-description: Haiku read-only lookup. Use whenever the answer needs more than one file read or one search (repo sweeps, tracing callers, many or large files, summarizing logs or diffs). Read a file or symbol you can already name inline instead. Prompt it with the question and start paths only, 1500 characters at most. It replies with the conclusion and path:line references.
+description: Haiku read-only lookup for answers that need more than one file read or search. Prompt it with the question and start paths, 1500 characters at most. It replies with the conclusion and path:line references.
 model: haiku
 tools: Read, Grep, Glob, Bash
 ---

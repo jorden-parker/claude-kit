@@ -26,7 +26,7 @@ expect_not_printed() {
 
 rules_output="$(cd / && "$hook_directory/print-tdd-rules.sh" 2>&1)"
 
-expect_printed "prints the red step" "write one failing test first" "$rules_output"
+expect_printed "prints the red step" "write one failing test, run it" "$rules_output"
 expect_printed "prints the rule against editing tests to pass" "Never edit a test to make it pass" "$rules_output"
 expect_printed "prints the test command pin" ".claude/tdd.json" "$rules_output"
 expect_not_printed "leaves out the comment rules" "Do not write comments" "$rules_output"

@@ -732,7 +732,7 @@ def kind($keys): .code // .rule // ((.finding_id // "") | split(":") | .[1])
 
 # The block message lists at most this many findings. The full report holds
 # the rest.
-GATE_MAX_FINDINGS=50
+GATE_MAX_FINDINGS=20
 
 # The audited tree can hold symbolic links, for example a committed `.fallow`
 # link that points to a directory outside the tree. The gate must not write
@@ -796,15 +796,15 @@ print_block_message() {
   {
     echo "fallow-gate: blocked by fallow ${VERSION:-unknown} at $BIN_DESC"
     if [ "$count" -gt 0 ]; then
-      echo "fallow-gate: verdict fail, $count finding(s) caused the block:"
+      echo "fallow-gate: $count finding(s) caused the block:"
       printf '%s\n' "$findings" | sed -n "1,${GATE_MAX_FINDINGS}s/^/  /p"
       if [ "$count" -gt "$GATE_MAX_FINDINGS" ]; then
         echo "  ... and $((count - GATE_MAX_FINDINGS)) more in the full report"
       fi
     else
-      echo "fallow-gate: verdict fail. Read the full report for the findings."
+      echo "fallow-gate: verdict fail, no findings."
     fi
-    echo "fallow-gate: full report: $report_path"
+    echo "fallow-gate: report: $report_path"
   } >&2
 }
 
@@ -897,7 +897,7 @@ run_audit() {
     else
       print_block_message
     fi
-    echo "fallow-gate: Spawn a subagent with the Agent tool to fix every failure above, including pre-existing ones this change did not introduce and ones in files no plan names. Name subagent_type guards:worker when it is listed, otherwise model haiku. If you have no Agent tool, or the fix is a few lines in one file that you may edit, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on." >&2
+    echo "fallow-gate: blocked. If you have an Agent tool, spawn a subagent to fix the findings above (guards:worker if listed, else model haiku), then retry. Otherwise fix them yourself." >&2
     exit 2
   fi
 

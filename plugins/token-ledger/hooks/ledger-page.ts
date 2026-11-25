@@ -77,9 +77,86 @@ export function composeMarkdownTable(rows: string[][]): string {
   ].join("\n");
 }
 
+export function composeLedgerCopy(
+  rows: string[][],
+  toolCharactersBySession: Record<string, Record<string, number>>
+): string {
+  const MAIN_SCOPE = "main";
+  const TOKEN_COLUMNS = [
+    "Input Tokens",
+    "Cache Write Tokens",
+    "Cache Read Tokens",
+    "Output Tokens",
+  ];
+  const [headerCells, ...bodyRows] = rows;
+  const readColumn = (row: string[], name: string) =>
+    row[headerCells.indexOf(name)];
+  const addUpColumn = (matrix: string[][], name: string) =>
+    matrix.reduce((total, row) => total + Number(readColumn(row, name)), 0);
+  const addUpTokens = (matrix: string[][]) =>
+    TOKEN_COLUMNS.reduce((total, name) => total + addUpColumn(matrix, name), 0);
+  const computePercent = (part: number, whole: number) =>
+    whole === 0 ? 0 : Math.round((100 * part) / whole);
+
+  const input = addUpColumn(bodyRows, "Input Tokens");
+  const cacheWrite = addUpColumn(bodyRows, "Cache Write Tokens");
+  const cacheRead = addUpColumn(bodyRows, "Cache Read Tokens");
+  const output = addUpColumn(bodyRows, "Output Tokens");
+  const promptTokens = input + cacheWrite + cacheRead;
+  const flaggedCount = bodyRows.filter(
+    (row) => readColumn(row, "Cache Status") !== "OK"
+  ).length;
+  const subagentRows = bodyRows.filter(
+    (row) => readColumn(row, "Scope") !== MAIN_SCOPE
+  );
+  const rowCountText =
+    bodyRows.length === 1 ? "1 row" : `${bodyRows.length} rows`;
+  const totalsLine =
+    `Totals for ${rowCountText}: input ${input}, cache write ${cacheWrite}, cache read ${cacheRead}, output ${output}. ` +
+    `Cache reads are ${computePercent(cacheRead, promptTokens)}% of prompt tokens. ` +
+    `Flagged ${flaggedCount} of ${bodyRows.length}. ` +
+    `Subagents used ${computePercent(addUpTokens(subagentRows), addUpTokens(bodyRows))}% of all tokens.`;
+
+  const characterTotals = new Map();
+  const sessionNames = new Set(
+    bodyRows.map((row) => readColumn(row, "Session"))
+  );
+  for (const sessionName of sessionNames) {
+    if (!Object.hasOwn(toolCharactersBySession, sessionName)) continue;
+    for (const [toolName, characters] of Object.entries(
+      toolCharactersBySession[sessionName]
+    )) {
+      characterTotals.set(
+        toolName,
+        (characterTotals.get(toolName) ?? 0) + characters
+      );
+    }
+  }
+  const largestTools = [...characterTotals]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5);
+
+  const lines = [
+    "claude-ledger: tokens per session, scope and model. Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
+    "Context Tokens is the main session's context size, reread on every turn. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+    totalsLine,
+  ];
+  if (largestTools.length > 0) {
+    lines.push(
+      "Largest tool results in characters: " +
+        largestTools
+          .map(([toolName, characters]) => `${toolName} ${characters}`)
+          .join(", ") +
+        "."
+    );
+  }
+  return [...lines, "", composeMarkdownTable(rows)].join("\n");
+}
+
 const SCRIPT = String.raw`const table = document.querySelector("table");
 const copyStatus = document.getElementById("copy-status");
 ${composeMarkdownTable.toString()}
+${composeLedgerCopy.toString()}
 const readCellTexts = (row) => [...row.cells].map((cell) => cell.textContent);
 function hasSelectedText(row) {
   const selection = getSelection();
@@ -114,7 +191,7 @@ document.addEventListener("copy", (event) => {
     return;
   }
   const copiedRows = [table.tHead.rows[0], ...selectedRows].map(readCellTexts);
-  event.clipboardData.setData("text/plain", composeMarkdownTable(copiedRows));
+  event.clipboardData.setData("text/plain", composeLedgerCopy(copiedRows, toolCharactersBySession));
   event.clipboardData.setData("text/html", buildPlainTable(copiedRows));
 });
 document.getElementById("copy-table").addEventListener("click", () => {
@@ -226,9 +303,14 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   if (rows.length === 0) {
     return `${head}<p>No sessions recorded yet.</p>${tail}`;
   }
+  const toolCharactersJson = JSON.stringify(
+    Object.fromEntries(
+      entries.map((entry) => [entry.session, entry.resultCharactersByTool])
+    )
+  ).replaceAll("<", "\\u003c");
   return (
     head +
-    "<p>Tokens per model for the newest sessions. Select rows and copy, or use Copy Table. It pastes as a Markdown table in Claude Code and text editors, and as cells in a spreadsheet. A selection inside one cell copies just that text.</p>" +
+    "<p>Tokens per model for the newest sessions. Select rows and copy, or use Copy Table. It pastes as a short summary and a Markdown table in Claude Code and text editors, and as cells in a spreadsheet. A selection inside one cell copies just that text.</p>" +
     composeLegend(rows.length, flaggedCount) +
     '<div class="toolbar"><button type="button" id="copy-table">Copy Table</button><span id="copy-status" role="status" aria-live="polite"></span></div>' +
     '<div class="table-scroll" tabindex="0" role="region" aria-labelledby="ledger-title"><table aria-labelledby="ledger-title">' +
@@ -236,6 +318,7 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
     `<tbody>${rows.join("")}</tbody>` +
     "</table></div>" +
     "</main>" +
+    `<script>const toolCharactersBySession = ${toolCharactersJson};</script>` +
     `<script>${SCRIPT}</script>` +
     "</body></html>"
   );

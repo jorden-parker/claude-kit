@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  composeLedgerCopy,
   composeLedgerPage,
   composeMarkdownTable,
   describeCacheStatus,
@@ -192,4 +193,110 @@ test("composeLedgerPage with no entries shows the empty message and no table", (
   expect(page).toContain("No sessions recorded yet.");
   expect(page).not.toContain("<table");
   expect(page).not.toContain('class="legend"');
+});
+
+const ledgerHeader = [
+  "Updated",
+  "Project",
+  "Session",
+  "Scope",
+  "Model",
+  "Context Tokens",
+  "Input Tokens",
+  "Cache Write Tokens",
+  "Cache Read Tokens",
+  "Cache Status",
+  "Output Tokens",
+];
+
+const ledgerRow = (
+  session: string,
+  scope: string,
+  cacheStatus: string,
+  input: string,
+  cacheWrite: string,
+  cacheRead: string,
+  output: string
+) => [
+  "2026-01-02 03:04",
+  "proj",
+  session,
+  scope,
+  "fable",
+  "120000",
+  input,
+  cacheWrite,
+  cacheRead,
+  cacheStatus,
+  output,
+];
+
+test("composeLedgerCopy puts a summary above the Markdown table", () => {
+  const rows = [
+    ledgerHeader,
+    ledgerRow("s1", "main", "OK", "1000", "100", "6000", "200"),
+    ledgerRow("s2", "main", "Never read", "100", "200", "0", "150"),
+    ledgerRow("s1", "subagent", "OK", "100", "0", "3000", "100"),
+  ];
+  const toolCharactersBySession = {
+    s1: { Read: 100000, Bash: 30000, Grep: 500 },
+    s2: {
+      Read: 20000,
+      Glob: 4000,
+      Edit: 3000,
+      Write: 2000,
+      Agent: 1500,
+      Task: 100,
+    },
+    s3: { Bash: 999999 },
+  };
+  expect(composeLedgerCopy(rows, toolCharactersBySession)).toBe(
+    [
+      "claude-ledger: tokens per session, scope and model. Propose claude-kit changes that cut context, tokens and cost. Start with the flagged rows and the largest numbers.",
+      "Context Tokens is the main session's context size, reread on every turn. Cache Status is OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+      "Totals for 3 rows: input 1200, cache write 300, cache read 9000, output 450. Cache reads are 86% of prompt tokens. Flagged 1 of 3. Subagents used 29% of all tokens.",
+      "Largest tool results in characters: Read 120000, Bash 30000, Glob 4000, Edit 3000, Write 2000.",
+      "",
+      composeMarkdownTable(rows),
+    ].join("\n")
+  );
+});
+
+test("composeLedgerCopy says 1 row, omits the tool line and ends with the table", () => {
+  const rows = [
+    ledgerHeader,
+    ledgerRow("s1", "main", "OK", "1", "2", "3", "4"),
+  ];
+  const summary = composeLedgerCopy(rows, {});
+  expect(summary).toContain("Totals for 1 row: ");
+  expect(summary).not.toContain("Largest tool results");
+  expect(summary.endsWith("\n\n" + composeMarkdownTable(rows))).toBe(true);
+});
+
+test("composeLedgerCopy reports 0% when every token cell is 0", () => {
+  const rows = [
+    ledgerHeader,
+    ledgerRow("s1", "main", "Not cached", "0", "0", "0", "0"),
+    ledgerRow("s1", "subagent", "Not cached", "0", "0", "0", "0"),
+  ];
+  const summary = composeLedgerCopy(rows, {});
+  expect(summary).toContain("Cache reads are 0% of prompt tokens.");
+  expect(summary).toContain("Subagents used 0% of all tokens.");
+});
+
+test("composeLedgerPage copies the summary and embeds the tool map for each session", () => {
+  const page = composeLedgerPage([
+    {
+      ...sampleEntry,
+      session: "session-tools",
+      resultCharactersByTool: { "Tool<x>": 5 },
+    },
+  ]);
+  expect(page).toContain(
+    "composeLedgerCopy(copiedRows, toolCharactersBySession)"
+  );
+  expect(page).toContain('setData("text/html", buildPlainTable(copiedRows))');
+  expect(page).toContain("const toolCharactersBySession = {");
+  expect(page).toContain('{"session-tools":{"Tool\\u003cx>":5}}');
+  expect(page).not.toContain('"Tool<x>"');
 });

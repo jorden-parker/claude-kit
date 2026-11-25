@@ -217,6 +217,12 @@ function hasSelectedText(row) {
   }
   return false;
 }
+function composeLedgerText(bodyRows) {
+  const copiedRows = [table.tHead.rows[0], ...bodyRows].map(readCellTexts);
+  const projectColumn = readCellTexts(table.tHead.rows[0]).indexOf("Project");
+  const pageProjectNames = [...table.tBodies[0].rows].map((row) => readCellTexts(row)[projectColumn]);
+  return composeLedgerCopy(labelProjects(copiedRows, pageProjectNames), toolCharactersBySession);
+}
 document.addEventListener("copy", (event) => {
   const selectedText = getSelection().toString().trim();
   if (!selectedText) return;
@@ -227,10 +233,7 @@ document.addEventListener("copy", (event) => {
     event.clipboardData.setData("text/plain", selectedText);
     return;
   }
-  const copiedRows = [table.tHead.rows[0], ...selectedRows].map(readCellTexts);
-  const projectColumn = readCellTexts(table.tHead.rows[0]).indexOf("Project");
-  const pageProjectNames = [...table.tBodies[0].rows].map((row) => readCellTexts(row)[projectColumn]);
-  event.clipboardData.setData("text/plain", composeLedgerCopy(labelProjects(copiedRows, pageProjectNames), toolCharactersBySession));
+  event.clipboardData.setData("text/plain", composeLedgerText(selectedRows));
 });
 document.getElementById("copy-table").addEventListener("click", () => {
   getSelection().selectAllChildren(table);
@@ -238,6 +241,13 @@ document.getElementById("copy-table").addEventListener("click", () => {
   copyStatus.textContent = hasCopied
     ? "Copied " + table.tBodies[0].rows.length + " rows"
     : "Copy failed. Press Cmd+C while the table is selected.";
+});
+document.getElementById("download-table").addEventListener("click", () => {
+  const downloadLink = document.createElement("a");
+  downloadLink.href = URL.createObjectURL(new Blob([composeLedgerText([...table.tBodies[0].rows])], { type: "text/plain" }));
+  downloadLink.download = "claude-ledger-usage.txt";
+  downloadLink.click();
+  copyStatus.textContent = "Downloaded " + table.tBodies[0].rows.length + " rows as claude-ledger-usage.txt";
 });`;
 
 function escapeHtml(text: string): string {
@@ -413,9 +423,9 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   ).replaceAll("<", "\\u003c");
   return (
     head +
-    `<p>Sessions shown: ${sessionCount}, newest first. Each row is one model's tokens for a session's main agent or its subagents. Select rows and copy, or use Copy Table. It pastes as plain text, a short summary then one line per row, with no Markdown or HTML, so it stays intact through chat apps such as Slack and WhatsApp on the way to Claude. Copied rows name projects as project 1, project 2 and so on, and never include tool output. A selection inside one cell copies just that text.</p>` +
+    `<p>Sessions shown: ${sessionCount}, newest first. Each row is one model's tokens for a session's main agent or its subagents. Select rows and copy, or use Copy Table. It pastes as plain text, a short summary then one line per row, with no Markdown or HTML, so it stays intact through chat apps such as Slack and WhatsApp on the way to Claude. Copied rows name projects as project 1, project 2 and so on, and never include tool output. A selection inside one cell copies just that text. Download .txt saves the same text for every row as a file, for when it is too long to paste.</p>` +
     composeLegend(rows.length, flaggedCount) +
-    '<div class="toolbar"><button type="button" id="copy-table">Copy Table</button><span id="copy-status" role="status" aria-live="polite"></span></div>' +
+    '<div class="toolbar"><button type="button" id="copy-table">Copy Table</button><button type="button" id="download-table">Download .txt</button><span id="copy-status" role="status" aria-live="polite"></span></div>' +
     '<div class="table-scroll" tabindex="0" role="region" aria-labelledby="ledger-title"><table aria-labelledby="ledger-title">' +
     `<thead><tr>${composeHeader()}</tr></thead>` +
     `<tbody>${rows.join("")}</tbody>` +

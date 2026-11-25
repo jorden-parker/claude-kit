@@ -124,6 +124,24 @@ test("composeLedgerPage script copies plain text only", () => {
   expect(page).toContain('setData("text/plain"');
 });
 
+test("composeLedgerPage offers the ledger text as a file download", () => {
+  const page = composeLedgerPage([sampleEntry]);
+  expect(page).toContain('id="download-table"');
+  expect(page).toContain("Download .txt");
+  expect(page).toContain("composeLedgerText([...table.tBodies[0].rows])");
+  expect(page).toContain('downloadLink.download = "claude-ledger-usage.txt"');
+  expect(page).toContain(
+    'setData("text/plain", composeLedgerText(selectedRows))'
+  );
+  const scriptBodies = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
+    (match) => match[1] ?? ""
+  );
+  const scriptText =
+    scriptBodies.find((body) => body.includes("copy-table")) ?? "";
+  expect(scriptText).not.toBe("");
+  expect(() => new Function(scriptText)).not.toThrow();
+});
+
 test("composeLedgerPage puts the session values in order, escaped and unpadded", () => {
   const [, firstRow = "", secondRow = ""] = rowsOf(
     composeLedgerPage([sampleEntry])

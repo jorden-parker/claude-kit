@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-const DEFAULT_NUDGE_TOKENS = 150_000;
+const DEFAULT_NUDGE_TOKENS = 80_000;
 const NUDGE_STEP_TOKENS = 50_000;
 const REPORTED_TOOLS = 3;
 

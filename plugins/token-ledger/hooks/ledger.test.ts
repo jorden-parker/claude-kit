@@ -209,14 +209,14 @@ test("a broken line is skipped", () => {
 });
 
 test("no nudge under the threshold or right after one", () => {
-  expect(composeNudge(149_999, 0, 150_000)).toBeNull();
-  expect(composeNudge(180_000, 150_000, 150_000)).toBeNull();
+  expect(composeNudge(79_999, 0, 80_000)).toBeNull();
+  expect(composeNudge(110_000, 80_000, 80_000)).toBeNull();
 });
 
 test("a nudge at the threshold and again after 50,000 more tokens", () => {
-  expect(composeNudge(150_000, 0, 150_000)).toContain("150k tokens");
-  expect(composeNudge(150_000, 0, 150_000)).toContain("/handoff");
-  expect(composeNudge(200_000, 150_000, 150_000)).toContain("200k tokens");
+  expect(composeNudge(80_000, 0, 80_000)).toContain("80k tokens");
+  expect(composeNudge(80_000, 0, 80_000)).toContain("/handoff");
+  expect(composeNudge(130_000, 80_000, 80_000)).toContain("130k tokens");
 });
 
 function createSession(contextTokens: number) {
@@ -279,6 +279,23 @@ test("a large context shows the user a nudge once", () => {
   const secondOutput = recordSession(event, userHome, new Date());
   expect(secondOutput?.systemMessage).toStartWith("Context 160k.");
   expect(secondOutput?.systemMessage).not.toContain("/handoff");
+});
+
+test("the default threshold nudges at 80,000 tokens, not before", () => {
+  const belowThreshold = createSession(79_999);
+  const belowOutput = recordSession(
+    belowThreshold.event,
+    belowThreshold.userHome,
+    new Date()
+  );
+  expect(belowOutput?.systemMessage).not.toContain("/handoff");
+  const atThreshold = createSession(80_000);
+  const atOutput = recordSession(
+    atThreshold.event,
+    atThreshold.userHome,
+    new Date()
+  );
+  expect(atOutput?.systemMessage).toContain("80k tokens");
 });
 
 test("a session with no subagents leaves them out of the summary", () => {

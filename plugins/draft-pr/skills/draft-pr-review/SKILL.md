@@ -31,7 +31,7 @@ Stop, and say why in one line, when there is no PR.
 - `gh pr view <number> --json title,body,author,baseRefName,headRefName,headRefOid,files`
 - `gh pr diff <number>`
 - The code around each change. When `git rev-parse HEAD` equals `headRefOid`, read the files in the working tree. Otherwise read a file at the PR's head with `gh api "repos/{owner}/{repo}/contents/<path>?ref=<headRefOid>" -H "Accept: application/vnd.github.raw"`.
-- The project's rules: `CLAUDE.md`, `CONTRIBUTING.md` and the linter config, where they exist.
+- The project's rules: `CONTRIBUTING.md` and the linter config, where they exist, and `CLAUDE.md` only when it is not already in your context.
 
 ## 3. Review
 

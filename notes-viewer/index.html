@@ -2175,6 +2175,7 @@
             ["/api/sections", "/api/tokens"].map(async (url) => (await fetch(url)).json())
           );
           sections = [...noteSections, tokenSection];
+          noteSections.forEach((section) => section.entries.forEach((entry) => (entry.groupTitle ??= entry.group)));
           if (selectedProject !== "" && !listProjects(sections).includes(selectedProject)) {
             selectedProject = "";
             saveSelectedProject();

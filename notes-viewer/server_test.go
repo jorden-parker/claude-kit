@@ -208,7 +208,7 @@ func TestPageHasCollapsibleGroupsFilterAndSections(t *testing.T) {
 	seedNotes(t)
 
 	page := requestPage("localhost:4000", "/").Body.String()
-	for _, expected := range []string{"claude-notes:collapsed", "entry-section", "entry-created", `"note-filter"`} {
+	for _, expected := range []string{"claude-notes:collapsed", "entry-section", "entry-created", `"note-filter"`, "entry.groupTitle ??= entry.group"} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("page is missing %q", expected)
 		}

@@ -208,13 +208,16 @@ func TestPageHasCollapsibleGroupsFilterAndSections(t *testing.T) {
 	seedNotes(t)
 
 	page := requestPage("localhost:4000", "/").Body.String()
-	for _, expected := range []string{"claude-notes:collapsed", "entry-section", `"note-filter"`} {
+	for _, expected := range []string{"claude-notes:collapsed", "entry-section", "entry-created", `"note-filter"`} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("page is missing %q", expected)
 		}
 	}
 	if strings.Contains(page, "entry-title-toggle") {
 		t.Error("the page still has a collapse toggle on the note title")
+	}
+	if strings.Contains(page, "entry-details") {
+		t.Error("the page still renders detail pills")
 	}
 }
 
@@ -545,8 +548,11 @@ func TestAHandoffTopicFolderThatIsNotARepositoryIsListedAndItsNoteIsServed(t *te
 	topicHandoff := "---\ntitle: Compare the vendors\nproject: research\ncreated: 2026-11-18T09:00:00.000Z\ncwd: /Users/me/notes\ntopic: research\n---\n\nThe shortlist is ready.\n"
 	writeNoteFile(t, "handoffs/research/001-compare-the-vendors.md", topicHandoff)
 
+	writeNoteFile(t, "project-notes/claude-kit/api-cleanup/2026-11-14-trim-the-routes.md", "---\ntitle: Trim the routes\n---\n\nA note.\n")
+
 	var topicEntry *entryView
-	handoffs := loadSections()[0]
+	sections := loadSections()
+	handoffs := sections[0]
 	for index := range handoffs.Entries {
 		if handoffs.Entries[index].Project == "research" {
 			topicEntry = &handoffs.Entries[index]
@@ -557,5 +563,29 @@ func TestAHandoffTopicFolderThatIsNotARepositoryIsListedAndItsNoteIsServed(t *te
 	}
 	if topicEntry.Title != "Compare the Vendors" || topicEntry.Source != topicHandoff || !strings.Contains(topicEntry.Html, "The shortlist is ready.") {
 		t.Fatalf("entry was %+v", topicEntry)
+	}
+	groupTitle := ""
+	for _, groupedEntry := range sections[1].Entries {
+		if groupedEntry.Group == "api-cleanup" {
+			groupTitle = groupedEntry.GroupTitle
+		}
+	}
+	if groupTitle != "API Cleanup" {
+		t.Errorf("group title was %q, want %q", groupTitle, "API Cleanup")
+	}
+}
+
+func TestFormatGroupTitle(t *testing.T) {
+	for _, testCase := range []struct{ group, want string }{
+		{"api-cleanup", "API Cleanup"},
+		{"finding", "Finding"},
+		{"add-the-viewer", "Add the Viewer"},
+		{"v2-migration", "V2 Migration"},
+		{"plan-2026-11-16-1333", "plan-2026-11-16-1333"},
+		{"", ""},
+	} {
+		if got := formatGroupTitle(testCase.group); got != testCase.want {
+			t.Errorf("formatGroupTitle(%q) = %q, want %q", testCase.group, got, testCase.want)
+		}
 	}
 }

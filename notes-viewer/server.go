@@ -59,16 +59,17 @@ var sectionLayouts = []sectionLayout{
 }
 
 type entryView struct {
-	Section string            `json:"section"`
-	Project string            `json:"project"`
-	Group   string            `json:"group"`
-	Name    string            `json:"name"`
-	Title   string            `json:"title"`
-	Created string            `json:"created"`
-	Fields  map[string]string `json:"fields"`
-	Path    string            `json:"path"`
-	Html    string            `json:"html"`
-	Source  string            `json:"source"`
+	Section    string            `json:"section"`
+	Project    string            `json:"project"`
+	Group      string            `json:"group"`
+	GroupTitle string            `json:"groupTitle"`
+	Name       string            `json:"name"`
+	Title      string            `json:"title"`
+	Created    string            `json:"created"`
+	Fields     map[string]string `json:"fields"`
+	Path       string            `json:"path"`
+	Html       string            `json:"html"`
+	Source     string            `json:"source"`
 }
 
 type sectionView struct {
@@ -175,16 +176,17 @@ func readEntry(layout sectionLayout, sectionRoot string, entryPath string) (entr
 		group = segments[layout.GroupSegment]
 	}
 	return entryView{
-		Section: layout.Identifier,
-		Project: segments[0],
-		Group:   group,
-		Name:    entryName,
-		Title:   toTitleCase(readField(fields, "title", entryName)),
-		Created: readField(fields, "created", datePrefixPattern.FindString(entryName)),
-		Fields:  fields,
-		Path:    strings.Join(segments, "/"),
-		Html:    renderMarkdown(body),
-		Source:  string(text),
+		Section:    layout.Identifier,
+		Project:    segments[0],
+		Group:      group,
+		GroupTitle: formatGroupTitle(group),
+		Name:       entryName,
+		Title:      toTitleCase(readField(fields, "title", entryName)),
+		Created:    readField(fields, "created", datePrefixPattern.FindString(entryName)),
+		Fields:     fields,
+		Path:       strings.Join(segments, "/"),
+		Html:       renderMarkdown(body),
+		Source:     string(text),
 	}, true
 }
 
@@ -571,6 +573,15 @@ func capitalizeTitleWord(word string, canLowerSmallWord bool) string {
 	}
 	runes[0] = unicode.ToUpper(runes[0])
 	return string(runes)
+}
+
+var numericPiecePattern = regexp.MustCompile(`(^|-)\d+(-|$)`)
+
+func formatGroupTitle(group string) string {
+	if numericPiecePattern.MatchString(group) {
+		return group
+	}
+	return toTitleCase(strings.ReplaceAll(group, "-", " "))
 }
 
 func toTitleCase(title string) string {

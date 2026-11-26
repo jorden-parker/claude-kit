@@ -584,31 +584,14 @@
           min-height: 44px;
         }
       }
-      .entry-details {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin: 16px 0 40px;
+      .entry-created {
+        display: block;
+        margin: 8px 0 40px;
         padding: 0 0 24px;
-        list-style: none;
         border-bottom: 1px solid var(--border);
         font-size: 12px;
         line-height: 1.5;
         color: var(--muted);
-      }
-      .entry-details li {
-        max-width: 100%;
-        padding: 2px 8px;
-        border: 1px solid transparent;
-        border-radius: 999px;
-        background: var(--surface);
-        color: var(--text-soft);
-        font-size: 12px;
-        font-weight: 500;
-        overflow-wrap: anywhere;
-      }
-      .entry-details .literal {
-        font-family: var(--mono);
       }
       .empty {
         max-width: 440px;
@@ -1749,10 +1732,6 @@
           )
           .join(" ");
 
-      const formatGroupName = (group) => (/\d/.test(group) ? group : formatProjectName(group));
-
-      const createLiteral = (text) => createElement("span", text, "literal");
-
       const formatEntryTitle = (section, entry) =>
         section.id === "tokens" ? formatProjectName(entry.title) : formatDisplayName(entry.title);
 
@@ -1769,9 +1748,6 @@
       const listGroupEntries = (section, memberEntry) =>
         section.entries.filter((entry) => entry.project === memberEntry.project && entry.group === memberEntry.group);
 
-      const readDependency = (entry) =>
-        entry.fields.depends_on && entry.fields.depends_on !== "none" && `Needs Plan ${entry.fields.depends_on}`;
-
       const describeCount = (count, noun) => `${Number(count).toLocaleString()} ${noun}${Number(count) === 1 ? "" : "s"}`;
 
       const PLAN_VIEW = {
@@ -1782,22 +1758,16 @@
           status: readStatus(entry),
         }),
         hasProgress: true,
-        listDetails: (entry) => [formatGroupName(entry.group), `Plan ${readOrder(entry)}`, formatFixedLabel(readKind(entry)), formatFixedLabel(readStatus(entry)), readDependency(entry)],
       };
 
       const SECTION_VIEWS = {
         handoffs: {
           noun: "handoff",
           describeLink: (entry) => ({ label: entry.title }),
-          listDetails: (entry) => [
-            entry.fields.focus && `Focus: ${entry.fields.focus}`,
-            /^\d/.test(entry.name) && createLiteral(`/handoff resume ${parseInt(entry.name, 10)}`),
-          ],
         },
         "project-notes": {
           noun: "note",
           describeLink: (entry) => ({ label: entry.title }),
-          listDetails: (entry) => [formatGroupName(entry.group)],
         },
         "small-plans": { ...PLAN_VIEW, hasEditableSets: true },
         brainstorm: { ...PLAN_VIEW, deleteWarning: "Its step files go with it." },
@@ -1808,7 +1778,6 @@
             label: formatProjectName(entry.title),
             caption: `${describeCount(Number(entry.fields.total_tokens), "token")} · ${describeCount(entry.fields.sessions, "session")}`,
           }),
-          listDetails: (entry) => [describeCount(entry.fields.sessions, "session")],
         },
       };
 
@@ -1938,12 +1907,12 @@
         const groupHeading = createElement("div", "", "group-heading");
         groupHeading.dataset.project = buildProjectKey(section, entry);
         groupHeading.dataset.depth = selectedProject === "" ? "1" : "0";
-        groupHeading.append(createCollapseHeading("h3", entry.group, buildGroupKey(section, entry)));
+        groupHeading.append(createCollapseHeading("h3", entry.groupTitle, buildGroupKey(section, entry)));
         if (view.hasEditableSets) {
           const actions = createElement("div", "", "group-actions");
           actions.append(
-            createIconButton(`Add a plan to ${entry.group}`, "plus", "add", () => openAddPlan(section, entry)),
-            createIconButton(`Delete set ${entry.group}`, "trash", "delete", () => deleteGroup(section, entry))
+            createIconButton(`Add a plan to ${entry.groupTitle}`, "plus", "add", () => openAddPlan(section, entry)),
+            createIconButton(`Delete set ${entry.groupTitle}`, "trash", "delete", () => deleteGroup(section, entry))
           );
           groupHeading.append(actions);
         }
@@ -2046,18 +2015,10 @@
         sidebar.scrollTop = scrollPosition;
       };
 
-      const createDetailList = (selectedSection, selectedEntry) => {
-        const detailList = createElement("ul", "", "entry-details");
-        detailList.setAttribute("aria-label", "Note details");
-        [
-          formatProjectName(selectedEntry.project),
-          ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
-          formatCreated(selectedEntry.created),
-          selectedSection.id === "tokens" ? formatProjectName(selectedEntry.path) : createLiteral(selectedEntry.path),
-        ]
-          .filter(Boolean)
-          .forEach((detail) => detailList.appendChild(createElement("li", "")).append(detail));
-        return detailList;
+      const createCreatedLine = (selectedEntry) => {
+        const createdLine = createElement("time", formatCreated(selectedEntry.created) || "", "entry-created");
+        if (selectedEntry.created) createdLine.dateTime = selectedEntry.created;
+        return createdLine;
       };
 
       const createEmptyState = (sectionId) => {
@@ -2181,7 +2142,7 @@
         body.innerHTML = selectedEntry.html;
         body.querySelectorAll("input[type=checkbox]").forEach((checkbox) => (checkbox.disabled = true));
         const header = createEntryHeader(selectedSection, selectedEntry);
-        const detailList = createDetailList(selectedSection, selectedEntry);
+        const createdLine = createCreatedLine(selectedEntry);
         assignHeadingIds(body);
         wrapEntrySections(body);
         const contents = createContents(body);
@@ -2197,7 +2158,7 @@
           );
           header.querySelector(".entry-actions").prepend(toggleAll);
         }
-        article.append(header, detailList, ...(contents ? [contents] : []), body);
+        article.append(header, createdLine, ...(contents ? [contents] : []), body);
         entryArea.replaceChildren(article);
       };
 
@@ -2378,7 +2339,7 @@
       const deleteGroup = async (section, memberEntry) => {
         const planCount = listGroupEntries(section, memberEntry).length;
         const isConfirmed = await askToConfirm({
-          title: `Delete the set “${memberEntry.group}”?`,
+          title: `Delete the set “${memberEntry.groupTitle}”?`,
           message: `${planCount === 1 ? "The only plan" : `All ${planCount} plans`} in this set will be deleted for good. No undo, no take-backsies.`,
           confirmLabel: `Delete ${planCount} ${planCount === 1 ? "Plan" : "Plans"}`,
         });
@@ -2445,7 +2406,7 @@
         addPlanTarget = { section, memberEntry };
         addPlanForm.reset();
         addPlanDialog.querySelector("#add-plan-error").hidden = true;
-        addPlanDialog.querySelector("#add-plan-set").textContent = `It joins the set ${memberEntry.group} as the next plan in line.`;
+        addPlanDialog.querySelector("#add-plan-set").textContent = `It joins the set ${memberEntry.groupTitle} as the next plan in line.`;
         addPlanDialog.showModal();
         addPlanDialog.querySelector("#plan-title").focus();
       };

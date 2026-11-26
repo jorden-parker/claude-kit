@@ -1,6 +1,6 @@
 {
   "name": "small-plans",
-  "version": "0.5.1",
+  "version": "0.26.0",
   "scripts": {
     "test": "claude plugin test .",
     "typecheck": "tsc -p ."

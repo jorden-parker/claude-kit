@@ -8,7 +8,7 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/small-plans <work to plan>`               | Plans the work you name                                                                                                                           |
 | `/small-plans`                              | Plans the work this conversation still leaves to do                                                                                               |
-| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`                                                         |
+| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the list, or handoff `<id>`                                                                |
 | `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, a Sonnet reviewer reviews and sends back fixes                                                  |
 | `/small-plans rename [set] [new name]`      | Gives a saved set a new name; its date or handoff prefix stays. Leave out the name, or both, and Claude finds the set and names it from its plans |
 | `/small-plans board`                        | Shows the build board again after you hide it                                                                                                     |
@@ -81,7 +81,7 @@ The files are plain Markdown: edit, move or delete them with any tool. The claud
 
 ## Build
 
-`/small-plans build` lists this project's four newest sets that still have a plan not done (sets whose plans are all done are left out) and asks which to build (type a name under "Other" for an older set; with one set it skips the question). It then asks whether to build the whole set or one plan of it, listing the plans that are not done (type an order under "Other" for one not listed; with one plan left it skips the question).
+`/small-plans build` lists this project's sets, newest first, that still have a plan not done (sets whose plans are all done are left out) and asks which to build (three at a time, with an "N more…" option for the rest; with one set it skips the question). It then asks whether to build the whole set or one plan of it, listing the plans that are not done (three at a time, with an "N more…" option for the rest; with one plan left it skips the question).
 
 - `/small-plans build <text>` picks the newest set whose name holds that text (`build fix-login`, `build 007`)
 - `/small-plans build <text> <order>` builds that one plan without asking (`build fix-login 2`)

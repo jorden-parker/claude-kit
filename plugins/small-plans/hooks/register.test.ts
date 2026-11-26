@@ -2261,3 +2261,94 @@ test("a report from another subagent type is delivered unchanged", async ($, on)
   expect(reply.text).toBe(text);
   expect(files.has(REVIEW_FINDINGS)).toBe(false);
 });
+
+const SIX_PLAN_SET = Object.fromEntries(
+  ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"].map(
+    (word, index) => [
+      `${SET_FOLDER}/0${index + 1}-${word}.md`,
+      "status: pending",
+    ]
+  )
+);
+
+test("/small-plans build pages the plan picker so no plan is dropped", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, "4 more…", "5 · Echo");
+  const { submittedPrompts } = await runCommand($, on, "build", SIX_PLAN_SET);
+
+  expect(askedLabels([askedQuestions[0] as AskedQuestion])).toEqual([
+    "Whole set",
+    "1 · Alpha",
+    "2 · Bravo",
+    "4 more…",
+  ]);
+  expect(askedLabels([askedQuestions[1] as AskedQuestion])).toEqual([
+    "3 · Charlie",
+    "4 · Delta",
+    "5 · Echo",
+    "6 · Foxtrot",
+  ]);
+  expect(submittedPrompts[0]).toContain(
+    `Build only the plan at ${SET_FOLDER}/05-echo.md.`
+  );
+});
+
+test("/small-plans build pages the set picker so no set is dropped", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  await runCommand(
+    $,
+    on,
+    "build",
+    Object.fromEntries(
+      [21, 22, 23, 24, 25].map((day) => [
+        `${PROJECT_FOLDER}/2026-11-${day}-1000-set-${day}/01-alpha.md`,
+        "status: pending",
+      ])
+    )
+  );
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "Set 25 · Nov 25, 10:00",
+    "Set 24 · Nov 24, 10:00",
+    "Set 23 · Nov 23, 10:00",
+    "2 more…",
+  ]);
+});
+
+test("/small-plans build lists plans in numeric order", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  await runCommand($, on, "build", {
+    [`${SET_FOLDER}/10-tenth-thing.md`]: "status: pending",
+    [`${SET_FOLDER}/2-second-thing.md`]: "status: pending",
+  });
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "Whole set",
+    "2 · Second Thing",
+    "10 · Tenth Thing",
+  ]);
+});
+
+test("/small-plans build restores apostrophes lost in slugs", async ($, on) => {
+  const planAsk = answerAskUserQuestion(on);
+  await runCommand($, on, "build", {
+    [`${PROJECT_FOLDER}/2026-11-20-1100-don-t-hide-the-ai-s-reason/01-show-the-ai-s-reason.md`]:
+      "status: pending",
+    [`${PROJECT_FOLDER}/2026-11-20-1100-don-t-hide-the-ai-s-reason/02-other.md`]:
+      "status: pending",
+  });
+
+  expect(askedLabels(planAsk)).toContain("1 · Show the AI's Reason");
+});
+
+test("/small-plans build labels a set with apostrophes restored", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  await runCommand($, on, "build", {
+    [`${PROJECT_FOLDER}/2026-11-20-1100-don-t-hide-the-ai-s-reason/01-a.md`]:
+      "status: pending",
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(askedLabels(askedQuestions)).toContain(
+    "Don't Hide the AI's Reason · Nov 20, 11:00"
+  );
+});

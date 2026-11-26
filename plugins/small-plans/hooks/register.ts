@@ -798,7 +798,11 @@ const composeIndexRow = (planName: string, planText: string) => {
 const readSetPlans = async (engine: EngineInterface, setFolder: string) => {
   const planNames = (await listNames(engine, setFolder))
     .filter((name) => NUMBERED_MARKDOWN_FILE.test(name))
-    .sort();
+    .sort(
+      (first, second) =>
+        parseInt(first, 10) - parseInt(second, 10) ||
+        first.localeCompare(second)
+    );
   const planTexts = await Promise.all(
     planNames.map(async (name) =>
       String(await engine.fs.read(`${setFolder}/${name}`).catch(() => ""))
@@ -1657,16 +1661,25 @@ const SMALL_WORDS = new Set([
 ]);
 
 const toTitleCase = (slug: string) => {
-  const words = slug.replace(/[-_]+/g, " ").trim().split(/\s+/);
+  const words = slug
+    .replace(/([a-z0-9])[-_]+s(?![a-z0-9])/gi, "$1's")
+    .replace(/n[-_]+t(?![a-z0-9])/gi, "n't")
+    .replace(/[-_]+/g, " ")
+    .trim()
+    .split(/\s+/);
   return words
-    .map((word, index) => {
+    .map((fullWord, index) => {
+      const apostropheAt = fullWord.indexOf("'");
+      const word =
+        apostropheAt < 0 ? fullWord : fullWord.slice(0, apostropheAt);
+      const ending = apostropheAt < 0 ? "" : fullWord.slice(apostropheAt);
       const lower = word.toLowerCase();
       if (ACRONYMS.has(lower))
-        return lower === "ios" ? "iOS" : word.toUpperCase();
-      if (/[A-Z]/.test(word.slice(1))) return word;
+        return (lower === "ios" ? "iOS" : word.toUpperCase()) + ending;
+      if (/[A-Z]/.test(word.slice(1))) return fullWord;
       if (SMALL_WORDS.has(lower) && index > 0 && index < words.length - 1)
-        return lower;
-      return word.charAt(0).toUpperCase() + word.slice(1);
+        return lower + ending;
+      return word.charAt(0).toUpperCase() + word.slice(1) + ending;
     })
     .join(" ");
 };
@@ -1689,16 +1702,27 @@ const pickFromList = async (
   engine: EngineInterface,
   question: string,
   header: string,
-  namesNewestFirst: string[],
+  names: string[],
   labelName: (name: string) => string
-) => {
-  const askedNames = namesNewestFirst.slice(0, MAX_ASKED_OPTIONS);
+): Promise<string | undefined> => {
+  const isPaged = names.length > MAX_ASKED_OPTIONS;
+  const askedNames = isPaged ? names.slice(0, MAX_ASKED_OPTIONS - 1) : names;
+  const remainingNames = names.slice(askedNames.length);
+  const moreLabel = `${remainingNames.length} more…`;
   try {
     const answer = await engine.ui.ask(question, {
       header,
-      options: askedNames.map(labelName),
+      options: [...askedNames.map(labelName), ...(isPaged ? [moreLabel] : [])],
     });
-    return askedNames.find((name) => labelName(name) === answer) ?? answer;
+    if (isPaged && answer === moreLabel)
+      return await pickFromList(
+        engine,
+        question,
+        header,
+        remainingNames,
+        labelName
+      );
+    return names.find((name) => labelName(name) === answer) ?? answer;
   } catch {
     return undefined;
   }

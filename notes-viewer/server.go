@@ -53,9 +53,9 @@ type sectionLayout struct {
 
 var sectionLayouts = []sectionLayout{
 	{Identifier: "handoffs", Title: "Handoffs", RootVariable: "HANDOFFS_DIR", EntryPattern: "*/*.md", IsNewestEntryFirst: true},
-	{Identifier: "project-notes", Title: "Project notes", RootVariable: "PROJECT_NOTES_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestEntryFirst: true},
-	{Identifier: "small-plans", Title: "Small plans", RootVariable: "SMALL_PLANS_DIR", HomeFolder: ".local/share/small-plans", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true, HasEditableSets: true},
-	{Identifier: "brainstorm", Title: "Brainstorm plans", RootVariable: "BRAINSTORM_DIR", EntryPattern: "*/plans/*/*/plan.md", GroupSegment: 2, HasEntryFolder: true, IsNewestGroupFirst: true},
+	{Identifier: "project-notes", Title: "Project Notes", RootVariable: "PROJECT_NOTES_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestEntryFirst: true},
+	{Identifier: "small-plans", Title: "Small Plans", RootVariable: "SMALL_PLANS_DIR", HomeFolder: ".local/share/small-plans", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true, HasEditableSets: true},
+	{Identifier: "brainstorm", Title: "Brainstorm Plans", RootVariable: "BRAINSTORM_DIR", EntryPattern: "*/plans/*/*/plan.md", GroupSegment: 2, HasEntryFolder: true, IsNewestGroupFirst: true},
 }
 
 type entryView struct {

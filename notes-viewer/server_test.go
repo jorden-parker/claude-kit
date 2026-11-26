@@ -84,7 +84,7 @@ func TestSectionsAreHandoffsThenProjectNotesThenSmallPlans(t *testing.T) {
 	for _, section := range loadSections() {
 		titles = append(titles, section.Identifier+"="+section.Title)
 	}
-	if strings.Join(titles, ",") != "handoffs=Handoffs,project-notes=Project notes,small-plans=Small plans,brainstorm=Brainstorm plans" {
+	if strings.Join(titles, ",") != "handoffs=Handoffs,project-notes=Project Notes,small-plans=Small Plans,brainstorm=Brainstorm Plans" {
 		t.Fatalf("sections were %v", titles)
 	}
 }
@@ -215,6 +215,54 @@ func TestPageHasCollapsibleGroupsFilterAndSections(t *testing.T) {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("page is missing %q", expected)
 		}
+	}
+}
+
+func TestPageHasSidebarToggleAndNoGreeting(t *testing.T) {
+	seedNotes(t)
+
+	page := requestPage("localhost:4000", "/").Body.String()
+	for _, expected := range []string{"claude-notes:sidebar", `id="sidebar-open"`, "sidebar-toggle"} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("page is missing %q", expected)
+		}
+	}
+	if strings.Contains(page, "greetByHour") {
+		t.Fatal("page still greets by the hour")
+	}
+}
+
+func TestPageKeepsContentsVisible(t *testing.T) {
+	seedNotes(t)
+
+	page := requestPage("localhost:4000", "/").Body.String()
+	if !strings.Contains(page, "@container note") {
+		t.Fatal("page has no note container query for the contents list")
+	}
+	for _, forbidden := range []string{"min-width: 1420px", "wideScreen"} {
+		if strings.Contains(page, forbidden) {
+			t.Fatalf("page still has %q", forbidden)
+		}
+	}
+}
+
+func TestPageHasProjectSwitcherAndStatusDots(t *testing.T) {
+	seedNotes(t)
+
+	page := requestPage("localhost:4000", "/").Body.String()
+	for _, expected := range []string{"claude-notes:project", "project-switcher", "status-dot", "progress-count"} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("page is missing %q", expected)
+		}
+	}
+}
+
+func TestPageFormatsProjectNamesAndKinds(t *testing.T) {
+	seedNotes(t)
+
+	page := requestPage("localhost:4000", "/").Body.String()
+	if !strings.Contains(page, "formatProjectName") {
+		t.Fatal("page is missing formatProjectName")
 	}
 }
 

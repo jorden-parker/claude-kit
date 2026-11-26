@@ -13,65 +13,6 @@
       href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
     />
     <style>
-      :root {
-        --background: #ffffff;
-        --sidebar: #fafafa;
-        --surface: #f2f2f2;
-        --hover: #ebebeb;
-        --selected: #e6e6e6;
-        --text: #0a0a0a;
-        --text-soft: #262626;
-        --muted: #666666;
-        --border: #ebebeb;
-        --border-strong: #d4d4d4;
-        --dot: #d9d9d9;
-        --accent: #0068d6;
-        --focus: #0068d6;
-        --danger: #c50f1f;
-        --danger-hover: #a30d1a;
-        --on-danger: #ffffff;
-        --primary: #0a0a0a;
-        --on-primary: #ffffff;
-        --done: #107d32;
-        --in-progress: #a35200;
-        --pending: #737373;
-        --blocked: #c50f1f;
-        --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.08);
-        --radius: 8px;
-        --sidebar-width: 312px;
-        --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-        --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-        color-scheme: light;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --background: #0a0a0a;
-          --sidebar: #000000;
-          --surface: #1a1a1a;
-          --hover: #1f1f1f;
-          --selected: #262626;
-          --text: #ededed;
-          --text-soft: #d4d4d4;
-          --muted: #a1a1a1;
-          --border: #262626;
-          --border-strong: #3d3d3d;
-          --dot: #2a2a2a;
-          --accent: #52a8ff;
-          --focus: #52a8ff;
-          --danger: #ff6369;
-          --danger-hover: #ff8589;
-          --on-danger: #0a0a0a;
-          --primary: #ededed;
-          --on-primary: #0a0a0a;
-          --done: #45dd7f;
-          --in-progress: #ffb224;
-          --pending: #a1a1a1;
-          --blocked: #ff6369;
-          --shadow: 0 0 0 1px #262626, 0 8px 32px rgb(0 0 0 / 0.6);
-          color-scheme: dark;
-        }
-      }
       * {
         box-sizing: border-box;
       }
@@ -148,7 +89,7 @@
       .brand {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         font-size: 15px;
         font-weight: 600;
         letter-spacing: -0.02em;
@@ -162,19 +103,19 @@
         one hover / selected / focus treatment shared by every row.
       */
       nav {
-        --row: 36px;
+        --row: 28px;
+        --top-row: 32px;
         --step: 16px;
-        --inset: 10px;
+        --inset: 8px;
         --chevron: 16px;
         --gap: 4px;
-        --text-x: calc(var(--inset) + var(--chevron) + var(--gap));
-        --line-x: calc(var(--inset) + var(--chevron) / 2);
         grid-area: sidebar;
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: none;
-        scroll-padding-top: 280px;
-        padding: 0 8px calc(16px + env(safe-area-inset-bottom));
+        /* sticky top block (45px plus eight rows) plus 8px */
+        scroll-padding-top: calc(var(--top-row) * 8 + 53px);
+        padding: 0 7px calc(16px + env(safe-area-inset-bottom));
         padding-left: max(8px, env(safe-area-inset-left));
         background: var(--sidebar);
         border-right: 1px solid var(--border);
@@ -189,31 +130,32 @@
         display: none;
       }
       .sidebar-top {
+        --row: var(--top-row);
         position: sticky;
         top: 0;
         z-index: 2;
-        margin: 0 -8px;
-        padding: 0 8px 12px;
+        display: grid;
+        gap: 8px;
+        margin: 0 -7px 8px -8px;
+        padding: 12px 7px 8px 8px;
         background: var(--sidebar);
         border-bottom: 1px solid var(--border);
+        box-shadow: 0 8px 0 var(--sidebar);
       }
       .sidebar-header {
-        padding: 16px var(--inset) 8px;
-      }
-      .greeting {
-        margin: 0 0 0 32px;
-        font-size: 12px;
-        line-height: 16px;
-        color: var(--muted);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: var(--row);
+        padding: 0 0 0 var(--inset);
       }
       .filter-field {
         position: relative;
-        margin-top: 8px;
       }
       .filter-field::before {
         content: "";
         position: absolute;
-        left: 12px;
+        left: 8px;
         top: 50%;
         width: 16px;
         height: 16px;
@@ -231,7 +173,7 @@
         border-radius: var(--radius);
         background-color: transparent;
         background-clip: padding-box;
-        color: var(--text-soft);
+        color: var(--text);
         text-decoration: none;
         touch-action: manipulation;
         transition:
@@ -247,6 +189,10 @@
         background-color: var(--selected);
         color: var(--text);
         font-weight: 500;
+      }
+      nav a,
+      nav .collapse-toggle {
+        border: 0;
       }
       nav a:focus-visible,
       .collapse-toggle:focus-visible {
@@ -278,7 +224,7 @@
         justify-content: space-between;
         align-items: center;
         gap: 8px;
-        padding: 6px 8px;
+        padding: calc((var(--row) - 20px) / 2) 8px;
         font-size: 14px;
         line-height: 20px;
         font-weight: 500;
@@ -291,27 +237,14 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        margin-top: 4px;
+        margin: 0;
       }
-      .project-heading {
-        margin-top: 8px;
-      }
-      .group-heading:not(.project-heading) {
+      .group-heading[data-depth="1"] {
         --indent: var(--step);
-      }
-      .group-heading:not(.project-heading)::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: var(--line-x);
-        width: 1px;
-        background: var(--border-strong);
-        pointer-events: none;
       }
       .group-heading > h2,
       .group-heading > h3 {
-        flex: 1 0 100%;
+        flex: 1 1 0;
         min-width: 0;
         margin: 0;
         font-family: var(--sans);
@@ -351,6 +284,7 @@
       }
       .collapse-toggle svg {
         flex: none;
+        margin-left: -4px;
         width: var(--chevron);
         height: var(--chevron);
         color: var(--muted);
@@ -363,8 +297,8 @@
       /* row actions overlay the count while the heading is hovered or focused */
       .group-actions {
         position: absolute;
-        top: 2px;
-        right: 4px;
+        top: 0;
+        right: 0;
         display: flex;
         gap: 2px;
       }
@@ -377,33 +311,49 @@
         .group-heading:focus-within .group-actions {
           opacity: 1;
         }
-        .group-heading:hover .count,
-        .group-heading:focus-within .count {
+        .group-heading:has(.group-actions):hover .progress-count,
+        .group-heading:has(.group-actions):focus-within .progress-count {
           opacity: 0;
         }
       }
       @media (pointer: coarse) {
         .group-actions {
-          top: -4px;
+          top: 0;
           right: 0;
         }
-        .group-heading:has(.group-actions) .count {
+        .group-heading:has(.group-actions) .progress-count {
           margin-right: 44px;
         }
-        .group-heading:has(.icon-button + .icon-button) .count {
-          margin-right: 92px;
+        .group-heading:has(.icon-button + .icon-button) .progress-count {
+          margin-right: 88px;
+        }
+        .group-heading:has(.group-actions) .collapse-toggle {
+          padding-right: 92px;
+        }
+        .group-heading:has(.icon-button + .icon-button) .collapse-toggle {
+          padding-right: 136px;
+        }
+        .project-heading .collapse-toggle {
+          padding-right: 44px;
         }
       }
-      .progress {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex: 1 0 100%;
-        padding: 0 8px 4px calc(var(--text-x) + var(--indent) - 2px);
+      .progress-count {
+        position: absolute;
+        top: 50%;
+        right: 8px;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-family: var(--mono);
         font-size: 12px;
         line-height: 16px;
         color: var(--muted);
         font-variant-numeric: tabular-nums;
+      }
+      .group-heading:has(.progress-count) .collapse-toggle {
+        padding-right: 48px;
+      }
+      .progress-count[data-complete] {
+        color: var(--done);
       }
       .progress-bar {
         flex: 1;
@@ -426,41 +376,24 @@
         width: 100%;
         margin-top: 4px;
       }
-      .progress[data-complete] {
-        color: var(--done);
-      }
 
       /* note links: title on one truncated line, optional muted caption under it */
       nav a[data-depth] {
         position: relative;
         display: block;
         min-width: 0;
-        padding: 6px 8px;
+        padding: calc((var(--row) - 20px) / 2) 8px;
         font-size: 13px;
         line-height: 20px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      /* tree guide lines are background layers so they run through the transparent border and overflow clipping */
-      nav a[data-depth="1"],
-      nav a[data-depth="2"] {
-        --guide: linear-gradient(var(--border-strong), var(--border-strong));
-        background-repeat: no-repeat;
-        background-size: 1px 100%;
-        background-origin: border-box;
-      }
       nav a[data-depth="1"] {
-        padding-left: calc(var(--text-x) - 2px);
-        background-image: var(--guide);
-        background-position: var(--line-x) 0;
-        background-clip: border-box, padding-box;
+        padding-left: calc(var(--inset) + var(--step));
       }
       nav a[data-depth="2"] {
-        padding-left: calc(var(--text-x) + var(--step) - 2px);
-        background-image: var(--guide), var(--guide);
-        background-position: var(--line-x) 0, calc(var(--line-x) + var(--step)) 0;
-        background-clip: border-box, border-box, padding-box;
+        padding-left: calc(var(--inset) + var(--step) * 2);
       }
       nav a small {
         display: block;
@@ -470,31 +403,37 @@
         line-height: 16px;
         color: var(--muted);
       }
-      nav a[data-status] small::before {
-        content: "";
-        display: inline-block;
+      nav a[data-status] {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .note-title {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .status-dot {
+        flex: none;
         width: 8px;
         height: 8px;
-        margin-right: 6px;
         border-radius: 50%;
-        background: var(--pending);
-        vertical-align: baseline;
+        background: transparent;
+        box-shadow: inset 0 0 0 1.5px var(--pending);
       }
-      nav a[data-status="done"] {
-        color: var(--muted);
-      }
-      nav a[data-status="done"] small::before {
+      nav a[data-status="done"] .status-dot {
         background: var(--done);
+        box-shadow: none;
       }
-      nav a[data-status="in-progress"] small::before {
+      nav a[data-status="in-progress"] .status-dot {
         background: var(--in-progress);
+        box-shadow: none;
         animation: pulse 2s ease-in-out infinite;
       }
-      nav a[data-status="blocked"] small {
-        color: var(--blocked);
-      }
-      nav a[data-status="blocked"] small::before {
+      nav a[data-status="blocked"] .status-dot {
         background: var(--blocked);
+        box-shadow: none;
       }
       @keyframes pulse {
         50% {
@@ -503,9 +442,10 @@
       }
       main {
         grid-area: note;
+        container: note / inline-size;
         overflow-y: auto;
-        padding: 56px 56px 120px;
-        padding-right: max(56px, env(safe-area-inset-right));
+        padding: 64px 64px 64px;
+        padding-right: max(64px, env(safe-area-inset-right));
       }
       main:focus {
         outline: none;
@@ -519,17 +459,6 @@
         line-height: 1.7;
         color: var(--text-soft);
         animation: rise 300ms ease-out;
-      }
-      article::before {
-        content: "";
-        position: absolute;
-        z-index: -1;
-        inset: -56px -40px auto;
-        height: 260px;
-        background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-        background-size: 20px 20px;
-        mask-image: linear-gradient(to bottom, black, transparent);
-        pointer-events: none;
       }
       @keyframes rise {
         from {
@@ -582,7 +511,7 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 6px;
+        gap: 8px;
         min-height: 32px;
         font-size: 14px;
         padding: 0 12px;
@@ -676,8 +605,8 @@
       .entry-details {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        margin: 18px 0 36px;
+        gap: 8px;
+        margin: 16px 0 40px;
         padding: 0 0 24px;
         list-style: none;
         border-bottom: 1px solid var(--border);
@@ -688,9 +617,12 @@
       .entry-details li {
         max-width: 100%;
         padding: 2px 8px;
-        border: 1px solid var(--border);
+        border: 1px solid transparent;
         border-radius: 999px;
-        background: var(--background);
+        background: var(--surface);
+        color: var(--text-soft);
+        font-size: 12px;
+        font-weight: 500;
         overflow-wrap: anywhere;
       }
       .entry-details li:last-child {
@@ -700,7 +632,7 @@
       .empty {
         max-width: 440px;
         margin: 14vh auto 0;
-        padding: 40px 28px;
+        padding: 40px 32px;
         border: 1px dashed var(--border-strong);
         border-radius: var(--kit-radius);
         text-align: center;
@@ -709,13 +641,13 @@
       }
       .empty strong {
         display: block;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
         font-size: 16px;
         color: var(--text);
       }
       .empty-mark {
         display: inline-block;
-        margin-bottom: 14px;
+        margin-bottom: 16px;
         font-size: 28px;
         animation: bob 3s ease-in-out infinite;
       }
@@ -725,7 +657,7 @@
         }
       }
       .toc {
-        margin: 0 0 28px;
+        margin: 0 0 32px;
         padding: 12px 16px;
         border: 1px solid var(--border);
         border-radius: var(--kit-radius);
@@ -744,11 +676,11 @@
         list-style: none;
       }
       .toc .toc-nested {
-        padding-left: 14px;
+        padding-left: 16px;
       }
       .toc a {
         display: block;
-        padding: 3px 0 3px 10px;
+        padding: 4px 0 4px 6px;
         border-left: 2px solid transparent;
         color: var(--muted);
         text-decoration: none;
@@ -764,7 +696,12 @@
         outline: 2px solid var(--primary);
         outline-offset: 1px;
       }
-      @media (min-width: 1420px) {
+      @container note (min-width: 760px) {
+        article {
+          max-width: min(72ch, calc(100% - 200px));
+          margin-left: max(0px, calc((100% - 72ch - 200px) / 2));
+          margin-right: auto;
+        }
         .toc {
           position: absolute;
           top: 0;
@@ -779,6 +716,10 @@
         .toc details,
         .toc details::details-content {
           height: 100%;
+        }
+        .toc details::details-content {
+          content-visibility: visible;
+          display: block;
         }
         .toc summary {
           display: none;
@@ -798,7 +739,7 @@
         margin-top: 0;
       }
       .entry-body :is(h1, h2, h3, h4, h5, h6) {
-        margin: 40px 0 10px;
+        margin: 40px 0 8px;
         line-height: 1.3;
         letter-spacing: -0.02em;
         color: var(--text);
@@ -815,7 +756,7 @@
         line-height: 1.3;
       }
       .entry-section {
-        margin: 32px 0 10px;
+        margin: 40px 0 8px;
       }
       .entry-section > summary {
         list-style: none;
@@ -869,7 +810,7 @@
       }
       .entry-body li:has(> input[type="checkbox"]) {
         list-style: none;
-        margin-left: -22px;
+        margin-left: -24px;
       }
       .entry-body input[type="checkbox"] {
         margin: 0 8px 0 0;
@@ -880,7 +821,7 @@
         color: var(--text);
       }
       .entry-body code {
-        padding: 1px 5px;
+        padding: 2px 4px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--sidebar);
@@ -888,9 +829,9 @@
         font-size: 0.86em;
       }
       .entry-body pre {
-        padding: 16px 18px;
+        padding: 16px;
         border: 1px solid var(--border);
-        border-radius: var(--kit-radius);
+        border-radius: var(--radius);
         background: var(--sidebar);
         overflow-x: auto;
         line-height: 1.55;
@@ -903,13 +844,11 @@
       }
       .entry-body a {
         color: var(--accent);
-        text-decoration: underline;
-        text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
-        text-underline-offset: 3px;
-        transition: text-decoration-color 150ms ease;
+        text-decoration: none;
       }
       .entry-body a:hover {
-        text-decoration-color: currentColor;
+        text-decoration: underline;
+        text-underline-offset: 3px;
       }
       .entry-body blockquote {
         margin-left: 0;
@@ -931,13 +870,15 @@
       }
       .entry-body :is(th, td) {
         padding: 8px 12px;
-        border: 1px solid var(--border);
+        border: 0;
+        border-bottom: 1px solid var(--border);
         text-align: left;
       }
       .entry-body th {
         background: var(--sidebar);
-        color: var(--text);
-        font-weight: 600;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 500;
       }
       .entry-body hr {
         margin: 40px 0;
@@ -950,7 +891,7 @@
       }
       .editor {
         display: grid;
-        gap: 10px;
+        gap: 8px;
       }
       .editor label,
       dialog label {
@@ -981,12 +922,19 @@
         display: block;
         min-height: var(--row, 36px);
         margin-bottom: 0;
-        padding: 0 12px 0 36px;
+        padding: 0 8px 0 32px;
+        border: 1px solid var(--border);
         border-radius: var(--radius);
+        background: var(--background);
         font-size: 14px;
       }
-      .no-matches {
-        margin: 12px var(--inset, 10px);
+      .note-filter:hover {
+        border-color: var(--border-strong);
+      }
+      .no-matches,
+      .no-entries {
+        margin: 0 var(--inset, 8px);
+        line-height: var(--row, 32px);
         font-size: 13px;
         color: var(--muted);
       }
@@ -1027,7 +975,7 @@
         color: var(--muted);
       }
       kbd {
-        padding: 1px 5px;
+        padding: 2px 4px;
         border: 1px solid var(--border-strong);
         border-bottom-width: 2px;
         border-radius: 4px;
@@ -1110,9 +1058,9 @@
       .toast {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         max-width: min(360px, calc(100vw - 32px));
-        padding: 10px 14px;
+        padding: 12px 16px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--background);
@@ -1148,17 +1096,19 @@
         display: none;
       }
       @media (max-width: 960px) {
-        :root {
-          --sidebar-width: 272px;
-        }
         main {
-          padding: 40px 32px 96px;
+          padding: 40px 32px 64px;
         }
       }
       @media (max-width: 720px) {
+        .sidebar-toggle,
+        .sidebar-open {
+          display: none;
+        }
         input,
         textarea,
         .note-filter,
+        .project-switcher,
         .editor input {
           font-size: 16px;
         }
@@ -1206,21 +1156,12 @@
         }
         nav {
           --row: 44px;
-        }
-        nav a,
-        nav a[data-depth] {
-          padding-block: 12px;
-        }
-        .collapse-toggle {
-          min-height: 48px;
+          --top-row: 44px;
         }
         main {
-          padding: 28px 16px 96px;
+          padding: 24px 16px 64px;
           padding-left: max(16px, env(safe-area-inset-left));
           padding-right: max(16px, env(safe-area-inset-right));
-        }
-        article::before {
-          inset: -28px -16px auto;
         }
         .entry-actions {
           width: 100%;
@@ -1277,13 +1218,179 @@
       :hover>.mark:empty,.brand:hover .mark:empty{transform:rotate(-16deg) scale(1.12);border-radius:56% 44% 40% 60%/44% 56% 50% 50%}
       @media (prefers-reduced-motion:reduce){*,::before,::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
       /* Geist pass: page-local overrides. Keep below the kit theme lines so they win the cascade. */
+      body {
+        transition: grid-template-columns 200ms ease;
+      }
+      @media (min-width: 721px) {
+        body[data-sidebar="closed"] {
+          grid-template-columns: 0 minmax(0, 1fr);
+        }
+        body[data-sidebar="closed"] nav {
+          visibility: hidden;
+          overflow: hidden;
+          border-right: 0;
+          padding: 0;
+        }
+      }
+      .sidebar-open {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 5;
+      }
+      .sidebar-open[hidden] {
+        display: none;
+      }
+      .switcher {
+        position: relative;
+        width: 100%;
+        height: var(--row);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--background);
+      }
+      .switcher:hover {
+        border-color: var(--border-strong);
+      }
+      .switcher::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        right: 7px;
+        width: 16px;
+        height: 16px;
+        margin-top: -8px;
+        background: var(--muted);
+        pointer-events: none;
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+      }
+      .project-switcher {
+        width: 100%;
+        height: 100%;
+        padding: 0 28px 0 7px;
+        border: 0;
+        border-radius: var(--radius);
+        appearance: none;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        text-overflow: ellipsis;
+      }
+      .project-switcher:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 1px;
+        box-shadow: none;
+      }
+      @media (pointer: coarse) {
+        nav {
+          --row: 44px;
+          --top-row: 44px;
+        }
+      }
+      /* two-line rows (title + caption + bar) keep their content in a fixed 4px frame */
+      nav a[data-depth]:has(small) {
+        padding-top: 4px;
+        padding-bottom: 4px;
+      }
       :root {
+        --background: #ffffff;
+        --sidebar: #fafafa;
+        --surface: #f2f2f2;
+        --hover: #f2f2f2;
+        --selected: #ebebeb;
+        --text: #171717;
+        --text-soft: #262626;
+        --muted: #666666;
+        --border: #ebebeb;
+        --border-strong: #d4d4d4;
+        --dot: #d9d9d9;
+        --accent: #0068d6;
+        --focus: #0068d6;
+        --danger: #c50f1f;
+        --danger-hover: #a30d1a;
+        --on-danger: #ffffff;
+        --primary: #0a0a0a;
+        --on-primary: #ffffff;
+        --done: #107d32;
+        --in-progress: #a35200;
+        --pending: #737373;
+        --blocked: #c50f1f;
+        --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.08);
         --radius: 6px;
+        --sidebar-width: 256px;
+        --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
         --spring: ease;
-        --selected: color-mix(in srgb, var(--kit-hover) 60%, var(--kit-line-strong));
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #0a0a0a;
+          --sidebar: #000000;
+          --surface: #1a1a1a;
+          --hover: #1a1a1a;
+          --selected: #292929;
+          --text: #ededed;
+          --text-soft: #d4d4d4;
+          --muted: #a1a1a1;
+          --border: #262626;
+          --border-strong: #3d3d3d;
+          --dot: #2a2a2a;
+          --accent: #52a8ff;
+          --focus: #52a8ff;
+          --danger: #ff6369;
+          --danger-hover: #ff8589;
+          --on-danger: #0a0a0a;
+          --primary: #ededed;
+          --on-primary: #0a0a0a;
+          --done: #45dd7f;
+          --in-progress: #ffb224;
+          --pending: #a1a1a1;
+          --blocked: #ff6369;
+          --shadow: 0 0 0 1px #262626, 0 8px 32px rgb(0 0 0 / 0.6);
+          color-scheme: dark;
+        }
       }
       html::before {
-        height: 2px;
+        content: none;
+      }
+      html {
+        accent-color: var(--text);
+        scrollbar-color: var(--border-strong) transparent;
+      }
+      ::selection {
+        background: color-mix(in srgb, var(--accent) 25%, transparent);
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      :where(input, textarea, select):focus-visible {
+        outline: none;
+        border-color: var(--focus);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent);
+      }
+      .mark:empty {
+        background: var(--text);
+        border-radius: 50%;
+        box-shadow: none;
+        transform: none;
+        animation: none;
+      }
+      .mark:empty::before {
+        content: none;
+      }
+      :hover > .mark:empty,
+      .brand:hover .mark:empty {
+        background: var(--text);
+        border-radius: 50%;
+        box-shadow: none;
+        transform: none;
+        animation: none;
       }
       body {
         background-image: none;
@@ -1351,6 +1458,7 @@
       <span class="brand" translate="no"><span class="mark" aria-hidden="true"></span>Claude notes</span>
     </header>
     <div class="backdrop" hidden></div>
+    <button id="sidebar-open" class="icon-button sidebar-open" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open sidebar" hidden></button>
     <nav id="sidebar" aria-label="All notes"></nav>
     <main id="note" tabindex="-1" aria-busy="true">
       <p class="empty" role="status">Loading notes…</p>
@@ -1372,7 +1480,7 @@
       <form method="dialog" id="add-plan-form">
         <h2 id="add-plan-title">Add a Plan</h2>
         <p id="add-plan-set"></p>
-        <label for="plan-title">Plan title</label>
+        <label for="plan-title">Plan Title</label>
         <input id="plan-title" name="title" required autocomplete="off" maxlength="100" placeholder="Clear the cached token…" />
         <p class="field-error" id="add-plan-error" role="alert" hidden></p>
         <div class="dialog-actions">
@@ -1386,7 +1494,7 @@
       <form method="dialog" id="rename-project-form">
         <h2 id="rename-project-title">Rename Project</h2>
         <p id="rename-project-scope"></p>
-        <label for="project-name">New name</label>
+        <label for="project-name">New Name</label>
         <input id="project-name" name="name" required autocomplete="off" spellcheck="false" maxlength="100" />
         <p class="field-error" id="rename-project-error" role="alert" hidden></p>
         <div class="dialog-actions">
@@ -1400,6 +1508,7 @@
       const sidebar = document.querySelector("nav");
       const entryArea = document.querySelector("main");
       const menuButton = document.querySelector("#menu-button");
+      const sidebarOpenButton = document.querySelector("#sidebar-open");
       const backdrop = document.querySelector(".backdrop");
       const toastRegion = document.querySelector(".toast-region");
       const confirmDialog = document.querySelector("#confirm-dialog");
@@ -1410,6 +1519,7 @@
       const narrowScreen = matchMedia("(max-width: 720px)");
       let sections = [];
       let openEditor = null;
+      let selectedProject = "";
 
       const ICONS = {
         pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
@@ -1417,6 +1527,7 @@
         plus: '<path d="M12 5v14M5 12h14"/>',
         check: '<path d="M20 6 9 17l-5-5"/>',
         chevron: '<path d="m6 9 6 6 6-6"/>',
+        sidebar: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
       };
 
       const COLLAPSED_STORAGE_KEY = "claude-notes:collapsed";
@@ -1439,6 +1550,46 @@
         }
       };
 
+      const PROJECT_STORAGE_KEY = "claude-notes:project";
+
+      const readSelectedProject = () => {
+        try {
+          return localStorage.getItem(PROJECT_STORAGE_KEY) ?? "";
+        } catch (error) {
+          return "";
+        }
+      };
+
+      const saveSelectedProject = () => {
+        try {
+          localStorage.setItem(PROJECT_STORAGE_KEY, selectedProject);
+        } catch (error) {
+          return;
+        }
+      };
+
+      selectedProject = readSelectedProject();
+
+      const SIDEBAR_STORAGE_KEY = "claude-notes:sidebar";
+
+      const readIsSidebarOpen = () => {
+        try {
+          return localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "closed";
+        } catch (error) {
+          return true;
+        }
+      };
+
+      let isSidebarOpen = readIsSidebarOpen();
+
+      const saveIsSidebarOpen = () => {
+        try {
+          localStorage.setItem(SIDEBAR_STORAGE_KEY, isSidebarOpen ? "open" : "closed");
+        } catch (error) {
+          return;
+        }
+      };
+
       const EMPTY_HINTS = {
         handoffs: ["No handoffs yet", "Run /handoff and your future self gets a head start."],
         "project-notes": ["No project notes yet", "Ask Claude to write one, or run /project-note."],
@@ -1451,14 +1602,6 @@
       const ADDED_MESSAGES = ["New plan, fresh page.", "Plan added. Let’s go."];
 
       const pickOne = (choices) => choices[Math.floor(Math.random() * choices.length)];
-
-      const greetByHour = () => {
-        const hour = new Date().getHours();
-        if (hour < 5) return "Burning the midnight oil?";
-        if (hour < 12) return "Good morning.";
-        if (hour < 18) return "Good afternoon.";
-        return "Good evening.";
-      };
 
       const createElement = (tagName, text, className) => {
         const element = document.createElement(tagName);
@@ -1549,15 +1692,41 @@
           confirmDialog.querySelector("#confirm-cancel").focus();
         });
 
-      const readSelection = () => {
+      const listProjects = (sectionList) => [
+        ...new Set(
+          sectionList
+            .filter((section) => !SECTION_VIEWS[section.id].isReadOnly)
+            .flatMap((section) => section.entries.map((entry) => entry.project))
+            .filter(Boolean)
+        ),
+      ].sort();
+
+      const filterEntriesByProject = (entries, project) =>
+        project === "" ? entries : entries.filter((entry) => entry.project === project);
+
+      const listVisibleEntries = (section) =>
+        SECTION_VIEWS[section.id].isReadOnly ? section.entries : filterEntriesByProject(section.entries, selectedProject);
+
+      const buildEntryHash = (section, entry) => `#${section.id}/${encodeURIComponent(entry.path)}`;
+
+      const findHashTarget = () => {
         const [sectionId, ...pathSegments] = decodeURIComponent(location.hash.slice(1)).split("/");
         const section =
           sections.find((candidate) => candidate.id === sectionId) ??
           sections.find((candidate) => candidate.entries.length) ??
           sections[0];
         const entryPath = pathSegments.join("/");
-        const entry = section?.entries.find((candidate) => candidate.path === entryPath) ?? section?.entries[0];
-        return { section, entry };
+        return { section, namedEntry: section?.entries.find((candidate) => candidate.path === entryPath) };
+      };
+
+      const readSelection = () => {
+        const { section, namedEntry } = findHashTarget();
+        if (namedEntry && selectedProject !== "" && !SECTION_VIEWS[section.id].isReadOnly && namedEntry.project !== selectedProject) {
+          selectedProject = namedEntry.project;
+          saveSelectedProject();
+        }
+        const entries = section ? listVisibleEntries(section) : [];
+        return { section, entry: entries.includes(namedEntry) ? namedEntry : entries[0] };
       };
 
       const readStatus = (entry) => entry.fields.status ?? "pending";
@@ -1586,8 +1755,24 @@
           )
           .join("");
 
-      const formatStatusLabel = (status) =>
-        status
+      const formatProjectName = (name) =>
+        name
+          .split(/[-\s]+/)
+          .filter(Boolean)
+          .map((piece) =>
+            titleAcronyms.has(piece.toLowerCase())
+              ? piece.toUpperCase()
+              : /^[a-z]+$/.test(piece)
+                ? piece.charAt(0).toUpperCase() + piece.slice(1)
+                : piece
+          )
+          .join(" ");
+
+      const formatEntryTitle = (section, entry) =>
+        section.id === "tokens" ? formatProjectName(entry.title) : formatDisplayName(entry.title);
+
+      const formatFixedLabel = (value) =>
+        value
           .split("-")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(" ");
@@ -1600,17 +1785,19 @@
         section.entries.filter((entry) => entry.project === memberEntry.project && entry.group === memberEntry.group);
 
       const readDependency = (entry) =>
-        entry.fields.depends_on && entry.fields.depends_on !== "none" && `needs plan ${entry.fields.depends_on}`;
+        entry.fields.depends_on && entry.fields.depends_on !== "none" && `Needs Plan ${entry.fields.depends_on}`;
+
+      const describeCount = (count, noun) => `${Number(count).toLocaleString()} ${noun}${Number(count) === 1 ? "" : "s"}`;
 
       const PLAN_VIEW = {
         noun: "plan",
         describeLink: (entry) => ({
           label: `${readOrder(entry)} ${entry.title}`,
-          caption: `${readKind(entry)} · ${formatStatusLabel(readStatus(entry))}`,
+          caption: `${formatFixedLabel(readKind(entry))} · ${formatFixedLabel(readStatus(entry))}`,
           status: readStatus(entry),
         }),
         hasProgress: true,
-        listDetails: (entry) => [entry.group, `plan ${readOrder(entry)}`, readKind(entry), formatStatusLabel(readStatus(entry)), readDependency(entry)],
+        listDetails: (entry) => [entry.group, `Plan ${readOrder(entry)}`, formatFixedLabel(readKind(entry)), formatFixedLabel(readStatus(entry)), readDependency(entry)],
       };
 
       const SECTION_VIEWS = {
@@ -1618,7 +1805,7 @@
           noun: "handoff",
           describeLink: (entry) => ({ label: entry.title }),
           listDetails: (entry) => [
-            entry.fields.focus && `focus: ${entry.fields.focus}`,
+            entry.fields.focus && `Focus: ${entry.fields.focus}`,
             /^\d/.test(entry.name) && `/handoff resume ${parseInt(entry.name, 10)}`,
           ],
         },
@@ -1633,18 +1820,30 @@
           noun: "project",
           isReadOnly: true,
           describeLink: (entry) => ({
-            label: entry.title,
-            caption: `${Number(entry.fields.total_tokens).toLocaleString()} tokens · ${entry.fields.sessions} sessions`,
+            label: formatProjectName(entry.title),
+            caption: `${describeCount(Number(entry.fields.total_tokens), "token")} · ${describeCount(entry.fields.sessions, "session")}`,
           }),
-          listDetails: (entry) => [`${entry.fields.sessions} sessions`],
+          listDetails: (entry) => [describeCount(entry.fields.sessions, "session")],
         },
+      };
+
+      const updateSidebarInert = () => {
+        sidebar.inert = narrowScreen.matches ? document.body.dataset.menu !== "open" : !isSidebarOpen;
+      };
+
+      const setSidebarOpen = (isOpen) => {
+        isSidebarOpen = isOpen;
+        saveIsSidebarOpen();
+        document.body.dataset.sidebar = isOpen ? "open" : "closed";
+        sidebarOpenButton.hidden = isOpen;
+        updateSidebarInert();
       };
 
       const setMenuOpen = (isOpen) => {
         document.body.dataset.menu = isOpen ? "open" : "closed";
         menuButton.setAttribute("aria-expanded", String(isOpen));
         menuButton.setAttribute("aria-label", isOpen ? "Close Notes List" : "Open Notes List");
-        sidebar.inert = narrowScreen.matches && !isOpen;
+        updateSidebarInert();
         backdrop.hidden = !isOpen;
         if (isOpen) (sidebar.querySelector("[aria-current='page']") ?? sidebar.querySelector("a"))?.focus();
       };
@@ -1654,7 +1853,8 @@
         sections.forEach((section) => {
           const link = createElement("a", section.title);
           link.href = `#${section.id}`;
-          link.append(createElement("span", String(section.entries.length), "count"));
+          const entryCount = listVisibleEntries(section).length;
+          if (entryCount > 0) link.append(createElement("span", String(entryCount), "count"));
           if (section === selectedSection) link.setAttribute("aria-current", "true");
           sectionLinks.append(link);
         });
@@ -1663,11 +1863,20 @@
 
       const createEntryLink = (section, entry, selectedEntry) => {
         const { label, caption, status } = SECTION_VIEWS[section.id].describeLink(entry);
-        const link = createElement("a", formatDisplayName(label));
-        link.href = `#${section.id}/${encodeURIComponent(entry.path)}`;
-        link.title = formatDisplayName(entry.title);
-        if (status) link.dataset.status = status;
-        if (caption) link.append(createElement("small", formatDisplayName(caption)));
+        const link = createElement("a");
+        link.href = buildEntryHash(section, entry);
+        link.title = formatEntryTitle(section, entry);
+        if (status) {
+          const statusDot = createElement("span", "", "status-dot");
+          statusDot.setAttribute("aria-hidden", "true");
+          link.dataset.status = status;
+          link.title = `${link.title} · ${formatDisplayName(caption)}`;
+          link.setAttribute("aria-label", link.title);
+          link.append(createElement("span", formatDisplayName(label), "note-title"), statusDot);
+        } else {
+          link.append(formatDisplayName(label));
+          if (caption) link.append(createElement("small", formatDisplayName(caption)));
+        }
         if (entry.fields.share) {
           const shareBar = createElement("span", "", "progress-bar");
           shareBar.setAttribute("aria-hidden", "true");
@@ -1678,17 +1887,13 @@
         return link;
       };
 
-      const createProgress = (section, entry) => {
+      const createProgressCount = (section, entry) => {
         const entriesOfGroup = listGroupEntries(section, entry);
         const doneCount = entriesOfGroup.filter((member) => readStatus(member) === "done").length;
-        const isComplete = doneCount === entriesOfGroup.length;
-        const progress = createElement("span", "", "progress");
-        const progressBar = createElement("span", "", "progress-bar");
-        progressBar.setAttribute("aria-hidden", "true");
-        progressBar.style.setProperty("--progress", String(doneCount / entriesOfGroup.length));
-        progress.append(progressBar, isComplete ? `all ${doneCount} done ✦` : `${doneCount} of ${entriesOfGroup.length} done`);
-        if (isComplete) progress.dataset.complete = "";
-        return progress;
+        const progressCount = createElement("span", `${doneCount}/${entriesOfGroup.length}`, "progress-count");
+        progressCount.setAttribute("aria-label", `${doneCount} of ${entriesOfGroup.length} done`);
+        if (doneCount === entriesOfGroup.length) progressCount.dataset.complete = "";
+        return progressCount;
       };
 
       const buildProjectKey = (section, entry) => `${section.id}/${entry.project}`;
@@ -1701,7 +1906,7 @@
         toggle.type = "button";
         toggle.dataset.key = key;
         toggle.title = text;
-        toggle.append(createIcon("chevron"), createElement("span", text), createElement("span", "", "count"));
+        toggle.append(createIcon("chevron"), createElement("span", text));
         toggle.addEventListener("click", () => {
           if (!collapsedKeys.delete(key)) collapsedKeys.add(key);
           saveCollapsedKeys();
@@ -1722,9 +1927,10 @@
       const applySidebarVisibility = () => {
         const query = filterInput.value.trim().toLowerCase();
         const isFiltering = query !== "";
+        const isProjectMode = selectedProject !== "";
         const links = [...sidebar.querySelectorAll("a[data-project]")];
         links.forEach((link) => {
-          const isCollapsed = collapsedKeys.has(link.dataset.project) || collapsedKeys.has(link.dataset.group);
+          const isCollapsed = (!isProjectMode && collapsedKeys.has(link.dataset.project)) || collapsedKeys.has(link.dataset.group);
           link.hidden = isFiltering
             ? !link.textContent.toLowerCase().includes(query)
             : isCollapsed;
@@ -1734,12 +1940,9 @@
           const heading = toggle.closest(".group-heading");
           const members = links.filter((link) => link.dataset.project === key || link.dataset.group === key);
           const hasVisibleMember = members.some((link) => !link.hidden);
-          const hiddenCount = members.filter((link) => link.hidden).length;
           const isCollapsed = collapsedKeys.has(key);
-          const isProjectCollapsed = collapsedKeys.has(heading.dataset.project);
-          const countBadge = toggle.querySelector(".count");
+          const isProjectCollapsed = !isProjectMode && collapsedKeys.has(heading.dataset.project);
           toggle.setAttribute("aria-expanded", String(!isCollapsed || isFiltering));
-          countBadge.textContent = String(members.length - (isFiltering ? hiddenCount : 0));
           heading.hidden = isFiltering ? !hasVisibleMember : isProjectCollapsed;
         });
         sidebar.querySelector(".no-matches").hidden = !isFiltering || links.some((link) => !link.hidden);
@@ -1749,6 +1952,7 @@
         const view = SECTION_VIEWS[section.id];
         const groupHeading = createElement("div", "", "group-heading");
         groupHeading.dataset.project = buildProjectKey(section, entry);
+        groupHeading.dataset.depth = selectedProject === "" ? "1" : "0";
         groupHeading.append(createCollapseHeading("h3", entry.group, buildGroupKey(section, entry)));
         if (view.hasEditableSets) {
           const actions = createElement("div", "", "group-actions");
@@ -1758,15 +1962,15 @@
           );
           groupHeading.append(actions);
         }
-        if (view.hasProgress) groupHeading.append(createProgress(section, entry));
+        if (view.hasProgress) groupHeading.append(createProgressCount(section, entry));
         return groupHeading;
       };
 
       const createProjectHeading = (section, project) => {
         const projectHeading = createElement("div", "", "group-heading project-heading");
         const actions = createElement("div", "", "group-actions");
-        actions.append(createIconButton(`Rename project ${project}`, "pencil", "rename", () => openRenameProject(project)));
-        projectHeading.append(createCollapseHeading("h2", project, buildProjectKey(section, { project })), actions);
+        actions.append(createIconButton(`Rename project ${formatProjectName(project)}`, "pencil", "rename", () => openRenameProject(project)));
+        projectHeading.append(createCollapseHeading("h2", formatProjectName(project), buildProjectKey(section, { project })), actions);
         return projectHeading;
       };
 
@@ -1777,37 +1981,79 @@
         const mark = createElement("span", "", "mark");
         mark.setAttribute("aria-hidden", "true");
         brand.append(mark, "Claude notes");
-        header.append(brand, createElement("p", greetByHour(), "greeting"));
+        const toggle = createIconButton("Close sidebar", "sidebar", "sidebar-toggle", () => {
+          setSidebarOpen(false);
+          sidebarOpenButton.focus();
+        });
+        toggle.setAttribute("aria-controls", "sidebar");
+        toggle.setAttribute("aria-expanded", "true");
+        header.append(brand, toggle);
         return header;
+      };
+
+      const changeProject = (project) => {
+        selectedProject = project;
+        saveSelectedProject();
+        const { section, namedEntry } = findHashTarget();
+        const isOpenEntryElsewhere =
+          project !== "" && namedEntry && !SECTION_VIEWS[section.id].isReadOnly && namedEntry.project !== project;
+        if (!isOpenEntryElsewhere) {
+          render();
+          return;
+        }
+        const targetSection = [section, ...sections].find(
+          (candidate) => !SECTION_VIEWS[candidate.id].isReadOnly && listVisibleEntries(candidate).length > 0
+        );
+        const previousHash = location.hash;
+        location.hash = targetSection ? buildEntryHash(targetSection, listVisibleEntries(targetSection)[0]) : `#${section.id}`;
+        if (location.hash === previousHash) render();
+      };
+
+      const createProjectSwitcher = () => {
+        const switcher = createElement("div", "", "switcher");
+        const select = createElement("select", "", "project-switcher");
+        select.setAttribute("aria-label", "Project");
+        select.append(new Option("All Projects", ""), ...listProjects(sections).map((project) => new Option(formatProjectName(project), project)));
+        select.value = selectedProject;
+        select.addEventListener("change", () => changeProject(select.value));
+        switcher.append(select);
+        return switcher;
       };
 
       const createSidebarTop = (selectedSection) => {
         const top = createElement("div", "", "sidebar-top");
         const filterField = createElement("div", "", "filter-field");
         filterField.append(filterInput);
-        top.append(createSidebarHeader(), createSectionLinks(selectedSection), filterField);
+        top.append(createSidebarHeader(), createProjectSwitcher(), filterField, createSectionLinks(selectedSection));
         return top;
       };
 
       const renderSidebar = (selectedSection, selectedEntry) => {
         const scrollPosition = sidebar.scrollTop;
         const hadFocus = document.activeElement === filterInput;
+        const hadSwitcherFocus = document.activeElement?.classList.contains("project-switcher");
         const { selectionStart, selectionEnd } = filterInput;
         sidebar.replaceChildren(createSidebarTop(selectedSection));
-        const entries = selectedSection?.entries ?? [];
+        const entries = selectedSection ? listVisibleEntries(selectedSection) : [];
+        const isReadOnly = Boolean(selectedSection && SECTION_VIEWS[selectedSection.id].isReadOnly);
+        const hasProjectHeadings = selectedProject === "" && !isReadOnly;
         entries.forEach((entry, entryIndex) => {
           const previousEntry = entries[entryIndex - 1] ?? {};
           const isNewProject = entry.project !== previousEntry.project;
-          if (isNewProject && !SECTION_VIEWS[selectedSection.id].isReadOnly) sidebar.append(createProjectHeading(selectedSection, entry.project));
+          if (isNewProject && hasProjectHeadings) sidebar.append(createProjectHeading(selectedSection, entry.project));
           if (entry.group && (isNewProject || entry.group !== previousEntry.group)) sidebar.append(createGroupHeading(selectedSection, entry));
           const link = createEntryLink(selectedSection, entry, selectedEntry);
           link.dataset.project = buildProjectKey(selectedSection, entry);
           if (entry.group) link.dataset.group = buildGroupKey(selectedSection, entry);
-          link.dataset.depth = SECTION_VIEWS[selectedSection.id].isReadOnly ? "0" : entry.group ? "2" : "1";
+          link.dataset.depth = String((hasProjectHeadings ? 1 : 0) + (entry.group ? 1 : 0));
           sidebar.append(link);
         });
+        if (selectedSection && selectedProject !== "" && entries.length === 0) {
+          sidebar.append(createElement("p", "Nothing here for this project.", "no-entries"));
+        }
         sidebar.append(createElement("p", "No matching notes", "no-matches"));
         applySidebarVisibility();
+        if (hadSwitcherFocus) sidebar.querySelector(".project-switcher").focus();
         if (hadFocus) {
           filterInput.focus();
           filterInput.setSelectionRange(selectionStart, selectionEnd);
@@ -1819,10 +2065,10 @@
         const detailList = createElement("ul", "", "entry-details");
         detailList.setAttribute("aria-label", "Note details");
         [
-          selectedEntry.project,
+          formatProjectName(selectedEntry.project),
           ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
           formatCreated(selectedEntry.created),
-          selectedEntry.path,
+          selectedSection.id === "tokens" ? formatProjectName(selectedEntry.path) : selectedEntry.path,
         ]
           .filter(Boolean)
           .forEach((detail) => detailList.append(createElement("li", detail)));
@@ -1852,7 +2098,7 @@
         const titleToggle = createElement("button", "", "collapse-toggle entry-title-toggle");
         titleToggle.type = "button";
         titleToggle.setAttribute("aria-expanded", "true");
-        titleToggle.append(createIcon("chevron"), createElement("span", formatDisplayName(selectedEntry.title)));
+        titleToggle.append(createIcon("chevron"), createElement("span", formatEntryTitle(selectedSection, selectedEntry)));
         const title = createElement("h1");
         title.append(titleToggle);
         header.append(title, actions);
@@ -1876,15 +2122,9 @@
         }
       };
 
-      const wideScreen = matchMedia("(min-width: 1420px)");
       let tocObserver = null;
       let isTocScrolling = false;
       let tocScrollTimer = 0;
-
-      wideScreen.addEventListener("change", () => {
-        const disclosure = document.querySelector(".toc details");
-        if (disclosure) disclosure.open = wideScreen.matches;
-      });
 
       const assignHeadingIds = (body) => {
         const usedIds = new Set();
@@ -1917,7 +2157,7 @@
         contents.setAttribute("role", "navigation");
         contents.setAttribute("aria-label", "Contents");
         const disclosure = createElement("details");
-        disclosure.open = wideScreen.matches;
+        disclosure.open = true;
         disclosure.append(createElement("summary", "Contents"));
         const list = createElement("ul");
         const linksById = new Map();
@@ -1991,7 +2231,7 @@
 
       const render = () => {
         const { section, entry } = readSelection();
-        document.title = entry ? `${formatDisplayName(entry.title)} · ${section.title}` : "Claude notes";
+        document.title = entry ? `${formatEntryTitle(section, entry)} · ${section.title}` : "Claude notes";
         renderSidebar(section, entry);
         if (!openEditor) renderEntry(section, entry);
       };
@@ -2002,6 +2242,10 @@
             ["/api/sections", "/api/tokens"].map(async (url) => (await fetch(url)).json())
           );
           sections = [...noteSections, tokenSection];
+          if (selectedProject !== "" && !listProjects(sections).includes(selectedProject)) {
+            selectedProject = "";
+            saveSelectedProject();
+          }
         } catch (error) {
           entryArea.replaceChildren(createElement("p", "Can’t reach the notes server. Run claude-notes again, then reload this page.", "empty"));
           return;
@@ -2111,7 +2355,7 @@
             }
             await loadSections();
             entryArea.focus();
-            showToast(isMove ? `Moved to ${newProject}. New home, same note.` : pickOne(SAVED_MESSAGES));
+            showToast(isMove ? `Moved to ${formatProjectName(newProject)}. New home, same note.` : pickOne(SAVED_MESSAGES));
           } catch (error) {
             failure.textContent = describeFailure("save", error);
             failure.hidden = false;
@@ -2279,7 +2523,7 @@
         renameProjectForm.reset();
         renameProjectForm.elements.name.value = project;
         renameProjectDialog.querySelector("#rename-project-error").hidden = true;
-        renameProjectDialog.querySelector("#rename-project-scope").textContent = `Renames the ${project} folder in every section and rewrites the project: line of each note inside.`;
+        renameProjectDialog.querySelector("#rename-project-scope").textContent = `Renames the ${formatProjectName(project)} folder in every section and rewrites the project: line of each note inside.`;
         renameProjectDialog.showModal();
         renameProjectForm.elements.name.select();
       };
@@ -2328,7 +2572,7 @@
         renameProjectDialog.close();
         replaceHashProject(project, newProject);
         await loadSections();
-        showToast(`Renamed ${project} to ${newProject}.`);
+        showToast(`Renamed ${formatProjectName(project)} to ${formatProjectName(newProject)}.`);
       });
 
       document.querySelector(".skip-link").addEventListener("click", (event) => {
@@ -2338,7 +2582,14 @@
 
       menuButton.addEventListener("click", () => setMenuOpen(document.body.dataset.menu !== "open"));
       backdrop.addEventListener("click", () => setMenuOpen(false));
-      narrowScreen.addEventListener("change", () => setMenuOpen(false));
+      narrowScreen.addEventListener("change", () => {
+        setMenuOpen(false);
+        updateSidebarInert();
+      });
+      sidebarOpenButton.addEventListener("click", () => {
+        setSidebarOpen(true);
+        sidebar.querySelector(".sidebar-toggle")?.focus();
+      });
       filterInput.addEventListener("input", applySidebarVisibility);
       filterInput.addEventListener("keydown", (event) => {
         if (event.key !== "Escape" || !filterInput.value) return;
@@ -2371,9 +2622,10 @@
           history.replaceState(null, "", newHash);
         }
         if (narrowScreen.matches) setMenuOpen(false);
+        const hasSwitcherFocus = document.activeElement?.classList.contains("project-switcher");
         render();
         entryArea.scrollTop = 0;
-        entryArea.focus();
+        if (!hasSwitcherFocus) entryArea.focus();
       });
       addEventListener("beforeunload", (event) => {
         if (hasUnsavedChanges()) event.preventDefault();
@@ -2381,7 +2633,9 @@
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden && !openEditor) loadSections();
       });
+      sidebarOpenButton.append(createIcon("sidebar"));
       setMenuOpen(false);
+      setSidebarOpen(readIsSidebarOpen());
       loadSections();
     </script>
   </body>

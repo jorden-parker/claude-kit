@@ -100,5 +100,5 @@ func loadTokenSection() sectionView {
 		entries = append(entries, describeTokenProject(project, sessions, totalsByProject[project], largestTotal))
 	}
 	sort.Slice(entries, func(first, second int) bool { return entries[first].Project < entries[second].Project })
-	return sectionView{Identifier: "tokens", Title: "Token use", Entries: entries}
+	return sectionView{Identifier: "tokens", Title: "Token Use", Entries: entries}
 }

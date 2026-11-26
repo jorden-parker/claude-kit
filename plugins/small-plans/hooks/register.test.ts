@@ -159,7 +159,7 @@ const runCommand = async (
     args: commandArguments,
   } as never);
   await clock.settle();
-  return { reply, ...recorded };
+  return { reply, clock, ...recorded };
 };
 
 test("a plan is saved under its project and set", async ($, on) => {
@@ -852,11 +852,38 @@ test("/small-plans handoff says so when the project has no handoff", async ($, o
   expect(submittedPrompts).toHaveLength(0);
 });
 
+type PaneOpening = {
+  id: string;
+  title: string;
+  focus?: boolean;
+  closeOnEscape?: boolean;
+};
+
+const trackPane = (on: On, isPlaced: boolean) => {
+  const openings: PaneOpening[] = [];
+  const closings: string[] = [];
+  on("ui.open", (_, e) => {
+    openings.push(e as unknown as PaneOpening);
+    return {
+      value: isPlaced
+        ? { isPlaced: true as const }
+        : { isPlaced: false as const, reason: "no-surface" as const },
+    };
+  });
+  on("ui.close", () => {
+    closings.push("close");
+    return { value: undefined };
+  });
+  on("ui.toast", () => ({ value: undefined }));
+  return { openings, closings };
+};
+
 type AskedQuestion = { questions: { options: { label: string }[] }[] };
 
 const answerAskUserQuestion = (on: On, ...chosenLabels: string[]) => {
   const askedQuestions: AskedQuestion[] = [];
   const remainingLabels = [...chosenLabels];
+  trackPane(on, false);
   on("tool.call", { tool: "AskUserQuestion" }, (_, e) => {
     const askedQuestion = e as unknown as AskedQuestion & {
       questions: { question: string }[];
@@ -1326,9 +1353,9 @@ test("/small-plans build asks for the whole set or one plan that is not done", a
   const { submittedPrompts } = await runCommand($, on, "build", THREE_PLAN_SET);
 
   expect(askedLabels(askedQuestions)).toEqual([
-    "Whole set",
     "2 · Store the Choice",
     "3 · Test the Toggle",
+    "Whole set",
   ]);
   expect(submittedPrompts[0]).toContain(
     `Build the plans in ${SET_FOLDER}, in the order listed below.`
@@ -2271,40 +2298,150 @@ const SIX_PLAN_SET = Object.fromEntries(
   )
 );
 
-test("/small-plans build pages the plan picker so no plan is dropped", async ($, on) => {
+const PICKER_PANE_ID = "small-plans-picker-pane";
+
+const mountPicker = ($: Engine) =>
+  $.ui.mount({
+    plugin: "small-plans",
+    component: "Pane",
+    requestId: PICKER_PANE_ID,
+    surface: "terminal",
+    props: {},
+  } as never);
+
+const pickerRows = async ($: Engine) => {
+  const drawing = await mountPicker($);
+  const keys = (await drawing.findAll({ type: "Button" })).map(
+    (button) => button.key
+  );
+  await drawing.unmount();
+  return keys;
+};
+
+const SIX_SET_PLANS = [
+  "1 · Alpha",
+  "2 · Bravo",
+  "3 · Charlie",
+  "4 · Delta",
+  "5 · Echo",
+  "6 · Foxtrot",
+];
+
+test("/small-plans build opens a focused pane to pick from", async ($, on) => {
+  const { openings } = trackPane(on, true);
+  const { reply } = await runCommand($, on, "build", SIX_PLAN_SET);
+
+  expect(openings).toHaveLength(1);
+  expect(openings[0]?.focus).toBe(true);
+  expect(openings[0]?.closeOnEscape).toBe(true);
+  expect(openings[0]?.title).toBeTruthy();
+  expect((reply as { text: string }).text).toContain("pane");
+});
+
+test("/small-plans build lists every plan in the pane, Whole set last", async ($, on) => {
+  trackPane(on, true);
+  await runCommand($, on, "build", SIX_PLAN_SET);
+  const drawing = await mountPicker($);
+  const labels = (await drawing.findAll({ type: "Button" })).map(
+    (button) => button.text
+  );
+
+  expect(labels).toEqual([...SIX_SET_PLANS, "Whole set"]);
+});
+
+test("pressing a plan row closes the pane and builds that plan", async ($, on) => {
+  const { closings } = trackPane(on, true);
+  const { submittedPrompts, clock } = await runCommand(
+    $,
+    on,
+    "build",
+    SIX_PLAN_SET
+  );
+  const drawing = await mountPicker($);
+
+  await drawing.press({ key: "pick-05-echo" });
+  await clock.settle();
+
+  expect(closings).toEqual(["close"]);
+  expect(submittedPrompts[0]).toContain(
+    `Build only the plan at ${SET_FOLDER}/05-echo.md.`
+  );
+});
+
+test("pressing Whole set in the pane builds the whole set", async ($, on) => {
+  trackPane(on, true);
+  const { submittedPrompts, clock } = await runCommand(
+    $,
+    on,
+    "build",
+    SIX_PLAN_SET
+  );
+  const drawing = await mountPicker($);
+
+  await drawing.press({ key: "pick-Whole set" });
+  await clock.settle();
+
+  expect(submittedPrompts[0]).not.toContain("Build only the plan");
+  expect(submittedPrompts[0]).toContain(SET_FOLDER);
+});
+
+const FIVE_SETS = Object.fromEntries(
+  [21, 22, 23, 24, 25].map((day) => [
+    `${PROJECT_FOLDER}/2026-11-${day}-1000-set-${day}/01-alpha.md`,
+    "status: pending",
+  ])
+);
+
+test("/small-plans build lists every set in the pane, newest first, and picking one opens its plans", async ($, on) => {
+  const { openings } = trackPane(on, true);
+  const { clock } = await runCommand($, on, "build", {
+    ...FIVE_SETS,
+    [`${PROJECT_FOLDER}/2026-11-24-1000-set-24/02-bravo.md`]: "status: pending",
+  });
+
+  const drawing = await mountPicker($);
+  const setKeys = (await drawing.findAll({ type: "Button" })).map(
+    (button) => button.key
+  );
+  expect(setKeys).toEqual(
+    [25, 24, 23, 22, 21].map((day) => `pick-2026-11-${day}-1000-set-${day}`)
+  );
+  await drawing.press({ key: "pick-2026-11-24-1000-set-24" });
+  await clock.settle();
+  await drawing.unmount();
+
+  expect(openings).toHaveLength(2);
+  expect(await pickerRows($)).toEqual([
+    "pick-01-alpha",
+    "pick-02-bravo",
+    "pick-Whole set",
+  ]);
+});
+
+test("/small-plans build pages the plan picker with Whole set last when no pane opens", async ($, on) => {
   const askedQuestions = answerAskUserQuestion(on, "4 more…", "5 · Echo");
   const { submittedPrompts } = await runCommand($, on, "build", SIX_PLAN_SET);
 
   expect(askedLabels([askedQuestions[0] as AskedQuestion])).toEqual([
-    "Whole set",
     "1 · Alpha",
     "2 · Bravo",
+    "3 · Charlie",
     "4 more…",
   ]);
   expect(askedLabels([askedQuestions[1] as AskedQuestion])).toEqual([
-    "3 · Charlie",
     "4 · Delta",
     "5 · Echo",
     "6 · Foxtrot",
+    "Whole set",
   ]);
   expect(submittedPrompts[0]).toContain(
     `Build only the plan at ${SET_FOLDER}/05-echo.md.`
   );
 });
 
-test("/small-plans build pages the set picker so no set is dropped", async ($, on) => {
+test("/small-plans build pages the set picker so no set is dropped when no pane opens", async ($, on) => {
   const askedQuestions = answerAskUserQuestion(on);
-  await runCommand(
-    $,
-    on,
-    "build",
-    Object.fromEntries(
-      [21, 22, 23, 24, 25].map((day) => [
-        `${PROJECT_FOLDER}/2026-11-${day}-1000-set-${day}/01-alpha.md`,
-        "status: pending",
-      ])
-    )
-  );
+  await runCommand($, on, "build", FIVE_SETS);
 
   expect(askedLabels(askedQuestions)).toEqual([
     "Set 25 · Nov 25, 10:00",
@@ -2322,9 +2459,9 @@ test("/small-plans build lists plans in numeric order", async ($, on) => {
   });
 
   expect(askedLabels(askedQuestions)).toEqual([
-    "Whole set",
     "2 · Second Thing",
     "10 · Tenth Thing",
+    "Whole set",
   ]);
 });
 

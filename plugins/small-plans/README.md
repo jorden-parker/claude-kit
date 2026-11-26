@@ -81,7 +81,7 @@ The files are plain Markdown: edit, move or delete them with any tool. The claud
 
 ## Build
 
-`/small-plans build` lists this project's sets, newest first, that still have a plan not done (sets whose plans are all done are left out) and asks which to build (three at a time, with an "N more…" option for the rest; with one set it skips the question). It then asks whether to build the whole set or one plan of it, listing the plans that are not done (three at a time, with an "N more…" option for the rest; with one plan left it skips the question).
+`/small-plans build` opens a pane listing every set of this project that still has a plan not done (newest first; sets whose plans are all done are left out; with one set it skips the pick). Picking a set opens a second pane listing every plan not done, in plan-number order with "Whole set" last (with one plan it skips the pick). Tab moves between rows, Enter picks and Esc closes the pane. Where no pane can open, an ask dialog is the fallback, showing three at a time with an "N more…" option.
 
 - `/small-plans build <text>` picks the newest set whose name holds that text (`build fix-login`, `build 007`)
 - `/small-plans build <text> <order>` builds that one plan without asking (`build fix-login 2`)

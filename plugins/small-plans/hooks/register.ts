@@ -1698,7 +1698,7 @@ const labelNumbered = (prefix: string) => (name: string) => {
     : name;
 };
 
-const pickFromList = async (
+const askFromList = async (
   engine: EngineInterface,
   question: string,
   header: string,
@@ -1715,7 +1715,7 @@ const pickFromList = async (
       options: [...askedNames.map(labelName), ...(isPaged ? [moreLabel] : [])],
     });
     if (isPaged && answer === moreLabel)
-      return await pickFromList(
+      return await askFromList(
         engine,
         question,
         header,
@@ -1726,6 +1726,29 @@ const pickFromList = async (
   } catch {
     return undefined;
   }
+};
+
+const chooseFromList = async (
+  engine: EngineInterface,
+  header: string,
+  question: string,
+  names: string[],
+  labelName: (name: string) => string,
+  onChoose: (name: string | undefined) => Promise<{ text: string }>
+): Promise<{ text: string }> => {
+  const isPaneOpen = await openPickerPane(
+    engine,
+    header,
+    names.map((name) => ({ value: name, label: labelName(name) })),
+    async (name) => {
+      const { text } = await onChoose(name);
+      await engine.ui.toast(text);
+    }
+  );
+  if (isPaneOpen) return { text: PICK_IN_PANE_TEXT };
+  return onChoose(
+    await askFromList(engine, question, header, names, labelName)
+  );
 };
 
 const splitHandoff = async (
@@ -1742,7 +1765,7 @@ const splitHandoff = async (
     };
   const shouldAsk = !requestedNumber && handoffNames.length > 1;
   const pickedName = shouldAsk
-    ? await pickFromList(
+    ? await askFromList(
         engine,
         HANDOFF_QUESTION,
         "Handoff",
@@ -1820,31 +1843,85 @@ const findPlanName = (planNames: string[], requestedPlan: string) => {
         planNames.find((name) => name.includes(wantedText)));
 };
 
-const pickPlanName = async (
-  engine: EngineInterface,
-  planNames: string[],
-  requestedPlan: string
-) => {
-  if (requestedPlan) return findPlanName(planNames, requestedPlan);
-  if (planNames.length === 1) return "";
-  const pickedOption = await pickFromList(
-    engine,
-    PLAN_QUESTION,
-    "Plans",
-    [WHOLE_SET_OPTION, ...planNames],
-    (name) => (name === WHOLE_SET_OPTION ? name : labelNumbered("")(name))
-  );
-  if (pickedOption === WHOLE_SET_OPTION) return "";
-  return pickedOption === undefined
-    ? undefined
-    : findPlanName(planNames, pickedOption);
-};
-
 const matchSetNames = (setNames: string[], wantedName: string) => {
   const exactNames = setNames.filter((name) => name === wantedName);
   return exactNames.length > 0
     ? exactNames
     : setNames.filter((name) => name.includes(wantedName.trim()));
+};
+
+const startBuild = async (
+  engine: EngineInterface,
+  setFolder: string,
+  setName: string,
+  projectFolder: string,
+  planName: string
+) => {
+  await startBoard(engine, setFolder, setName);
+  askClaude(
+    engine,
+    composeBuildInstruction(
+      setFolder,
+      planName,
+      projectFolder,
+      await listPlanLinesNotDone(engine, setFolder)
+    )
+  );
+  return {
+    text: planName
+      ? `Building plan ${planName} of set ${setName}…`
+      : `Building the plans of set ${setName}…`,
+  };
+};
+
+const buildSet = async (
+  engine: EngineInterface,
+  projectFolder: string,
+  setNames: string[],
+  pickedName: string | undefined,
+  requestedName: string,
+  requestedPlan: string
+): Promise<{ text: string }> => {
+  if (pickedName === undefined)
+    return {
+      text: `No set was picked. Run /${COMMAND_NAME} build <set> with one of: ${setNames.join(", ")}.`,
+    };
+  const setName = matchSetNames(setNames, pickedName)[0];
+  if (!setName)
+    return {
+      text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
+    };
+  const setFolder = `${projectFolder}/${setName}`;
+  await writeSetIndex(engine, setFolder);
+  const planNames = await listPlanNamesNotDone(engine, setFolder);
+  if (planNames.length === 0)
+    return { text: `Every plan in set ${setName} is done.` };
+  const noPlanText = `No plan was picked. Run /${COMMAND_NAME} build ${setName} <order> with one of the plans not done: ${planNames.join(", ")}.`;
+  if (requestedPlan) {
+    const foundPlan = findPlanName(planNames, requestedPlan);
+    return foundPlan === undefined
+      ? { text: noPlanText }
+      : startBuild(engine, setFolder, setName, projectFolder, foundPlan);
+  }
+  if (planNames.length === 1)
+    return startBuild(engine, setFolder, setName, projectFolder, "");
+  return chooseFromList(
+    engine,
+    "Plans",
+    PLAN_QUESTION,
+    [...planNames, WHOLE_SET_OPTION],
+    (name) => (name === WHOLE_SET_OPTION ? name : labelNumbered("")(name)),
+    async (pickedOption) => {
+      if (pickedOption === undefined) return { text: noPlanText };
+      const pickedPlan =
+        pickedOption === WHOLE_SET_OPTION
+          ? ""
+          : findPlanName(planNames, pickedOption);
+      return pickedPlan === undefined
+        ? { text: noPlanText }
+        : startBuild(engine, setFolder, setName, projectFolder, pickedPlan);
+    }
+  );
 };
 
 const buildPlans = async (
@@ -1872,43 +1949,25 @@ const buildPlans = async (
     return { text: `Every plan of this project is done.` };
   const setNames = requestedName ? savedSetNames : setNamesNotDone;
   const shouldAsk = !requestedName && setNames.length > 1;
-  const pickedName = shouldAsk
-    ? await pickFromList(engine, SET_QUESTION, "Plan set", setNames, labelSet)
-    : requestedName;
-  if (pickedName === undefined)
-    return {
-      text: `No set was picked. Run /${COMMAND_NAME} build <set> with one of: ${setNames.join(", ")}.`,
-    };
-  const setName = matchSetNames(setNames, pickedName)[0];
-  if (!setName)
-    return {
-      text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
-    };
-  const setFolder = `${projectFolder}/${setName}`;
-  await writeSetIndex(engine, setFolder);
-  const planNames = await listPlanNamesNotDone(engine, setFolder);
-  if (planNames.length === 0)
-    return { text: `Every plan in set ${setName} is done.` };
-  const planName = await pickPlanName(engine, planNames, requestedPlan);
-  if (planName === undefined)
-    return {
-      text: `No plan was picked. Run /${COMMAND_NAME} build ${setName} <order> with one of the plans not done: ${planNames.join(", ")}.`,
-    };
-  await startBoard(engine, setFolder, setName);
-  askClaude(
-    engine,
-    composeBuildInstruction(
-      setFolder,
-      planName,
+  const buildPicked = (pickedName: string | undefined) =>
+    buildSet(
+      engine,
       projectFolder,
-      await listPlanLinesNotDone(engine, setFolder)
-    )
-  );
-  return {
-    text: planName
-      ? `Building plan ${planName} of set ${setName}…`
-      : `Building the plans of set ${setName}…`,
-  };
+      setNames,
+      pickedName,
+      requestedName,
+      requestedPlan
+    );
+  return shouldAsk
+    ? chooseFromList(
+        engine,
+        "Plan set",
+        SET_QUESTION,
+        setNames,
+        labelSet,
+        buildPicked
+      )
+    : buildPicked(requestedName);
 };
 
 type BoardPlan = {
@@ -1932,6 +1991,44 @@ const STATE_OF_STATUS: Record<string, BoardState> = {
   "in-progress": "running",
   done: "passing",
   pending: "waiting",
+};
+
+const PICKER_PANE_ID = "small-plans-picker-pane";
+const PICK_IN_PANE_TEXT = "Pick one in the pane below…";
+
+const picker = {
+  rows: [] as { value: string; label: string }[],
+  choose: undefined as ((value: string) => Promise<void>) | undefined,
+};
+
+const openPickerPane = async (
+  engine: EngineInterface,
+  header: string,
+  rows: { value: string; label: string }[],
+  choose: (value: string) => Promise<void>
+) => {
+  picker.rows = rows;
+  picker.choose = choose;
+  try {
+    const openResult = await engine.ui.open({
+      id: PICKER_PANE_ID,
+      title: header,
+      focus: true,
+      closeOnEscape: true,
+      holdToasts: true,
+      rows: rows.length + 3,
+    });
+    if (openResult?.isPlaced) return true;
+    if (openResult) await engine.ui.close({ id: PICKER_PANE_ID });
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+const pickRow = async (engine: EngineInterface, value: string) => {
+  await engine.ui.close({ id: PICKER_PANE_ID });
+  await picker.choose?.(value);
 };
 
 const board = {
@@ -2145,6 +2242,26 @@ const renderBoard = (
 };
 
 export const register: Register = (on) => {
+  on("ui.render", { component: "Pane", requestId: PICKER_PANE_ID }, ($, e) => {
+    const { Box, Button, Text } = $.ui.resolve(e);
+    return h(
+      Box,
+      { flexDirection: "column" },
+      ...picker.rows.map((row) =>
+        h(
+          Button,
+          {
+            key: `pick-${row.value}`,
+            plain: true,
+            onPress: () => pickRow($, row.value),
+          },
+          row.label
+        )
+      ),
+      h(Text, { dimColor: true }, "Tab moves · Enter picks · Esc closes")
+    ) as RenderElement;
+  });
+
   on("ui.render", { component: "AskUserQuestion" }, async ($, e, next) => {
     const dialog = await next(e);
     if (!isPickerQuestion(e.props.questions)) return dialog;

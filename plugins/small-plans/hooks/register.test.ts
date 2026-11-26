@@ -9,7 +9,10 @@ const WRITE_TOOL = "mcp__small-plans__write_small_plan";
 const STATUS_TOOL = "mcp__small-plans__set_small_plan_status";
 const START_TOOL = "mcp__small-plans__start_small_plan";
 const CHECK_TOOL = "mcp__small-plans__check_small_plan";
+const LIST_TOOL = "mcp__small-plans__list_small_plans";
+const RENAME_TOOL = "mcp__small-plans__rename_small_plan_set";
 const FINISH_TOOL = "mcp__small-plans__finish_small_plan";
+const UPDATE_TOOL = "mcp__small-plans__update_small_plan";
 const PLANS_FOLDER = "/home/tester/.local/share/small-plans";
 const PROJECT_FOLDER = `${PLANS_FOLDER}/claude-kit`;
 const HANDOFFS_FOLDER = "/home/tester/.claude/handoffs/claude-kit";
@@ -58,6 +61,10 @@ type Recorded = {
 };
 
 const moveFolder = (files: Map<string, string>, from: string, to: string) => {
+  if (files.has(from)) {
+    files.set(to, files.get(from) ?? "");
+    files.delete(from);
+  }
   for (const [path, text] of [...files]) {
     if (!path.startsWith(`${from}/`)) continue;
     files.delete(path);
@@ -173,6 +180,78 @@ test("a plan is saved under its project and set", async ($, on) => {
     )
   );
   expect(body).toBe(`${PLAN_BODY}\n`);
+});
+
+test("a new set gets its date and time from the tool", async ($, on) => {
+  mockEngine(on);
+
+  const reply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    set: "dark-mode-toggle",
+    order: 1,
+    depends_on: [],
+  });
+
+  expect(reply.result).toMatch(
+    new RegExp(`${PROJECT_FOLDER}/${NEW_SET_STAMP}-dark-mode-toggle/01-`)
+  );
+});
+
+test("a later plan with the same short name joins the set already saved", async ($, on) => {
+  const savedSetFolder = `${PROJECT_FOLDER}/2026-11-19-1542-dark-mode-toggle`;
+  const { files } = mockEngine(on, {
+    [`${savedSetFolder}/01-first.md`]: "saved",
+  });
+
+  const reply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    set: "dark-mode-toggle",
+    order: 2,
+    depends_on: [1],
+  });
+
+  expect(reply.result).toContain(
+    `${savedSetFolder}/02-clear-the-cached-token.md`
+  );
+  const setFolders = new Set(
+    [...files.keys()]
+      .filter((path) => path.startsWith(`${PROJECT_FOLDER}/`))
+      .map((path) => path.slice(PROJECT_FOLDER.length + 1).split("/")[0])
+  );
+  expect([...setFolders]).toEqual(["2026-11-19-1542-dark-mode-toggle"]);
+});
+
+test("a set named after the request is refused", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  for (const set of ["plan-this", "plans", "the-work", "next-steps"]) {
+    const reply = await callTool($, WRITE_TOOL, {
+      ...VALID_PLAN,
+      set,
+      order: 1,
+      depends_on: [],
+    });
+    expect(reply.deny).toContain("names the request");
+  }
+  expect(
+    [...files.keys()].filter((path) => path.startsWith(PROJECT_FOLDER))
+  ).toEqual([]);
+});
+
+test("a saved set with a refused name still takes plans", async ($, on) => {
+  const savedSetFolder = `${PROJECT_FOLDER}/2026-11-19-1542-plan-this`;
+  mockEngine(on, { [`${savedSetFolder}/01-first.md`]: "saved" });
+
+  const reply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    set: "plan-this",
+    order: 2,
+    depends_on: [1],
+  });
+
+  expect(reply.result).toContain(
+    `${savedSetFolder}/02-clear-the-cached-token.md`
+  );
 });
 
 test("with no SMALL_PLANS_DIR a plan is saved under the local share folder", async ($, on) => {
@@ -420,6 +499,167 @@ test("a status change is refused outside the plans folder and for an unknown sta
   expect(files.get(strayPath)).toBe("status: pending\n");
 });
 
+const SECOND_PLAN = `${PROJECT_FOLDER}/${HANDOFF_SET}/02-clear-the-cached-token.md`;
+const SECOND_PLAN_TEXT = `---\ntitle: Clear the cached token\nproject: claude-kit\ncreated: 2026-11-18T09:00:00.000Z\nset: ${HANDOFF_SET}\norder: 2\nkind: fix\nstatus: pending\n---\n\n${PLAN_BODY}\n`;
+
+test("an update retitles a plan, renames its file and keeps its body, status and created", async ($, on) => {
+  const { files } = mockEngine(on, { [SECOND_PLAN]: SECOND_PLAN_TEXT });
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: SECOND_PLAN,
+    title: "Refresh the profile token",
+  });
+
+  const renamedPath = `${PROJECT_FOLDER}/${HANDOFF_SET}/02-refresh-the-profile-token.md`;
+  expect(reply.result).toBe(
+    `Plan updated at ${renamedPath}. The set's index is updated.`
+  );
+  expect(files.has(SECOND_PLAN)).toBe(false);
+  expect(files.get(renamedPath)).toBe(
+    SECOND_PLAN_TEXT.replace(
+      "title: Clear the cached token",
+      "title: Refresh the profile token"
+    )
+  );
+  expect(files.get(HANDOFF_SET_INDEX)).toContain(
+    "| 2 | [Refresh the profile token](02-refresh-the-profile-token.md) | fix | pending | none |"
+  );
+});
+
+test("an update changes only the body it is given", async ($, on) => {
+  const { files } = mockEngine(on, { [SECOND_PLAN]: SECOND_PLAN_TEXT });
+  const newBody = PLAN_BODY.replace(
+    "The profile request works after a token refresh.",
+    "The profile request works after a token refresh and a retry."
+  );
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: SECOND_PLAN,
+    body: newBody,
+  });
+
+  expect(reply.deny).toBeUndefined();
+  expect(files.get(SECOND_PLAN)).toBe(
+    SECOND_PLAN_TEXT.replace(`${PLAN_BODY}\n`, `${newBody}\n`)
+  );
+});
+
+test("an update with a body that lacks a heading is refused and changes nothing", async ($, on) => {
+  const { files } = mockEngine(on, { [SECOND_PLAN]: SECOND_PLAN_TEXT });
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: SECOND_PLAN,
+    body: PLAN_BODY.replace("## Review", "## Notes"),
+  });
+
+  expect(reply.deny).toContain("The plan was not updated");
+  expect(reply.deny).toContain('The body lacks "## Review".');
+  expect(files.get(SECOND_PLAN)).toBe(SECOND_PLAN_TEXT);
+});
+
+test("an update with depends_on [] removes the dependency line", async ($, on) => {
+  const planWithDependency = SECOND_PLAN_TEXT.replace(
+    "status: pending\n",
+    "status: pending\ndepends_on: 1\n"
+  );
+  const { files } = mockEngine(on, { [SECOND_PLAN]: planWithDependency });
+
+  await callTool($, UPDATE_TOOL, { path: SECOND_PLAN, depends_on: [] });
+
+  expect(files.get(SECOND_PLAN)).toBe(SECOND_PLAN_TEXT);
+});
+
+test("an update with depends_on [1] adds the line after the status line", async ($, on) => {
+  const { files } = mockEngine(on, { [SECOND_PLAN]: SECOND_PLAN_TEXT });
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: SECOND_PLAN,
+    depends_on: [1],
+  });
+
+  expect(reply.deny).toBeUndefined();
+  expect(files.get(SECOND_PLAN)).toBe(
+    SECOND_PLAN_TEXT.replace(
+      "status: pending\n",
+      "status: pending\ndepends_on: 1\n"
+    )
+  );
+});
+
+test("an update with depends_on naming a later order is refused", async ($, on) => {
+  const { files } = mockEngine(on, { [SECOND_PLAN]: SECOND_PLAN_TEXT });
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: SECOND_PLAN,
+    depends_on: [2, 3],
+  });
+
+  expect(reply.deny).toContain(
+    "depends_on may only name the orders of earlier plans."
+  );
+  expect(files.get(SECOND_PLAN)).toBe(SECOND_PLAN_TEXT);
+});
+
+test("an update of an in-progress plan is refused", async ($, on) => {
+  const { files } = mockEngine(on, {
+    [SECOND_PLAN]: SECOND_PLAN_TEXT.replace(
+      "status: pending",
+      "status: in-progress"
+    ),
+  });
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: SECOND_PLAN,
+    title: "Refresh the profile token",
+  });
+
+  expect(reply.deny).toBe(
+    `Plan ${SECOND_PLAN} is in-progress: a build is using it. Update it when the build ends.`
+  );
+  expect(files.has(SECOND_PLAN)).toBe(true);
+});
+
+test("an update outside the plans folder is refused", async ($, on) => {
+  const strayPath = "/work/claude-kit/README.md";
+  const { files } = mockEngine(on, { [strayPath]: SECOND_PLAN_TEXT });
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: strayPath,
+    title: "Refresh the profile token",
+  });
+
+  expect(reply.deny).toContain(PLANS_FOLDER);
+  expect(files.get(strayPath)).toBe(SECOND_PLAN_TEXT);
+});
+
+test("an update with no field to change is refused", async ($, on) => {
+  const { files } = mockEngine(on, { [SECOND_PLAN]: SECOND_PLAN_TEXT });
+
+  const reply = await callTool($, UPDATE_TOOL, { path: SECOND_PLAN });
+
+  expect(reply.deny).toBe(
+    "Give at least one of title, kind, body or depends_on."
+  );
+  expect(files.get(SECOND_PLAN)).toBe(SECOND_PLAN_TEXT);
+});
+
+test("an update that retitles a plan onto an existing file name is refused", async ($, on) => {
+  const takenPath = `${PROJECT_FOLDER}/${HANDOFF_SET}/02-refresh-the-profile-token.md`;
+  const { files } = mockEngine(on, {
+    [SECOND_PLAN]: SECOND_PLAN_TEXT,
+    [takenPath]: "taken",
+  });
+
+  const reply = await callTool($, UPDATE_TOOL, {
+    path: SECOND_PLAN,
+    title: "Refresh the profile token",
+  });
+
+  expect(reply.deny).toContain(`${takenPath} already exists`);
+  expect(files.get(SECOND_PLAN)).toBe(SECOND_PLAN_TEXT);
+  expect(files.get(takenPath)).toBe("taken");
+});
+
 test("/small-plans <work> plans that work with no handoff", async ($, on) => {
   const { reply, submittedPrompts } = await runCommand(
     $,
@@ -427,12 +667,11 @@ test("/small-plans <work> plans that work with no handoff", async ($, on) => {
     "Add a dark mode toggle!"
   );
 
-  const setPattern = `${NEW_SET_STAMP}-add-a-dark-mode-toggle`;
-  expect(reply.text).toMatch(new RegExp(setPattern));
+  expect(reply.text).toContain("Planning the work as small plans");
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain("Add a dark mode toggle!");
   expect(submittedPrompts[0]).toContain(WRITE_TOOL);
-  expect(submittedPrompts[0]).toMatch(new RegExp(`set "${setPattern}"`));
+  expect(submittedPrompts[0]).toContain("a name you choose for this work");
   expect(submittedPrompts[0]).toContain(
     'Set "project" from the work being planned (the files, services and repositories it names), not from the working directory'
   );
@@ -449,10 +688,16 @@ test("/small-plans alone plans the work this conversation leaves", async ($, on)
 
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain("this conversation");
-  expect(submittedPrompts[0]).toMatch(
-    new RegExp(`set "${NEW_SET_STAMP}-plans"`)
-  );
+  expect(submittedPrompts[0]).not.toMatch(new RegExp(`${NEW_SET_STAMP}-plans`));
   expect(submittedPrompts[0]).not.toContain(NEWER_HANDOFF);
+});
+
+test("/small-plans plan this names the set after the work, not the request's words", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "plan this");
+
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).not.toContain("plan-this");
+  expect(submittedPrompts[0]).toContain("dark-mode-toggle");
 });
 
 test("/small-plans <work> that starts with a command word is still planned as work", async ($, on) => {
@@ -1155,6 +1400,134 @@ test("/small-plans rename lists every set its name matches and renames none", as
   expect(reply.text).toContain(HANDOFF_SET);
   expect(reply.text).toContain(STANDALONE_SET);
   expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
+});
+
+test("/small-plans rename with no words submits one prompt to Claude and renames nothing", async ($, on) => {
+  const { reply, files, submittedPrompts } = await runCommand($, on, "rename", {
+    [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT,
+  });
+
+  expect(reply.text).toBe("Renaming a set of small plans…");
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain("rename_small_plan_set");
+  expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
+});
+
+test("/small-plans rename with only a set submits one prompt naming that set and renames nothing", async ($, on) => {
+  const { reply, files, submittedPrompts } = await runCommand(
+    $,
+    on,
+    "rename fix-login",
+    { [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT }
+  );
+
+  expect(reply.text).toBe("Renaming a set of small plans…");
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain("rename_small_plan_set");
+  expect(submittedPrompts[0]).toContain(`whose name holds "fix-login"`);
+  expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
+});
+
+test("the rename tool renames a set and returns the result", async ($, on) => {
+  const { files } = mockEngine(on, { [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT });
+
+  const outcome = await callTool($, RENAME_TOOL, {
+    set: "fix-login",
+    name: "Repair the login refresh",
+  });
+
+  expect(outcome.result).toBe(`Renamed set ${HANDOFF_SET} -> ${RENAMED_SET}.`);
+  expect(outcome.deny).toBeUndefined();
+  expect(files.get(`${RENAMED_SET_FOLDER}/01-clear-the-cached-token.md`)).toBe(
+    FIX_LOGIN_PLAN_TEXT.replace(`set: ${HANDOFF_SET}`, `set: ${RENAMED_SET}`)
+  );
+});
+
+test("the rename tool denies a name that names the request and renames nothing", async ($, on) => {
+  const { files } = mockEngine(on, { [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT });
+
+  const outcome = await callTool($, RENAME_TOOL, {
+    set: "fix-login",
+    name: "plan-this",
+  });
+
+  expect(outcome.deny).toBe(
+    'The name "plan-this" names the request, not the work. Name what the plans deliver in 2 to 5 words, such as dark-mode-toggle.'
+  );
+  expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
+});
+
+test("the rename tool denies a set text that several sets hold and lists them", async ($, on) => {
+  const { files } = mockEngine(on, {
+    [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT,
+    [STANDALONE_SET_PLAN]: "saved",
+  });
+
+  const outcome = await callTool($, RENAME_TOOL, {
+    set: "2026-11",
+    name: "Repair the login refresh",
+  });
+
+  expect(outcome.deny).toContain(HANDOFF_SET);
+  expect(outcome.deny).toContain(STANDALONE_SET);
+  expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
+});
+
+test("the list tool shows the newest sets with their index and folder", async ($, on) => {
+  mockEngine(on, {
+    [`${PROJECT_FOLDER}/${HANDOFF_SET}/index.md`]: "handoff index",
+    [`${PROJECT_FOLDER}/${STANDALONE_SET}/index.md`]: "standalone index",
+  });
+
+  const outcome = await callTool($, LIST_TOOL);
+
+  expect(outcome.result).toBe(
+    [
+      `Set ${STANDALONE_SET} (${PROJECT_FOLDER}/${STANDALONE_SET})\nstandalone index`,
+      `Set ${HANDOFF_SET} (${PROJECT_FOLDER}/${HANDOFF_SET})\nhandoff index`,
+    ].join("\n\n")
+  );
+});
+
+test("the list tool shows only the sets whose name holds the given text", async ($, on) => {
+  mockEngine(on, {
+    [`${PROJECT_FOLDER}/${HANDOFF_SET}/index.md`]: "handoff index",
+    [`${PROJECT_FOLDER}/${STANDALONE_SET}/index.md`]: "standalone index",
+  });
+
+  const outcome = await callTool($, LIST_TOOL, { set: "fix-login" });
+
+  expect(outcome.result).toContain(`Set ${HANDOFF_SET} (`);
+  expect(outcome.result).not.toContain(STANDALONE_SET);
+});
+
+test("the list tool names the older sets it leaves out after the five newest", async ($, on) => {
+  const seededFiles = Object.fromEntries(
+    ["01", "02", "03", "04", "05", "06"].map((order) => [
+      `${PROJECT_FOLDER}/2026-11-${order}-0900-set-${order}/index.md`,
+      `index ${order}`,
+    ])
+  );
+  mockEngine(on, seededFiles);
+
+  const outcome = await callTool($, LIST_TOOL);
+
+  expect(outcome.result).not.toContain("Set 2026-11-01-0900-set-01 (");
+  expect(outcome.result).toContain("\nOlder sets: 2026-11-01-0900-set-01");
+});
+
+test("the list tool says when no set is saved, or none holds the given text", async ($, on) => {
+  mockEngine(on);
+
+  const everySet = await callTool($, LIST_TOOL);
+  const namedSet = await callTool($, LIST_TOOL, { set: "nothing-like-this" });
+
+  expect(everySet.result).toBe(
+    `No small plans are saved in ${PROJECT_FOLDER}.`
+  );
+  expect(namedSet.result).toBe(
+    `No saved set holds "nothing-like-this" in ${PROJECT_FOLDER}.`
+  );
 });
 
 test("/small-plans rename is refused while a build of that set runs", async ($, on) => {

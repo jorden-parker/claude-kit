@@ -4,14 +4,14 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 
 ## Usage
 
-| Command                                     | What it does                                                                                     |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `/small-plans <work to plan>`               | Plans the work you name                                                                          |
-| `/small-plans`                              | Plans the work this conversation still leaves to do                                              |
-| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`        |
-| `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, a Sonnet reviewer reviews and sends back fixes |
-| `/small-plans rename <set> <new name>`      | Gives a saved set a new name; its date or handoff prefix stays, and the rest is the new name     |
-| `/small-plans board`                        | Shows the build board again after you hide it                                                    |
+| Command                                     | What it does                                                                                                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/small-plans <work to plan>`               | Plans the work you name                                                                                                                           |
+| `/small-plans`                              | Plans the work this conversation still leaves to do                                                                                               |
+| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`                                                         |
+| `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, a Sonnet reviewer reviews and sends back fixes                                                  |
+| `/small-plans rename [set] [new name]`      | Gives a saved set a new name; its date or handoff prefix stays. Leave out the name, or both, and Claude finds the set and names it from its plans |
+| `/small-plans board`                        | Shows the build board again after you hide it                                                                                                     |
 
 Typing `/small-plans ` suggests the actions.
 
@@ -23,7 +23,23 @@ While `build` runs, a build board above the prompt shows each plan as a WAIT, RU
 
 `build` is a command only when it stands as shown: `/small-plans build a login page with tests` plans that work.
 
-You can also ask in your own words ("break this into small plans"); Claude calls the same tool.
+## Asking in your own words
+
+Every command has a plain-words form. Claude calls the plugin's tools itself, and finds the set or plan you mean with `list_small_plans`, so you never type an exact name.
+
+| Say                                                    | Claude calls            |
+| ------------------------------------------------------ | ----------------------- |
+| "Plan this", "break that into small plans"             | `write_small_plan`      |
+| "What plans do I have?", "show the login plans"        | `list_small_plans`      |
+| "Rename the plans to X", "give that set a better name" | `rename_small_plan_set` |
+| "Change plan 3 so that...", "retitle plan 2"           | `update_small_plan`     |
+| "Mark plan 2 blocked"                                  | `set_small_plan_status` |
+
+"The plan" in a rename means the set, unless you name one plan by its order or title. Deleting a plan or a set stays with you: delete the file or folder.
+
+### How a set gets its name
+
+Claude names a new set from the work itself, in 2 to 5 words such as `dark-mode-toggle`, and the tool puts the date and time in front. The name never comes from the words of the request: "plan this" names what "this" is. The tool refuses a new name made only of request words (`plan-this`, `the-work`, `next-steps`) and tells Claude to name the work. A set saved under such a name still takes plans.
 
 ## What a plan holds
 
@@ -42,7 +58,7 @@ The tool refuses a plan, and names every problem at once, when:
 - the prose holds vague wording: "as appropriate", "if needed", "as needed", "where appropriate", "consider", "similar to", "etc.", "and so on", "you may", "TODO" (code fences are exempt)
 - the kind is not one of `feature`, `fix`, `refactor`, `test`, `docs`, `chore`
 - `depends_on` is missing (pass `[]` for a plan that needs no other), or names a plan that is not earlier in the order, so the numbers always follow the dependency order
-- a plan of the same order is already saved in the set: a saved plan is never replaced. Delete its file to write it again
+- a plan of the same order is already saved in the set: `write_small_plan` never replaces a saved plan. `update_small_plan` changes its title, kind, body or `depends_on` with the same checks, and renames the file when the title changes. It leaves the order and status alone and refuses a plan that is in-progress
 
 ## Storage
 
@@ -54,7 +70,7 @@ The tool refuses a plan, and names every problem at once, when:
 Plans used to live in `~/.claude/small-plans`; `claude-kit-update` moves that folder to `~/.local/share/small-plans` after updating plugins, leaving any project folder that already exists at the new path in place.
 
 - `<project>` is the repository the plan changes. Claude picks it from the work being planned, not from the folder the session started in, and asks you when more than one repository fits. The folder is named after the repository, shared by its worktrees (the name the handoff plugin uses too), also from a deleted `<repo>/.claude/worktrees/<name>` worktree. Build plans saved for another repository from a session in that repository
-- `<set>` groups the plans of one planning run: the date and time (UTC), then a slug of the work, such as `2026-11-19-1542-add-a-dark-mode-toggle`. A set planned from a handoff ends in `handoff-<handoff file name>`, such as `2026-11-19-1542-handoff-007-fix-login`
+- `<set>` groups the plans of one planning run: the date and time (UTC), added by the tool, then the short name Claude gives the work, such as `2026-11-19-1542-dark-mode-toggle`. A later plan saved under the same short name joins that set. A set planned from a handoff ends in `handoff-<handoff file name>`, such as `2026-11-19-1542-handoff-007-fix-login`
 - `<order>` is the plan's place in the build order, two digits; `<slug>` comes from the title
 - Each file starts with front matter: `title`, `project`, `set`, `order`, `kind`, `status`, `depends_on` when it has any, and `created`
 - `status` is `pending`, `in-progress`, `done` or `blocked`. The `set_small_plan_status`, `start_small_plan` and `finish_small_plan` tools change it, and only for files under the plans folder

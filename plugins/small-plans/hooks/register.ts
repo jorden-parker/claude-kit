@@ -18,6 +18,8 @@ const BANNED_PHRASES = [
 const MAX_STEPS = 6;
 const MAX_ORDER = 99;
 const ORDER_WIDTH = 2;
+const LEADING_ORDER_PREFIX = /^\d+-/;
+const PLAN_FILE_PARTS = /^---\n([\s\S]*?\n)---\n\n([\s\S]*)$/;
 const MAX_SLUG_LENGTH = 60;
 const MAX_ASKED_OPTIONS = 4;
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
@@ -27,6 +29,67 @@ const WHOLE_SET_OPTION = "Whole set";
 const MAX_FIX_ROUNDS = 3;
 const SET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SET_PREFIX = /^(\d{4}-\d{2}-\d{2}-\d{4}(?:-handoff-\d+)?)-/;
+const STAMP_PREFIX = /^\d{4}-\d{2}-\d{2}-\d{4}-/;
+const REQUEST_WORDS = new Set([
+  "plan",
+  "plans",
+  "planning",
+  "planned",
+  "small",
+  "this",
+  "that",
+  "it",
+  "these",
+  "those",
+  "the",
+  "a",
+  "an",
+  "work",
+  "task",
+  "tasks",
+  "todo",
+  "todos",
+  "stuff",
+  "thing",
+  "things",
+  "set",
+  "new",
+  "next",
+  "step",
+  "steps",
+  "rest",
+  "remaining",
+  "left",
+  "all",
+  "of",
+  "for",
+  "to",
+  "do",
+  "and",
+  "my",
+  "our",
+  "now",
+  "here",
+  "above",
+  "conversation",
+  "discussion",
+  "what",
+  "we",
+  "just",
+  "talked",
+  "about",
+  "discussed",
+  "break",
+  "split",
+  "down",
+  "into",
+  "up",
+  "out",
+  "please",
+  "make",
+  "create",
+  "write",
+]);
 const CODE_FENCE = /```[\s\S]*?```/g;
 const NUMBERED_STEP = /^\d+\.\s/gm;
 const BACKTICKED_TEXT = /`[^`\n]+`/;
@@ -57,7 +120,7 @@ const SUBCOMMAND_SUGGESTIONS = [
   {
     text: "rename",
     description:
-      "Give a saved set a new name, keeping its date or handoff prefix",
+      "Give a saved set a new name, keeping its date or handoff prefix; the set and new name are optional",
   },
 ];
 const WRITE_TOOL_NAME = "write_small_plan";
@@ -70,6 +133,13 @@ const CHECK_TOOL_NAME = "check_small_plan";
 const QUALIFIED_CHECK_TOOL_NAME = `mcp__small-plans__${CHECK_TOOL_NAME}`;
 const FINISH_TOOL_NAME = "finish_small_plan";
 const QUALIFIED_FINISH_TOOL_NAME = `mcp__small-plans__${FINISH_TOOL_NAME}`;
+const LIST_TOOL_NAME = "list_small_plans";
+const QUALIFIED_LIST_TOOL_NAME = `mcp__small-plans__${LIST_TOOL_NAME}`;
+const RENAME_TOOL_NAME = "rename_small_plan_set";
+const QUALIFIED_RENAME_TOOL_NAME = `mcp__small-plans__${RENAME_TOOL_NAME}`;
+const UPDATE_TOOL_NAME = "update_small_plan";
+const QUALIFIED_UPDATE_TOOL_NAME = `mcp__small-plans__${UPDATE_TOOL_NAME}`;
+const SHOWN_SET_COUNT = 5;
 const MAX_GUARD_ROUNDS = 3;
 const COMMAND_TIMEOUT_MS = 600_000;
 const FAILURE_TAIL_LINES = 5;
@@ -96,13 +166,20 @@ const PLAN_SHAPE = `The body holds these "## " headings, in this order: ${PLAN_S
 - Check: proves the behaviour the plan delivers works, not only that the code builds: "- Run:" with one command in backticks that exercises it, such as the test the plan adds or changes, or a command that runs the feature, and "- Expect:" with the exact output that counts as passing, such as the test name reported as passed or the value the command prints. A build, type-check, lint or format command alone is refused.
 - Review: a list of what a reviewer confirms by reading the diff, each line a fact that is true or false.
 Vague wording is refused outside code fences: ${BANNED_PHRASES.join(", ")}. Say the exact thing instead.`;
+const PROJECT_PROPERTY = {
+  type: "string",
+  description:
+    "The repository the plan changes, as an absolute folder path inside it. Leave it out when that is the working directory's repository.",
+};
+const KIND_DESCRIPTION =
+  "feature: new behaviour. fix: a bug. refactor: same behaviour, better code. test: tests only. docs: documentation only. chore: tooling, config, releases.";
 const WRITE_TOOL_SCHEMA = {
   type: "object",
   properties: {
     set: {
       type: "string",
       description:
-        "The folder name of the group this plan belongs to; every plan of one split shares it. Use the set the instruction names, or name a new one as date, time and slug, such as 2026-11-19-1542-fix-login.",
+        'The set this plan joins; every plan of one planning run shares it. For a new set pass a short name: 2 to 5 lowercase words joined by hyphens that say what the work delivers, such as dark-mode-toggle. Take it from the work itself, never from the wording of the request: when the user says "plan this", name what "this" is. The tool puts the date and time in front and tells you the folder. For a saved set pass its folder name, or the name the instruction gives.',
     },
     order: {
       type: "number",
@@ -112,8 +189,7 @@ const WRITE_TOOL_SCHEMA = {
     kind: {
       type: "string",
       enum: KINDS,
-      description:
-        "feature: new behaviour. fix: a bug. refactor: same behaviour, better code. test: tests only. docs: documentation only. chore: tooling, config, releases.",
+      description: KIND_DESCRIPTION,
     },
     body: { type: "string", description: "The plan, in Markdown." },
     depends_on: {
@@ -122,13 +198,66 @@ const WRITE_TOOL_SCHEMA = {
       description:
         "The orders of the earlier plans this plan needs done; [] when it needs none. Required: it declares the dependency order.",
     },
-    project: {
-      type: "string",
-      description:
-        "The repository the plan changes, as an absolute folder path inside it. Leave it out when that is the working directory's repository.",
-    },
+    project: PROJECT_PROPERTY,
   },
   required: ["set", "order", "title", "kind", "body", "depends_on"],
+};
+const UPDATE_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    path: {
+      type: "string",
+      description:
+        "The plan file, as list_small_plans or write_small_plan gave it.",
+    },
+    title: {
+      type: "string",
+      description:
+        "A new short title, under 10 words. The file is renamed to match.",
+    },
+    kind: { type: "string", enum: KINDS, description: KIND_DESCRIPTION },
+    body: {
+      type: "string",
+      description:
+        "The whole new plan body, in Markdown. It replaces the saved body.",
+    },
+    depends_on: {
+      type: "array",
+      items: { type: "number" },
+      description:
+        "The orders of the earlier plans this plan needs done; [] when it needs none.",
+    },
+  },
+  required: ["path"],
+};
+const LIST_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    set: {
+      type: "string",
+      description:
+        "Text the set name holds. Leave it out for the five newest sets.",
+    },
+    project: PROJECT_PROPERTY,
+  },
+  required: [],
+};
+const RENAME_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    set: {
+      type: "string",
+      description:
+        "The set to rename: its folder name, or text only that set's name holds.",
+    },
+    name: {
+      type: "string",
+      description:
+        "The new name: 2 to 5 lowercase words joined by hyphens that say what the set's plans deliver, such as dark-mode-toggle. Never the wording of the request.",
+    },
+    project: PROJECT_PROPERTY,
+  },
+  required: ["set", "name"],
 };
 const STATUS_TOOL_SCHEMA = {
   type: "object",
@@ -241,6 +370,17 @@ const resolvePlansRoot = async (engine: EngineInterface) =>
 const resolveProjectFolder = async (engine: EngineInterface) =>
   `${await resolvePlansRoot(engine)}/${await resolveProjectName(engine)}`;
 
+const resolveRequestedProjectFolder = async (
+  engine: EngineInterface,
+  requestedProject: string
+) => {
+  const projectName =
+    requestedProject && !requestedProject.startsWith("/")
+      ? toProjectName(requestedProject)
+      : await resolveProjectName(engine, requestedProject);
+  return `${await resolvePlansRoot(engine)}/${projectName}`;
+};
+
 const resolveHandoffsRoot = async (engine: EngineInterface) =>
   (await engine.env.get("HANDOFFS_DIR")) ??
   `${await readClaudeFolder(engine)}/handoffs`;
@@ -248,11 +388,20 @@ const resolveHandoffsRoot = async (engine: EngineInterface) =>
 const listNames = async (engine: EngineInterface, folderPath: string) =>
   (await engine.fs.list(folderPath).catch(() => [])).map((entry) => entry.name);
 
-const listSetsNewestFirst = async (engine: EngineInterface) =>
-  (await listNames(engine, await resolveProjectFolder(engine)))
+const listSavedSetNames = async (
+  engine: EngineInterface,
+  projectFolder: string
+) =>
+  (await listNames(engine, projectFolder))
     .filter((name) => SET_NAME.test(name) && !name.endsWith(".md"))
     .sort()
     .reverse();
+
+const listSetsNewestFirst = async (engine: EngineInterface) =>
+  listSavedSetNames(engine, await resolveProjectFolder(engine));
+
+const isRequestName = (slug: string) =>
+  slug.split("-").every((word) => REQUEST_WORDS.has(word));
 
 const composeNewSetName = (slug: string) => {
   const stamp = new Date()
@@ -261,6 +410,23 @@ const composeNewSetName = (slug: string) => {
     .replace("T", "-")
     .replace(":", "");
   return `${stamp}-${slug}`;
+};
+
+const resolveSetName = async (
+  engine: EngineInterface,
+  projectFolder: string,
+  requestedSet: string
+) => {
+  const savedSetNames = await listSavedSetNames(engine, projectFolder);
+  if (savedSetNames.includes(requestedSet) || SET_PREFIX.test(requestedSet))
+    return requestedSet;
+  const slug = toSlug(requestedSet);
+  const joinedSetName = savedSetNames.find(
+    (name) => STAMP_PREFIX.test(name) && name.replace(STAMP_PREFIX, "") === slug
+  );
+  if (joinedSetName) return joinedSetName;
+  if (isRequestName(slug)) return "";
+  return composeNewSetName(slug);
 };
 
 const readSection = (body: string, section: string) =>
@@ -327,18 +493,56 @@ const listBodyProblems = (body: string) => {
   ];
 };
 
+const normalizeTitle = (requestedTitle: unknown) =>
+  trimText(requestedTitle).replace(/\s+/g, " ");
+
+const listTitleProblems = (title: string) =>
+  toSlug(title) ? [] : ["The title needs letters or digits."];
+
+const listKindProblems = (kind: string) =>
+  KINDS.includes(kind) ? [] : [`kind must be one of: ${KINDS.join(", ")}.`];
+
+const listDependencyListProblems = (requestedDependencies: unknown) =>
+  Array.isArray(requestedDependencies)
+    ? []
+    : [
+        "depends_on is required: list the orders of the earlier plans this plan needs, or [] when it needs none.",
+      ];
+
+const listDependencyOrderProblems = (dependencies: number[], order: number) =>
+  dependencies.every(
+    (dependency) =>
+      Number.isInteger(dependency) && dependency >= 1 && dependency < order
+  )
+    ? []
+    : ["depends_on may only name the orders of earlier plans."];
+
+const composeProblemDeny = (outcome: string, problems: string[]) => ({
+  deny: `${outcome} Fix every problem and call this tool again:\n- ${problems.join("\n- ")}`,
+});
+
+const describePlanPathProblem = (plansRoot: string) =>
+  `path must be a saved plan file under ${plansRoot}.`;
+
+const describeMissingStatusLine = (planPath: string) =>
+  `${planPath} has no "status:" line in its front matter.`;
+
+const readPlanRequestFields = (toolInput: Record<string, unknown>) => ({
+  title: normalizeTitle(toolInput.title),
+  kind: trimText(toolInput.kind),
+  body: trimText(toolInput.body),
+  dependencies: Array.isArray(toolInput.depends_on)
+    ? toolInput.depends_on.map(Number)
+    : [],
+});
+
 const writeSmallPlan = async (
   engine: EngineInterface,
   toolInput: Record<string, unknown>
 ) => {
   const setName = trimText(toolInput.set);
   const order = Number(toolInput.order);
-  const title = trimText(toolInput.title).replace(/\s+/g, " ");
-  const kind = trimText(toolInput.kind);
-  const body = trimText(toolInput.body);
-  const dependencies = Array.isArray(toolInput.depends_on)
-    ? toolInput.depends_on.map(Number)
-    : [];
+  const { title, kind, body, dependencies } = readPlanRequestFields(toolInput);
   const problems = [
     ...(SET_NAME.test(setName)
       ? []
@@ -348,41 +552,33 @@ const writeSmallPlan = async (
     ...(Number.isInteger(order) && order >= 1 && order <= MAX_ORDER
       ? []
       : [`order must be a whole number from 1 to ${MAX_ORDER}.`]),
-    ...(toSlug(title) ? [] : ["The title needs letters or digits."]),
-    ...(KINDS.includes(kind)
-      ? []
-      : [`kind must be one of: ${KINDS.join(", ")}.`]),
-    ...(Array.isArray(toolInput.depends_on)
-      ? []
-      : [
-          "depends_on is required: list the orders of the earlier plans this plan needs, or [] when it needs none.",
-        ]),
-    ...(dependencies.every(
-      (dependency) =>
-        Number.isInteger(dependency) && dependency >= 1 && dependency < order
-    )
-      ? []
-      : ["depends_on may only name the orders of earlier plans."]),
+    ...listTitleProblems(title),
+    ...listKindProblems(kind),
+    ...listDependencyListProblems(toolInput.depends_on),
+    ...listDependencyOrderProblems(dependencies, order),
     ...listBodyProblems(body),
   ];
   if (problems.length > 0)
-    return {
-      deny: `The plan was not saved. Fix every problem and call this tool again:\n- ${problems.join("\n- ")}`,
-    };
+    return composeProblemDeny("The plan was not saved.", problems);
 
-  const requestedProject = trimText(toolInput.project);
-  const projectName =
-    requestedProject && !requestedProject.startsWith("/")
-      ? toProjectName(requestedProject)
-      : await resolveProjectName(engine, requestedProject);
-  const setFolder = `${await resolvePlansRoot(engine)}/${projectName}/${setName}`;
+  const projectFolder = await resolveRequestedProjectFolder(
+    engine,
+    trimText(toolInput.project)
+  );
+  const projectName = projectFolder.split("/").pop() ?? "";
+  const resolvedSetName = await resolveSetName(engine, projectFolder, setName);
+  if (!resolvedSetName)
+    return {
+      deny: `The set name "${setName}" names the request, not the work. Name what the work delivers in 2 to 5 words, such as dark-mode-toggle.`,
+    };
+  const setFolder = `${projectFolder}/${resolvedSetName}`;
   const orderPrefix = `${String(order).padStart(ORDER_WIDTH, "0")}-`;
   const savedName = (await listNames(engine, setFolder)).find((name) =>
     name.startsWith(orderPrefix)
   );
   if (savedName)
     return {
-      deny: `Plan ${order} is already saved at ${setFolder}/${savedName}, and a saved plan is never replaced. Use the next free order, or have the user delete that file.`,
+      deny: `Plan ${order} is already saved at ${setFolder}/${savedName}, and a saved plan is never replaced. To change that plan call ${UPDATE_TOOL_NAME}; for a new plan use the next free order.`,
     };
 
   const planPath = `${setFolder}/${orderPrefix}${toSlug(title)}.md`;
@@ -390,7 +586,7 @@ const writeSmallPlan = async (
     `title: ${title}`,
     `project: ${projectName}`,
     `created: ${new Date().toISOString()}`,
-    `set: ${setName}`,
+    `set: ${resolvedSetName}`,
     `order: ${order}`,
     `kind: ${kind}`,
     `status: ${STATUSES[0]}`,
@@ -407,6 +603,166 @@ const writeSmallPlan = async (
 
 const readFrontMatterField = (planText: string, field: string) =>
   new RegExp(`^${field}: (.*)$`, "m").exec(planText)?.[1]?.trim() ?? "";
+
+const replaceFrontMatterLine = (
+  frontMatter: string,
+  field: string,
+  line: string
+) => frontMatter.replace(new RegExp(`^${field}: .*$`, "m"), () => line);
+
+const replaceDependencyLine = (frontMatter: string, dependencies: number[]) => {
+  const withoutDependencies = frontMatter.replace(/^depends_on: .*\n/m, "");
+  return dependencies.length === 0
+    ? withoutDependencies
+    : withoutDependencies.replace(
+        /^status: .*\n/m,
+        (statusLine) => `${statusLine}depends_on: ${dependencies.join(", ")}\n`
+      );
+};
+
+const readUpdateFlags = (toolInput: Record<string, unknown>) => ({
+  hasTitle: toolInput.title !== undefined,
+  hasKind: toolInput.kind !== undefined,
+  hasBody: toolInput.body !== undefined,
+  hasDependencies: toolInput.depends_on !== undefined,
+});
+
+const hasAnyUpdateField = (toolInput: Record<string, unknown>) =>
+  Object.values(readUpdateFlags(toolInput)).includes(true);
+
+const readUpdatablePlan = async (
+  engine: EngineInterface,
+  planPath: string
+): Promise<{ deny: string } | { frontMatter: string; savedBody: string }> => {
+  const planText = await engine.fs
+    .read(planPath)
+    .then(String)
+    .catch(() => undefined);
+  if (planText === undefined) return { deny: `${planPath} cannot be read.` };
+  const planParts = PLAN_FILE_PARTS.exec(planText);
+  if (!planParts || !STATUS_LINE.test(planParts[1] ?? ""))
+    return { deny: describeMissingStatusLine(planPath) };
+  const [, frontMatter = "", savedBody = ""] = planParts;
+  if (readFrontMatterField(frontMatter, "status") === "in-progress")
+    return {
+      deny: `Plan ${planPath} is in-progress: a build is using it. Update it when the build ends.`,
+    };
+  return { frontMatter, savedBody };
+};
+
+const listUpdateFieldProblems = (
+  frontMatter: string,
+  toolInput: Record<string, unknown>
+) => {
+  const { hasTitle, hasKind, hasBody, hasDependencies } =
+    readUpdateFlags(toolInput);
+  const order = Number(readFrontMatterField(frontMatter, "order"));
+  const { title, kind, body, dependencies } = readPlanRequestFields(toolInput);
+  return [
+    ...(hasTitle ? listTitleProblems(title) : []),
+    ...(hasKind ? listKindProblems(kind) : []),
+    ...(hasDependencies
+      ? [
+          ...listDependencyListProblems(toolInput.depends_on),
+          ...listDependencyOrderProblems(dependencies, order),
+        ]
+      : []),
+    ...(hasBody ? listBodyProblems(body) : []),
+  ];
+};
+
+const resolveUpdatedPlanPath = (
+  setFolder: string,
+  planPath: string,
+  toolInput: Record<string, unknown>
+) => {
+  if (toolInput.title === undefined) return planPath;
+  const planName = planPath.slice(planPath.lastIndexOf("/") + 1);
+  const { title } = readPlanRequestFields(toolInput);
+  return `${setFolder}/${planName.match(LEADING_ORDER_PREFIX)?.[0] ?? ""}${toSlug(title)}.md`;
+};
+
+const applyUpdateToPlanText = (
+  frontMatter: string,
+  savedBody: string,
+  toolInput: Record<string, unknown>
+) => {
+  const { hasTitle, hasKind, hasBody, hasDependencies } =
+    readUpdateFlags(toolInput);
+  const { title, kind, body, dependencies } = readPlanRequestFields(toolInput);
+  let updatedFrontMatter = frontMatter;
+  if (hasTitle)
+    updatedFrontMatter = replaceFrontMatterLine(
+      updatedFrontMatter,
+      "title",
+      `title: ${title}`
+    );
+  if (hasKind)
+    updatedFrontMatter = replaceFrontMatterLine(
+      updatedFrontMatter,
+      "kind",
+      `kind: ${kind}`
+    );
+  if (hasDependencies)
+    updatedFrontMatter = replaceDependencyLine(
+      updatedFrontMatter,
+      dependencies
+    );
+  const updatedBody = hasBody ? `${body}\n` : savedBody;
+  return `---\n${updatedFrontMatter}---\n\n${updatedBody}`;
+};
+
+const moveRetitledPlan = async (
+  engine: EngineInterface,
+  planPath: string,
+  finalPath: string
+) => {
+  if (finalPath === planPath) return "";
+  const moveOutcome = await engine.process.run(["mv", planPath, finalPath]);
+  return moveOutcome.exitCode === 0 ? "" : moveOutcome.stderr.trim();
+};
+
+const updateSmallPlan = async (
+  engine: EngineInterface,
+  toolInput: Record<string, unknown>
+) => {
+  const planPath = trimText(toolInput.path);
+  const plansRoot = await resolvePlansRoot(engine);
+  const setFolder = findPlanSetFolder(plansRoot, planPath);
+  if (!setFolder || (await findPlanPathProblem(engine, planPath)))
+    return { deny: describePlanPathProblem(plansRoot) };
+  if (!hasAnyUpdateField(toolInput))
+    return { deny: "Give at least one of title, kind, body or depends_on." };
+  const planOutcome = await readUpdatablePlan(engine, planPath);
+  if ("deny" in planOutcome) return planOutcome;
+  const { frontMatter, savedBody } = planOutcome;
+
+  const problems = listUpdateFieldProblems(frontMatter, toolInput);
+  if (problems.length > 0)
+    return composeProblemDeny("The plan was not updated.", problems);
+
+  const planName = planPath.slice(planPath.lastIndexOf("/") + 1);
+  const finalPath = resolveUpdatedPlanPath(setFolder, planPath, toolInput);
+  const isRenamed = finalPath !== planPath;
+  if (isRenamed && (await engine.fs.exists(finalPath)))
+    return {
+      deny: `${finalPath} already exists, so ${planName} was not renamed.`,
+    };
+
+  await engine.fs.write(
+    planPath,
+    applyUpdateToPlanText(frontMatter, savedBody, toolInput)
+  );
+  const renameFailure = await moveRetitledPlan(engine, planPath, finalPath);
+  await writeSetIndex(engine, setFolder);
+  return renameFailure
+    ? {
+        deny: `Could not rename ${planName}, so it was updated under its old name: ${renameFailure}`,
+      }
+    : {
+        result: `Plan updated at ${finalPath}. The set's index is updated.`,
+      };
+};
 
 const composeIndexRow = (planName: string, planText: string) => {
   const title = readFrontMatterField(planText, "title") || planName;
@@ -466,7 +822,7 @@ const findPlanPathProblem = async (
     !planPath.split("/").includes("..");
   return isPlanFile && (await engine.fs.exists(planPath))
     ? ""
-    : `path must be a saved plan file under ${plansRoot}.`;
+    : describePlanPathProblem(plansRoot);
 };
 
 const setPlanStatus = async (
@@ -482,7 +838,7 @@ const setPlanStatus = async (
   if (pathProblem) return { deny: pathProblem };
   const planText = String(await engine.fs.read(planPath));
   if (!STATUS_LINE.test(planText))
-    return { deny: `${planPath} has no "status:" line in its front matter.` };
+    return { deny: describeMissingStatusLine(planPath) };
   await engine.fs.write(
     planPath,
     planText.replace(STATUS_LINE, `status: ${status}`)
@@ -959,7 +1315,7 @@ const askClaude = (engine: EngineInterface, instruction: string) => {
 
 const composePlanInstruction = (
   workSource: string,
-  setName: string,
+  setRule: string,
   laterNotes: string[]
 ) =>
   [
@@ -967,9 +1323,9 @@ const composePlanInstruction = (
     `1. List the work that is still left. Check each item against the project as it is now (the files it names, the recent commits) and drop what is already done. If nothing is left, say so and stop.
 2. Split that work into plans. A plan is one change that a small model can implement in one sitting and a second small model can review in one read: one goal, at most ${MAX_STEPS} steps, few files. Work that needs more becomes two plans. Leave out work that waits on a decision only the user can make.
 3. Declare the dependency order: number the plans from 1 so that each one needs earlier plans only, and its number is its place in the build order.
-4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set "${setName}", its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs ([] when it needs none), and its body. Set "project" from the work being planned (the files, services and repositories it names), not from the working directory; when it could be more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before saving.`,
+4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set ${setRule}, its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs ([] when it needs none), and its body. Set "project" from the work being planned (the files, services and repositories it names), not from the working directory; when it could be more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before saving.`,
     `Load ${QUALIFIED_WRITE_TOOL_NAME} before you draft the first plan: its description states the shape every plan body must have, and the tool refuses a body that breaks it.`,
-    `The plugin writes ${INDEX_FILE_NAME} in the set folder, listing every plan with its order, kind, status and dependencies, and rewrites it each time a plan is saved, edited with Edit or Write, or changes status. Never write or edit ${INDEX_FILE_NAME} yourself, and change a plan file only with Edit or Write, never with a shell command, so the index stays true.`,
+    `The plugin writes ${INDEX_FILE_NAME} in the set folder, listing every plan with its order, kind, status and dependencies, and rewrites it each time a plan is saved, edited with Edit or Write, or changes status. Never write or edit ${INDEX_FILE_NAME} yourself, and change a saved plan with ${QUALIFIED_UPDATE_TOOL_NAME}, or Edit for a wording fix, never with a shell command, so the index stays true.`,
     ...laterNotes,
     `When every plan is saved, reply with one line per plan (order, kind, title, the orders it depends on), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them, and say to run /clear first: the build reads the saved plans and needs nothing from this conversation.`,
   ].join("\n\n");
@@ -1008,13 +1364,15 @@ Finish with one line per plan: order, title, status, branch and the fix rounds i
 const renameSet = async (
   engine: EngineInterface,
   requestedSet: string,
-  newName: string
+  newName: string,
+  requestedProject = ""
 ) => {
-  if (!requestedSet || !newName)
-    return { text: `Usage: /${COMMAND_NAME} rename <set> <new name>` };
-  const projectFolder = await resolveProjectFolder(engine);
+  const projectFolder = await resolveRequestedProjectFolder(
+    engine,
+    requestedProject
+  );
   const matches = matchSetNames(
-    await listSetsNewestFirst(engine),
+    await listSavedSetNames(engine, projectFolder),
     requestedSet
   );
   if (matches.length === 0)
@@ -1072,19 +1430,103 @@ const renameSet = async (
   return { text: `Renamed set ${setName} -> ${newSetName}.` };
 };
 
+const askClaudeToRename = (engine: EngineInterface, requestedSet: string) => {
+  askClaude(
+    engine,
+    `Rename a saved set of small plans${requestedSet ? ` whose name holds "${requestedSet}"` : ""}. Call ${QUALIFIED_LIST_TOOL_NAME} to find it: the set this conversation made or talks about, else ask the user with AskUserQuestion which of the newest sets they mean. Then call ${QUALIFIED_RENAME_TOOL_NAME} with a name of 2 to 5 words taken from what the set's plans deliver, and reply with the old and new names.`
+  );
+  return { text: "Renaming a set of small plans…" };
+};
+
+const runRenameCommand = (engine: EngineInterface, laterWords: string[]) => {
+  const requestedSet = laterWords[0] ?? "";
+  const newName = laterWords.slice(1).join(" ");
+  return requestedSet && newName
+    ? renameSet(engine, requestedSet, newName)
+    : askClaudeToRename(engine, requestedSet);
+};
+
+const listSmallPlans = async (
+  engine: EngineInterface,
+  toolInput: Record<string, unknown>
+) => {
+  const requestedSet = trimText(toolInput.set);
+  const projectFolder = await resolveRequestedProjectFolder(
+    engine,
+    trimText(toolInput.project)
+  );
+  const savedSetNames = await listSavedSetNames(engine, projectFolder);
+  const shownSetNames = requestedSet
+    ? matchSetNames(savedSetNames, requestedSet)
+    : savedSetNames.slice(0, SHOWN_SET_COUNT);
+  if (shownSetNames.length === 0)
+    return {
+      result: requestedSet
+        ? `No saved set holds "${requestedSet}" in ${projectFolder}.`
+        : `No small plans are saved in ${projectFolder}.`,
+    };
+  const setTexts = await Promise.all(
+    shownSetNames.map(async (setName) => {
+      const indexPath = `${projectFolder}/${setName}/${INDEX_FILE_NAME}`;
+      const indexText = (await engine.fs.exists(indexPath))
+        ? String(await engine.fs.read(indexPath))
+        : "No index.";
+      return `Set ${setName} (${projectFolder}/${setName})\n${indexText}`;
+    })
+  );
+  const olderSetNames = requestedSet
+    ? []
+    : savedSetNames.slice(SHOWN_SET_COUNT);
+  return {
+    result: [
+      setTexts.join("\n\n"),
+      ...(olderSetNames.length > 0
+        ? [`Older sets: ${olderSetNames.join(", ")}`]
+        : []),
+    ].join("\n"),
+  };
+};
+
+const renameSmallPlanSet = async (
+  engine: EngineInterface,
+  toolInput: Record<string, unknown>
+) => {
+  const requestedSet = trimText(toolInput.set);
+  const newName = trimText(toolInput.name);
+  if (!requestedSet)
+    return {
+      deny: "set is required: the folder name of the set, or text its name holds.",
+    };
+  if (isRequestName(toSlug(newName)))
+    return {
+      deny: `The name "${newName}" names the request, not the work. Name what the plans deliver in 2 to 5 words, such as dark-mode-toggle.`,
+    };
+  const outcome = await renameSet(
+    engine,
+    requestedSet,
+    newName,
+    trimText(toolInput.project)
+  );
+  return outcome.text.startsWith("Renamed")
+    ? { result: outcome.text }
+    : { deny: outcome.text };
+};
+
+const NEW_SET_RULE =
+  'a name you choose for this work: 2 to 5 lowercase words joined by hyphens that say what the work delivers, such as dark-mode-toggle. Take it from the work itself, never from the wording of the request: when the user says "plan this", name what "this" is. Use the same name for every plan; the tool puts the date and time in front';
+
 const planWork = (engine: EngineInterface, requestedWork: string) => {
-  const setName = composeNewSetName(toSlug(requestedWork) || "plans");
   askClaude(
     engine,
     composePlanInstruction(
       requestedWork
         ? `Plan this work as small plans: ${requestedWork}\n\nTake what you need to know from this conversation and from the project.`
         : "Plan the work this conversation still leaves to do, as small plans. Take it from what was asked for and agreed in this conversation and is not done yet.",
-      setName,
+      NEW_SET_RULE,
       []
     )
   );
-  return { text: `Planning the work as small plans in set ${setName}…` };
+  return { text: "Planning the work as small plans…" };
 };
 
 const listHandoffNamesNewestFirst = async (
@@ -1214,7 +1656,7 @@ const splitHandoff = async (
     engine,
     composePlanInstruction(
       `Read the handoff at ${handoffFolder}/${handoffFileName}. It records a session's goal, what was done and what is left. Plan the work it leaves as small plans.`,
-      setName,
+      `"${setName}"`,
       [
         ...(savedSetName
           ? [
@@ -1636,13 +2078,13 @@ export const register: Register = (on) => {
     await $.command.register({
       name: COMMAND_NAME,
       description:
-        "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename.",
+        "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename, board.",
       argumentHint:
-        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename <set> <new name>",
+        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename [set] [new name]",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
-      description: `Saves one small plan as a Markdown file under ~/.local/share/small-plans/<project>/<set>/, where <project> is the repository the plan changes, chosen from the work rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it once per plan when the user asks to break work into small plans that a weaker model can implement and review. ${PLAN_SHAPE}`,
+      description: `Saves one small plan as a Markdown file under ~/.local/share/small-plans/<project>/<set>/, where <project> is the repository the plan changes, chosen from the work rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it once per plan when the user asks, in any words ("plan this", "break that into small plans"), to break work into small plans that a weaker model can implement and review. ${PLAN_SHAPE}`,
       inputSchema: WRITE_TOOL_SCHEMA,
       isDeferred: true,
     });
@@ -1673,6 +2115,27 @@ export const register: Register = (on) => {
       inputSchema: CHECK_TOOL_SCHEMA,
       isDeferred: true,
     });
+    await $.tool.register({
+      name: LIST_TOOL_NAME,
+      description:
+        'Lists a project\'s saved small plans: its five newest sets, or the sets whose name holds the given text, each with every plan\'s order, title, kind, status and file. Call it first whenever the user refers to plans or a set without its exact name ("that plan", "the plans we just made", "the login set"), and before you rename, update or build one.',
+      inputSchema: LIST_TOOL_SCHEMA,
+      isDeferred: true,
+    });
+    await $.tool.register({
+      name: UPDATE_TOOL_NAME,
+      description:
+        "Changes one saved small plan: its title, kind, body or depends_on. Fields left out stay as they are. Call it when the user asks to change, fix, retitle or rewrite a saved plan, and instead of Edit when the change touches a heading, a step or the check, because it applies the shape checks of write_small_plan. It does not change a plan's order or status, and refuses a plan that is in-progress.",
+      inputSchema: UPDATE_TOOL_SCHEMA,
+      isDeferred: true,
+    });
+    await $.tool.register({
+      name: RENAME_TOOL_NAME,
+      description:
+        'Renames one saved set of small plans: its date or handoff prefix stays and the rest becomes the new name. Call it when the user asks, in any words, to rename plans or a set ("rename the plans", "give that set a better name", "call it X"). "The plan" means the set unless the user names one plan by its order or title. When the user gives no name, choose one from what the set\'s plans deliver.',
+      inputSchema: RENAME_TOOL_SCHEMA,
+      isDeferred: true,
+    });
     return next(e);
   });
 
@@ -1687,8 +2150,7 @@ export const register: Register = (on) => {
     )
       return buildPlans($, laterWords[0] ?? "", laterWords[1] ?? "");
     if (/^board$/i.test(requestedWork)) return showBoard($);
-    if (/^rename$/i.test(firstWord))
-      return renameSet($, laterWords[0] ?? "", laterWords.slice(1).join(" "));
+    if (/^rename$/i.test(firstWord)) return runRenameCommand($, laterWords);
     if (!/^handoff$/i.test(firstWord)) return planWork($, requestedWork);
     return /^\d+$/.test(laterWords[0] ?? "")
       ? splitHandoff($, laterWords[0] ?? "", laterWords.slice(1).join(" "))
@@ -1707,6 +2169,12 @@ export const register: Register = (on) => {
       return finishSmallPlan($, toolInput);
     if (e.tool === (QUALIFIED_CHECK_TOOL_NAME as string))
       return checkSmallPlan($, toolInput);
+    if (e.tool === (QUALIFIED_LIST_TOOL_NAME as string))
+      return listSmallPlans($, toolInput);
+    if (e.tool === (QUALIFIED_RENAME_TOOL_NAME as string))
+      return renameSmallPlanSet($, toolInput);
+    if (e.tool === (QUALIFIED_UPDATE_TOOL_NAME as string))
+      return updateSmallPlan($, toolInput);
     if (!FILE_EDITING_TOOLS.includes(e.tool)) return next(e);
     const toolResult = await next(e);
     const setFolder = findPlanSetFolder(

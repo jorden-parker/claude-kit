@@ -1474,6 +1474,8 @@
 
       const readStatus = (entry) => entry.fields.status ?? "pending";
 
+      const titleAcronyms = new Set(["ai", "api", "ui", "ux", "cli", "ci", "pr", "url", "id", "mcp", "sdk", "json", "html", "css", "llm", "pdf", "sql", "csv"]);
+
       const kebabWordPattern = /(?<![\w/.\\-])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?![\w/.\\-])/g;
 
       const formatDisplayName = (text) =>
@@ -1485,7 +1487,13 @@
               : part.replace(kebabWordPattern, (word) => {
                   const pieces = word.split("-");
                   if (pieces.some((piece) => /^\d+$/.test(piece))) return word;
-                  return pieces.map((piece) => piece.charAt(0).toUpperCase() + piece.slice(1)).join(" ");
+                  return pieces
+                    .map((piece) =>
+                      titleAcronyms.has(piece.toLowerCase())
+                        ? piece.toUpperCase()
+                        : piece.charAt(0).toUpperCase() + piece.slice(1)
+                    )
+                    .join(" ");
                 })
           )
           .join("");

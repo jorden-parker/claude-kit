@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -453,6 +454,22 @@ func TestPostRefusesExistingPlansMissingSetsAndOtherSections(t *testing.T) {
 	}
 	if text, _ := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); strings.Contains(text, "Overwritten") {
 		t.Fatal("an existing plan was overwritten")
+	}
+}
+
+func TestPageKnowsEveryTitleAcronym(t *testing.T) {
+	seedNotes(t)
+
+	page := requestPage("localhost:4000", "/").Body.String()
+	acronymSetPattern := regexp.MustCompile(`const titleAcronyms = new Set\(\[([^\]]*)\]\)`)
+	match := acronymSetPattern.FindStringSubmatch(page)
+	if match == nil {
+		t.Fatal("the page has no titleAcronyms set")
+	}
+	for acronym := range titleAcronyms {
+		if !strings.Contains(match[1], `"`+acronym+`"`) {
+			t.Errorf("the page's titleAcronyms set is missing %q", acronym)
+		}
 	}
 }
 

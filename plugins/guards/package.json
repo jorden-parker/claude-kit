@@ -1,6 +1,6 @@
 {
   "name": "guards",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc -p ."

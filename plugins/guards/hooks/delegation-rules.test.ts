@@ -26,6 +26,7 @@ test("adds the delegation rules as session context", () => {
     "Send independent pieces as several Agent calls in one message"
   );
   expect(contextOf(result)).toContain("never the user's");
+  expect(contextOf(result)).toContain("up to 1,000 changed characters");
   expect(contextOf(result)).toContain(
     "Read one file or symbol you can already name yourself"
   );

@@ -400,6 +400,63 @@ test.each(["Edit", "Write", "MultiEdit", "NotebookEdit"])(
   }
 );
 
+test("allows a main-session Edit of a project file with a short change", () => {
+  const event = mainEvent("Edit", {
+    file_path: "/repo/src/a.ts",
+    old_string: "const total = 1;",
+    new_string: "const total = 2;",
+  });
+  expect(decideDelegation(event, "")).toBeNull();
+});
+
+test("allows a main-session Edit whose old and new strings total exactly 1000 characters", () => {
+  const event = mainEvent("Edit", {
+    file_path: "/repo/src/a.ts",
+    old_string: "x".repeat(500),
+    new_string: "y".repeat(500),
+  });
+  expect(decideDelegation(event, "")).toBeNull();
+});
+
+test("denies a main-session Edit whose old and new strings total over 1000 characters", () => {
+  const event = mainEvent("Edit", {
+    file_path: "/repo/src/a.ts",
+    old_string: "x".repeat(500),
+    new_string: "y".repeat(501),
+  });
+  expect(isDenied(decideDelegation(event, ""))).toBe(true);
+});
+
+test("allows a main-session MultiEdit whose edits total 1000 characters or less", () => {
+  const event = mainEvent("MultiEdit", {
+    file_path: "/repo/src/a.ts",
+    edits: [
+      { old_string: "x".repeat(300), new_string: "y".repeat(200) },
+      { old_string: "x".repeat(250), new_string: "y".repeat(250) },
+    ],
+  });
+  expect(decideDelegation(event, "")).toBeNull();
+});
+
+test("denies a main-session MultiEdit whose edits total over 1000 characters", () => {
+  const event = mainEvent("MultiEdit", {
+    file_path: "/repo/src/a.ts",
+    edits: [
+      { old_string: "x".repeat(300), new_string: "y".repeat(200) },
+      { old_string: "x".repeat(250), new_string: "y".repeat(251) },
+    ],
+  });
+  expect(isDenied(decideDelegation(event, ""))).toBe(true);
+});
+
+test("denies a main-session Write of a project file even when short", () => {
+  const event = mainEvent("Write", {
+    file_path: "/repo/src/a.ts",
+    content: "x",
+  });
+  expect(isDenied(decideDelegation(event, ""))).toBe(true);
+});
+
 test.each([
   join(homedir(), ".claude/projects/x/memory/note.md"),
   join(tmpdir(), "scratch/plan.md"),

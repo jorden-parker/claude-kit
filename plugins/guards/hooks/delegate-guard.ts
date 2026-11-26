@@ -7,6 +7,7 @@ import { deny, type HookEvent, type HookResult } from "./types.ts";
 
 const LOOKUP_BUDGET = 20_000;
 const WARNING_LINE = 10_000;
+const SMALL_EDIT_LIMIT = 1_000;
 const SCOUT_PROMPT_LIMIT = 1_500;
 const SCOUT_AGENT = "guards:context-scout";
 const WORKER_AGENT = "guards:worker";
@@ -80,8 +81,26 @@ function orchestrationFolders(): string[] {
   return [join(homedir(), ".claude"), tmpdir(), "/tmp", "/private/tmp"];
 }
 
+function changedCharacters(edit: any): number {
+  const oldString = edit?.old_string;
+  const newString = edit?.new_string;
+  if (typeof oldString !== "string" || typeof newString !== "string") {
+    return Infinity;
+  }
+  return oldString.length + newString.length;
+}
+
+function isSmallEdit(event: HookEvent): boolean {
+  const input = event.tool_input ?? {};
+  const edits = event.tool_name === "MultiEdit" ? input.edits : [input];
+  if (!Array.isArray(edits) || edits.length === 0) return false;
+  const total = edits.reduce((sum, edit) => sum + changedCharacters(edit), 0);
+  return total <= SMALL_EDIT_LIMIT;
+}
+
 function isProjectEdit(event: HookEvent): boolean {
   if (!EDIT_TOOLS.includes(event.tool_name ?? "")) return false;
+  if (isSmallEdit(event)) return false;
   const input = event.tool_input ?? {};
   const filePath = String(input.file_path ?? input.notebook_path ?? "");
   return !orchestrationFolders().some((folder) =>
@@ -90,7 +109,8 @@ function isProjectEdit(event: HookEvent): boolean {
 }
 
 function editReason(event: HookEvent): string {
-  return `The main session orchestrates and does not edit project files. Send this change to ${WORKER_AGENT} through the Agent tool: the files, the exact change and the check to run. Blocked: ${event.tool_name} of ${event.tool_input?.file_path ?? event.tool_input?.notebook_path}.`;
+  const limit = SMALL_EDIT_LIMIT.toLocaleString("en-US");
+  return `The main session makes only one Edit or MultiEdit of up to ${limit} changed characters (old and new strings together) to a project file. Send edits over ${limit} changed characters, and every Write, to ${WORKER_AGENT} through the Agent tool: the files, the exact change and the check to run. Blocked: ${event.tool_name} of ${event.tool_input?.file_path ?? event.tool_input?.notebook_path}.`;
 }
 
 function budgetReason(spent: number): string {

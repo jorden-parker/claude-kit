@@ -886,7 +886,11 @@ const gitOutput = (
     .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
     .catch(() => "");
 
-type CommandOutcome = { exitCode: number; output: string };
+type CommandOutcome = {
+  exitCode: number;
+  output: string;
+  isRefused: boolean;
+};
 
 const runLongCommand = (
   engine: EngineInterface,
@@ -902,8 +906,13 @@ const runLongCommand = (
     .then(({ exitCode, stdout, stderr }) => ({
       exitCode,
       output: `${stdout}\n${stderr}`.trim(),
+      isRefused: false,
     }))
-    .catch((failure: unknown) => ({ exitCode: 1, output: String(failure) }));
+    .catch((failure: unknown) => ({
+      exitCode: 1,
+      output: String(failure),
+      isRefused: /\bnot allowed\b/i.test(String(failure)),
+    }));
 
 const keepLastLines = (output: string, lineCount: number) =>
   output.split("\n").slice(-lineCount).join("\n");
@@ -1266,6 +1275,10 @@ const checkSmallPlan = async (
     ["sh", "-c", checkCommand],
     worktree
   );
+  if (check.isRefused)
+    return {
+      deny: `Claude Code refused the check command \`${checkCommand}\` because the same Bash command was denied earlier in this session: ${check.output}. Retrying is refused the same way, and so is running it with Bash. Stop and tell the user: they can allow it (approve it when asked, or add Bash(${checkCommand}) to permissions.allow), then call ${CHECK_TOOL_NAME} again.`,
+    };
   const changedFiles = await listChangedFiles(engine, worktree);
   const fileLines = changedFiles.map((changedFile) =>
     planText.includes(changedFile)
@@ -1376,7 +1389,7 @@ Each plan is built in its own git worktree, on its own branch:
 For each plan:
 1. Call ${QUALIFIED_START_TOOL_NAME} with the plan's path, a folder inside the repository, the branch and the base. It marks the plan in-progress, creates the worktree or reuses the one an earlier build left on that branch, and answers \`Worktree: <path>\`.
 2. Start the ${IMPLEMENTER_AGENT} agent. Its prompt is the plan file's absolute path, then a line \`Worktree: <path>\`. It answers DONE or BLOCKED.
-3. On DONE, call ${QUALIFIED_CHECK_TOOL_NAME} with the plan's path, the worktree and the plan's check command as listed above. It runs the plan's check, lint, fallow and the tests, saves their output to a report file and answers one line for each, then \`Report: <path>\`. When Lint, Fallow or Tests is FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <report path>\`, and call ${QUALIFIED_CHECK_TOOL_NAME} again. Allow at most ${MAX_GUARD_ROUNDS} such rounds, then go to step 7; a failing guard does not count as a fix round.
+3. On DONE, call ${QUALIFIED_CHECK_TOOL_NAME} with the plan's path, the worktree and the plan's check command as listed above. It runs the plan's check, lint, fallow and the tests, saves their output to a report file and answers one line for each, then \`Report: <path>\`. Never run a plan's check command with Bash yourself. If ${QUALIFIED_CHECK_TOOL_NAME} says the command was refused, do not call it again for that plan; tell the user what it says. When Lint, Fallow or Tests is FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <report path>\`, and call ${QUALIFIED_CHECK_TOOL_NAME} again. Allow at most ${MAX_GUARD_ROUNDS} such rounds, then go to step 7; a failing guard does not count as a fix round.
 4. Start the ${REVIEWER_AGENT} agent with the two lines, then a line \`Report: <report path>\`. It answers PASS, or FAIL and \`Findings: <path>\`.
 5. On PASS, call ${QUALIFIED_FINISH_TOOL_NAME} with the plan's path, the worktree and one short conventional commit subject in the style of \`git log --oneline -n 10\`. It commits everything changed in the worktree with that subject alone, pushes the branch, removes the worktree, which keeps the branch, and marks the plan done. Never call it before the reviewer answers PASS. When it answers that a git step failed, the worktree is kept: say so in the plan's report line.
 6. On FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <findings path>\`, and go again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.

@@ -23,6 +23,7 @@ Your prompt may also hold a line `Fix: <absolute path>` after the `Worktree:` li
 4. After the last step, run the command under `## Check` and compare its output with `- Expect:`.
 5. Run the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json) and, in a JavaScript or TypeScript project, `fallow audit`. A hook blocks you from finishing while lint, fallow, the code style checks or the tests fail.
 6. When lint, fallow, a code style hook or the tests fail, fix every reported failure, including pre-existing ones and ones in files the plan does not name, and run it again until it passes. A failing guard is never a reason to answer BLOCKED. If the plan's own check fails, read the output, fix your own edits, and run it again; try at most three times.
+7. If running the plan's check command is denied, do not retry it: answer BLOCKED and say the check command was denied.
 
 ## Rules
 

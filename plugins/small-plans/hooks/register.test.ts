@@ -1068,7 +1068,8 @@ type GitAnswer = { match: string; exitCode?: number; stdout?: string };
 const mockGit = (
   on: On,
   answers: GitAnswer[],
-  seededFiles: Record<string, string> = {}
+  seededFiles: Record<string, string> = {},
+  { rejectShellWith }: { rejectShellWith?: Error } = {}
 ) => {
   const recorded: Recorded = {
     files: new Map(Object.entries(seededFiles)),
@@ -1080,6 +1081,8 @@ const mockGit = (
   on("process.run", (_, e) => {
     recorded.commands.push([...e.argv]);
     recorded.runs.push({ argv: [...e.argv], cwd: e.init?.cwd });
+    if (rejectShellWith && e.argv[0] === "sh")
+      return { deny: rejectShellWith.message };
     const answer = answers.find(({ match }) => e.argv.includes(match));
     return {
       value: {
@@ -1992,6 +1995,20 @@ test("check_small_plan refuses a command that differs from the plan's check comm
     `command must be the plan's check command, exactly: ${CHECK_COMMAND}`
   );
   expect(runs.filter((run) => run.argv[0] === "sh")).toEqual([]);
+});
+
+test("check_small_plan denies without a report when Claude Code refuses the check command as not allowed", async ($, on) => {
+  const { files } = mockGit(on, checkGit("src/auth.ts"), CHECK_SEED, {
+    rejectShellWith: new Error(
+      "$.process.run: this repeats a Bash call that is not allowed; serve an allowed call"
+    ),
+  });
+
+  const reply = await runCheck($);
+
+  expect(reply.deny).toContain("refused");
+  expect(reply.deny).toContain("Retrying is refused");
+  expect(files.has(CHECK_REPORT)).toBe(false);
 });
 
 test("check_small_plan refuses a call with no command and runs nothing", async ($, on) => {

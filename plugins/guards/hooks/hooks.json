@@ -50,6 +50,15 @@
         ]
       },
       {
+        "matcher": "SubagentHandback",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}/hooks/run.ts\" handback-trim"
+          }
+        ]
+      },
+      {
         "matcher": "Read|Grep|Glob|Bash|Agent|Task",
         "hooks": [
           {
@@ -61,7 +70,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|mcp__.*",
+        "matcher": "Bash|mcp__.*|Grep|Glob|WebFetch|WebSearch|Agent|Task|BashOutput|TaskOutput|ListMcpResourcesTool|ReadMcpResourceTool",
         "hooks": [
           {
             "type": "command",

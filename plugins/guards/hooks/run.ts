@@ -15,6 +15,7 @@ import { decide as commitGuard } from "./commit-guard.ts";
 import { decideDelegationFromTranscript as delegateGuard } from "./delegate-guard.ts";
 import { decide as delegationRules } from "./delegation-rules.ts";
 import { decide as bashTrim, pruneSavedOutputs } from "./bash-trim.ts";
+import { decide as handbackTrim } from "./handback-trim.ts";
 import { decide as readGuard } from "./read-guard.ts";
 import { decideFromTranscript as selfCheck } from "./self-check.ts";
 import type { HookEvent, HookResult, SavedOutput } from "./types.ts";
@@ -30,6 +31,7 @@ const HOOKS: Record<string, (event: HookEvent) => HookResult> = {
   "commit-guard": commitGuard,
   "delegate-guard": delegateGuard,
   "delegation-rules": delegationRules,
+  "handback-trim": handbackTrim,
   "read-guard": readGuard,
   "self-check": selfCheck,
 };

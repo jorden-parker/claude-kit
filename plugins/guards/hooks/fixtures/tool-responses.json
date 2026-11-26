@@ -1,0 +1,117 @@
+{
+  "Grep": {
+    "mode": "content",
+    "numFiles": 0,
+    "filenames": [],
+    "content": "plugins/guards/hooks/bash-trim.ts:43:const capCharacters = (\nplugins/guards/hooks/bash-trim.ts:152:    const trimmedText = capCharacters(lineTrimmed, limits.maxCharacters, path);",
+    "numLines": 2,
+    "totalLines": 2
+  },
+  "Glob": {
+    "filenames": ["plugins/guards/hooks/hooks.json"],
+    "durationMs": 121,
+    "numFiles": 1,
+    "truncated": false,
+    "totalMatches": 1,
+    "countIsComplete": true
+  },
+  "WebSearch": {
+    "query": "bun test runner",
+    "results": [
+      {
+        "tool_use_id": "srvtoolu_01B6bwCUrZmHEf9skrrwT8bu",
+        "content": [
+          {
+            "title": "> ## Documentation Index",
+            "url": "https://bun.com/docs/test.md"
+          },
+          {
+            "title": "Test runner",
+            "url": "https://bun.sh/docs/test"
+          }
+        ]
+      },
+      "Bun's built-in test runner is Jest-compatible and needs no configuration beyond installing Bun and running `bun test`. The official docs describe it as a fast, built-in, Jest-compatible test runner with TypeScript support, lifecycle hooks, mocking, and watch mode.\n\nKey points from the results:\n\n- **Test discovery:** The runner scans the working directory for files matching *.test., *_test., and *.spec. with js, jsx, ts, tsx, mjs, cjs, mts, or cts extensions.\n- **Execution:** By default, all tests run in one process, and every file runs in one shared global environment. That shared setup means test files can interfere with each other.\n- **Common flags:** `--watch` re-runs tests on file changes, `--bail` stops after failures, `--timeout` sets the per-test timeout, and `--coverage` collects coverage. One guide notes that the exit code is 0 if all tests pass and 1 if any test fails.\n- **Snapshots and CI:** Snapshot testing is supported, and bun test automatically detects when it's running inside GitHub Actions and emits GitHub Actions annotations to the console directly. It can also write JUnit XML reports with `--reporter=junit`.\n- **Configuration:** Settings can go in `bunfig.toml` under a `[test]` section.\n\nThe results are mostly official Bun docs and third-party guides. Some third-party pages make performance claims, such as one saying Bun runs often 10-50x faster than Jest. I didn't verify those, so treat them with caution."
+    ],
+    "durationSeconds": 6.2476489169999985,
+    "searchCount": 1
+  },
+  "WebFetch": {
+    "bytes": 577,
+    "code": 200,
+    "codeText": "OK",
+    "result": "The page is a placeholder for documentation examples, and no permission is needed to use it that way. It is not a live service, so it shouldn't be used for testing or monitoring. It states that it is \"not a service.\"",
+    "durationMs": 2301,
+    "url": "https://example.com"
+  },
+  "mcp__context7__resolve-library-id": [
+    {
+      "type": "text",
+      "text": "Available Libraries:\n\n- Title: Zod\n- Context7-compatible library ID: /colinhacks/zod\n- Description: Zod is a TypeScript-first schema validation library that provides static type inference for strongly typed, validated data.\n- Code Snippets: 2128\n- Source Reputation: High\n- Benchmark Score: 73.13\n- Versions: v3.24.2, v4.0.1, v4.3.6, v4.6.5, v4.6.7, v3.25.76\n----------\n- Title: Zod\n- Context7-compatible library ID: /websites/zod_dev\n- Description: Zod is a TypeScript-first schema validation library that enables you to define and validate data schemas with static type inference, from simple strings to complex nested objects.\n- Code Snippets: 1223\n- Source Reputation: High\n- Benchmark Score: 74.44\n- Versions: v3\n----------\n- Title: Zod\n- Context7-compatible library ID: /llmstxt/zod_dev_llms-full_txt\n- Description: Zod is a TypeScript-first schema validation library with static type inference, offering comprehensive features for defining and validating data structures.\n- Code Snippets: 2975\n- Source Reputation: High\n- Benchmark Score: 76.61\n----------\n- Title: Zod\n- Context7-compatible library ID: /llmstxt/zod_dev_llms_txt\n- Description: Zod is a TypeScript-first schema validation library that provides static type inference for robust data validation.\n- Code Snippets: 1903\n- Source Reputation: High\n- Benchmark Score: 75.89\n----------\n- Title: Zod (Deepwiki)\n- Context7-compatible library ID: /websites/deepwiki_colinhacks_zod\n- Description: Zod is a TypeScript-first schema validation library that enables runtime type checking with static type inference.\n- Code Snippets: 766\n- Source Reputation: High\n- Benchmark Score: 65.88"
+    }
+  ],
+  "SubagentHandback": {
+    "success": true,
+    "message": "Report delivered to your caller."
+  },
+  "Agent": {
+    "status": "completed",
+    "prompt": "reply with the word ok",
+    "agentId": "a0d4869f68601c2e1",
+    "agentType": "general-purpose",
+    "handback": "send",
+    "handbackReport": {
+      "text": "ok",
+      "toolUseId": "toolu_01YHyMzngfgcwDcpoP3U9rHf"
+    },
+    "toolsUsed": ["SubagentHandback"],
+    "harnessNoteCount": 1,
+    "harnessTailCount": 0,
+    "harnessSectionHash": "3a399e0725ce2522",
+    "content": [
+      {
+        "type": "text",
+        "text": "This agent's report was delivered to you as a message from \"a0d4869f68601c2e1\" (its SubagentHandback call). Read it there; it is not repeated here.\n"
+      }
+    ],
+    "resolvedModel": "claude-sonnet-5-5",
+    "totalDurationMs": 1594,
+    "totalTokens": 37878,
+    "totalToolUseCount": 0,
+    "usage": {
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 37824,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 52,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 37824
+      },
+      "inference_geo": "global",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 52,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 37824,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 37824,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "canContinueAgent": true
+  }
+}

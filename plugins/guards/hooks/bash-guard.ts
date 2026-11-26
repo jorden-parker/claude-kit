@@ -1,4 +1,3 @@
-import { MAX_LINES } from "./bash-trim.ts";
 import {
   canRewriteInput,
   deny,
@@ -33,6 +32,7 @@ const unbounded = (command: string, boundingFlags: string[]) =>
     `${COMMAND_START}${command}\\b(?!${SEGMENT_BODY}(?:${boundingFlags.join("|")}))${SEGMENT_BODY}${NOT_BOUNDED}`
   );
 
+const MAX_LINES = 150;
 const OUTPUT_CAP = `| head -n ${MAX_LINES}`;
 const UNSAFE_TO_CAP =
   /[<>#]|\s-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b/;

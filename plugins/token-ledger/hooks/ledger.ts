@@ -334,10 +334,11 @@ function describeTools(resultCharactersByTool: Record<string, number>) {
 
 const CAP_REPORTED_TOOLS = 10;
 const GUARDS_SHELL_TOOLS = ["Bash", "run_shell_command"];
-const GUARDS_SHELL_CAP = "bash-trim caps at 150 lines, 400 characters a line";
+const GUARDS_SHELL_CAP =
+  "bash-trim caps at 80 lines, 400 characters a line, 4,000 characters";
 const GUARDS_MCP_CAP =
   "bash-trim caps at 300 lines (off when GUARDS_MCP_TRIM=0)";
-const GUARDS_READ_CAP = "read-guard caps at 300 lines";
+const GUARDS_READ_CAP = "read-guard caps at 150 lines (300 with a limit)";
 
 function describeGuardCap(toolName: string): string {
   if (GUARDS_SHELL_TOOLS.includes(toolName)) return GUARDS_SHELL_CAP;

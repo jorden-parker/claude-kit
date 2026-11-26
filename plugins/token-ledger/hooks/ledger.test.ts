@@ -51,7 +51,8 @@ test("formatReport lists the biggest tools beside the guards caps", () => {
       run_shell_command: 2000,
     }),
   ]);
-  const shellCap = "bash-trim caps at 150 lines, 400 characters a line";
+  const shellCap =
+    "bash-trim caps at 80 lines, 400 characters a line, 4,000 characters";
   expect(report).toContain(
     "Biggest tool results across these sessions, beside the guards caps:"
   );
@@ -60,7 +61,9 @@ test("formatReport lists the biggest tools beside the guards caps", () => {
   expect(report).toContain(
     "  mcp__notes__list 8k chars: bash-trim caps at 300 lines (off when GUARDS_MCP_TRIM=0)"
   );
-  expect(report).toContain("  Read 5k chars: read-guard caps at 300 lines");
+  expect(report).toContain(
+    "  Read 5k chars: read-guard caps at 150 lines (300 with a limit)"
+  );
   expect(report).toContain("  Agent 1k chars: no guards cap");
   expect(report.indexOf("  Bash 30k")).toBeLessThan(
     report.indexOf("  mcp__notes__list 8k")

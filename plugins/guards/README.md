@@ -16,9 +16,11 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   Next.js denies the commit while a running dev server reports compilation
   errors. Opt out with
   `GUARDS_COMMIT_GUARD=0`.
-- **read-guard** (PreToolUse, Read): caps a Read of a text file over 300 lines
-  at `limit: 300`, keeping the `offset`, and tells Claude the file's length so
+- **read-guard** (PreToolUse, Read): caps a Read of a text file over 150 lines
+  at `limit: 150`, keeping the `offset`, and tells Claude the file's length so
   it can read on. Denies a text file over 5 MB unless `limit` is 300 or less.
+  Denies a file over 20,000 bytes with very long lines (minified) and points
+  Claude at `cut -c1-400` or `head -c 4000`.
 - **delegation-rules** (SessionStart): makes the main session an orchestrator.
   It plans, talks to the user and judges results, and hands lookups to
   `guards:context-scout` and implementation and verification to `guards:worker`
@@ -55,14 +57,25 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   Subagents are never limited. Claude Code only. Opt out with
   `GUARDS_DELEGATE_GUARD=0`, and also off when `ANTHROPIC_BASE_URL` is a loopback address on port 11434 or 8435 (a claude-lite launch). Hooks load when a session starts, so a session
   opened before the plugin was updated runs without this guard.
-- **bash-trim** (PostToolUse, Bash and MCP tools): keeps the head, the tail
-  and the error lines of Bash output over 150 lines, and the head and tail of
-  an MCP text result over 300 lines. Output still over 6,000 characters (MCP
-  8,000) after that is cut to its start and end. The full text is saved under
+- **bash-trim** (PostToolUse: Bash, `mcp__*`, Grep, Glob, WebFetch, WebSearch,
+  Agent, Task, BashOutput, TaskOutput, ListMcpResourcesTool,
+  ReadMcpResourceTool): walks the whole result and trims every text value at
+  any depth. Bash output over 80 lines keeps its head, tail and error lines;
+  every other tool keeps the head and tail of text over 300 lines. Text still
+  over 4,000 characters (8,000 for tools other than Bash, Agent and Task) after
+  that is cut to its start and end. The full text is saved under
   `$TMPDIR/guards-output/` and the marker line names the file, so Claude greps
   that file and does not run the command again. Each time it saves a file it
-  first deletes saved files older than seven days. Leave MCP results alone with
-  `GUARDS_MCP_TRIM=0`.
+  first deletes saved files older than seven days. Image and audio blocks,
+  `isImage` results and `data`, `blob` and `base64` values are left alone.
+  `GUARDS_MCP_TRIM=0` leaves only `mcp__*` results alone. Never capped: Skill,
+  ToolSearch, Read, Edit, Write, AskUserQuestion, ExitPlanMode, and failed
+  commands, where Claude Code's own cut applies.
+- **handback-trim** (PreToolUse, SubagentHandback): a subagent report over
+  4,000 characters from guards:worker, guards:context-scout, Explore,
+  general-purpose, claude, claude-code-guide or web-fetch is rewritten to its
+  first 2,000 and last 2,000 characters around a marker that names the saved
+  full copy. Other agent types and shorter reports pass.
 - **browser-check** (Stop, off by default): blocks once when a UI file was
   edited after the last browser console read (`agent-browser console`,
   Playwright or Claude in Chrome). Opt in with `GUARDS_BROWSER_CHECK=1`.

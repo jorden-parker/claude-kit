@@ -8,8 +8,6 @@ import {
   type SavedOutput,
 } from "./types.ts";
 
-export const MAX_LINES = 150;
-const MAX_SIGNAL_LINES = 40;
 const SIGNAL = /error|fail|panic|traceback|exception|fatal|assert/i;
 const SUMMARY =
   /^(?:ok|PASS|FAIL)\b|\b\d+ (?:passed|failed|skipped|total)\b|^Tests:|^Test Suites:|^=+ .* =+$/;
@@ -21,14 +19,16 @@ type TrimLimits = {
   tailLines: number;
   maxLineChars: number;
   maxCharacters: number;
+  maxSignalLines: number;
 };
 
 const SHELL_LIMITS: TrimLimits = {
-  maxLines: MAX_LINES,
-  headLines: 30,
-  tailLines: 60,
+  maxLines: 80,
+  headLines: 20,
+  tailLines: 40,
   maxLineChars: 400,
-  maxCharacters: 6_000,
+  maxCharacters: 4_000,
+  maxSignalLines: 19,
 };
 
 const MCP_LIMITS: TrimLimits = {
@@ -37,9 +37,10 @@ const MCP_LIMITS: TrimLimits = {
   tailLines: 60,
   maxLineChars: Infinity,
   maxCharacters: 8_000,
+  maxSignalLines: 40,
 };
 
-const capCharacters = (
+export const capCharacters = (
   text: string,
   maxCharacters: number,
   savedPath: string
@@ -68,7 +69,7 @@ function trimLines(
   const middle = lines.slice(limits.headLines, -limits.tailLines);
   const signals = middle
     .filter((line) => SIGNAL.test(line) || SUMMARY.test(line))
-    .slice(0, MAX_SIGNAL_LINES);
+    .slice(0, limits.maxSignalLines);
   const marker = `[bash-trim: ${middle.length - signals.length} lines hidden from lines ${firstHidden}-${lastHidden}; full output in ${savedPath}: grep it, or sed -n '${firstHidden},${lastHidden}p' it]`;
   return [
     ...lines.slice(0, limits.headLines),
@@ -78,33 +79,60 @@ function trimLines(
   ];
 }
 
-const TRIMMABLE_STREAMS = ["stdout", "stderr", "llmContent", "returnDisplay"];
-
 const HIDDEN_COUNT = /\[bash-trim: (\d+) lines hidden/;
 const hiddenIn = (text: string) => Number(HIDDEN_COUNT.exec(text)?.[1] ?? 0);
 
 type TextTrimmer = (text: string, partName: string) => string;
 
-function trimEachText(response: unknown, trimText: TextTrimmer): unknown {
-  if (typeof response === "string") return trimText(response, "text");
-  if (Array.isArray(response))
-    return response.map((block, index) =>
-      typeof block?.text === "string"
-        ? { ...block, text: trimText(block.text, `text${index}`) }
-        : block
-    );
-  if (!response || typeof response !== "object") return response;
-  const streams = response as Record<string, unknown>;
-  const trimmed: Record<string, unknown> = { ...streams };
-  for (const stream of TRIMMABLE_STREAMS) {
-    const text = streams[stream];
-    if (typeof text === "string") trimmed[stream] = trimText(text, stream);
-  }
-  return trimmed;
+const SKIPPED_KEYS = ["data", "blob", "base64"];
+const SKIPPED_BLOCK_TYPES = ["image", "audio"];
+
+function isSkipped(value: Record<string, unknown>): boolean {
+  return (
+    value.isImage === true || SKIPPED_BLOCK_TYPES.includes(value.type as string)
+  );
 }
+
+function trimEachText(
+  value: unknown,
+  trimText: TextTrimmer,
+  path: string[] = []
+): unknown {
+  if (typeof value === "string")
+    return trimText(value, path.join("-") || "text");
+  if (Array.isArray(value))
+    return value.map((item, index) =>
+      trimEachText(item, trimText, [...path, String(index)])
+    );
+  if (!value || typeof value !== "object" || isSkipped(value as any))
+    return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      SKIPPED_KEYS.includes(key)
+        ? item
+        : trimEachText(item, trimText, [...path, key]),
+    ])
+  );
+}
+
+const AGENT_TOOL_NAMES = ["Agent", "Task"];
+const OTHER_TRIMMED_TOOL_NAMES = [
+  "Grep",
+  "Glob",
+  "WebFetch",
+  "WebSearch",
+  "BashOutput",
+  "TaskOutput",
+  "ListMcpResourcesTool",
+  "ReadMcpResourceTool",
+];
 
 function limitsFor(toolName: string): TrimLimits | null {
   if (SHELL_TOOL_NAMES.includes(toolName)) return SHELL_LIMITS;
+  if (AGENT_TOOL_NAMES.includes(toolName))
+    return { ...MCP_LIMITS, maxCharacters: 4_000 };
+  if (OTHER_TRIMMED_TOOL_NAMES.includes(toolName)) return MCP_LIMITS;
   const isTrimmedMcpTool =
     MCP_TOOL.test(toolName) && process.env.GUARDS_MCP_TRIM !== "0";
   return isTrimmedMcpTool ? MCP_LIMITS : null;
@@ -149,13 +177,12 @@ export function decide(
       .join("\n");
     const hiddenHere = hiddenIn(lineTrimmed);
     const trimmedText = capCharacters(lineTrimmed, limits.maxCharacters, path);
-    if (hiddenHere > 0 || trimmedText !== lineTrimmed)
-      savedOutputs.push({ path, text });
+    if (trimmedText !== text) savedOutputs.push({ path, text });
     hiddenLines += hiddenHere;
     return trimmedText;
   };
   const trimmed = trimEachText(response, trimText);
-  if (JSON.stringify(trimmed) === JSON.stringify(response)) return null;
+  if (savedOutputs.length === 0) return null;
   return {
     output: {
       hookSpecificOutput: {

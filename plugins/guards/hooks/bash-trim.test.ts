@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decide, pruneSavedOutputs } from "./bash-trim.ts";
@@ -51,9 +57,20 @@ test("long output keeps head, tail, errors and Bash shape", () => {
   expect(trimmedOutput.stdout).not.toContain("line 100\n");
 });
 
+test("shell output stays within 80 lines with no repeated lines", () => {
+  const stdoutFor = (count: number) =>
+    run(
+      Array.from({ length: count }, (_unused, i) => `line ${i}`).join("\n")
+    ).output.hookSpecificOutput.updatedToolOutput.stdout.split("\n");
+  const mid = stdoutFor(85);
+  expect(mid.length).toBeLessThanOrEqual(80);
+  expect(new Set(mid).size).toBe(mid.length);
+  expect(stdoutFor(400).length).toBeLessThanOrEqual(80);
+});
+
 test("long output reports how many lines were hidden", () => {
   const lines = Array.from({ length: 400 }, (_unused, i) => `line ${i}`);
-  expect(run(lines.join("\n")).hiddenLines).toBe(310);
+  expect(run(lines.join("\n")).hiddenLines).toBe(340);
 });
 
 test("long lines are clipped", () => {
@@ -183,8 +200,8 @@ test("a Bash result of 100 lines of 300 characters is replaced and capped", () =
   expect(trimmedText).toContain("bash-trim:");
 });
 
-test("a Bash result of 20 lines of 250 characters is untouched", () => {
-  const fullText = Array.from({ length: 20 }, () => "z".repeat(250)).join("\n");
+test("a Bash result of 15 lines of 250 characters is untouched", () => {
+  const fullText = Array.from({ length: 15 }, () => "z".repeat(250)).join("\n");
   expect(run(fullText)).toBeNull();
 });
 
@@ -195,4 +212,114 @@ test("GUARDS_MCP_TRIM=0 leaves a 50,000-character MCP line alone", () => {
   } finally {
     delete process.env.GUARDS_MCP_TRIM;
   }
+});
+
+const shapes = JSON.parse(
+  readFileSync(join(import.meta.dir, "fixtures/tool-responses.json"), "utf8")
+);
+const big = (count: number) => numberedLines(count);
+const trimmedBy = (toolName: string, toolResponse: unknown) =>
+  (
+    decide(
+      { tool_name: toolName, tool_response: toolResponse },
+      "/saved"
+    ) as any
+  )?.output.hookSpecificOutput.updatedToolOutput;
+
+test("Grep content is trimmed and the counters are kept", () => {
+  const out = trimmedBy("Grep", { ...shapes.Grep, content: big(500) });
+  expect(out.content).toContain("bash-trim:");
+  expect(out.numLines).toBe(shapes.Grep.numLines);
+  expect(out.filenames).toEqual(shapes.Grep.filenames);
+});
+
+test("Glob with a long filename list is trimmed inside the array", () => {
+  const filenames = Array.from({ length: 3 }, () => "p".repeat(9_000));
+  const out = trimmedBy("Glob", { ...shapes.Glob, filenames });
+  expect(out.filenames[0].length).toBeLessThan(8_600);
+  expect(trimmedBy("Glob", shapes.Glob)).toBeUndefined();
+});
+
+test("WebSearch text deep inside results is trimmed", () => {
+  const response = structuredClone(shapes.WebSearch);
+  response.results[0].content[0].title = big(500);
+  const out = trimmedBy("WebSearch", response);
+  expect(out.results[0].content[0].title).toContain("bash-trim:");
+  expect(out.results[0].content[1]).toEqual(
+    shapes.WebSearch.results[0].content[1]
+  );
+});
+
+test("WebFetch result text is trimmed", () => {
+  const out = trimmedBy("WebFetch", { ...shapes.WebFetch, result: big(500) });
+  expect(out.result).toContain("bash-trim:");
+  expect(out.url).toBe(shapes.WebFetch.url);
+});
+
+test("the captured context7 shape is trimmed block by block", () => {
+  const blocks = [
+    { ...shapes["mcp__context7__resolve-library-id"][0], text: big(500) },
+  ];
+  const out = trimmedBy("mcp__context7__resolve-library-id", blocks);
+  expect(out[0].text).toContain("bash-trim:");
+});
+
+test("Agent and Task use a 4,000-character cap, other tools 8,000", () => {
+  const text = "q".repeat(6_000);
+  const agent = { ...shapes.Agent, handbackReport: { text } };
+  for (const name of ["Agent", "Task"])
+    expect(trimmedBy(name, agent).handbackReport.text.length).toBeLessThan(
+      4_500
+    );
+  expect(trimmedBy("Grep", { ...shapes.Grep, content: text })).toBeUndefined();
+});
+
+test("the captured Agent shape is untouched", () =>
+  expect(trimmedBy("Agent", shapes.Agent)).toBeUndefined());
+
+test("image objects, image and audio blocks and data keys are skipped", () => {
+  const huge = big(500);
+  const response = {
+    stdout: "ok",
+    isImage: true,
+    note: huge,
+  };
+  expect(trimmedBy("Bash", response)).toBeUndefined();
+  const blocks = [
+    { type: "image", text: huge },
+    { type: "audio", text: huge },
+    { type: "text", data: huge, blob: huge, base64: huge },
+  ];
+  expect(trimmedBy("mcp__x__y", blocks)).toBeUndefined();
+});
+
+test("newly matched tools are trimmed and Skill, ToolSearch, Read are not", () => {
+  for (const name of [
+    "BashOutput",
+    "TaskOutput",
+    "ListMcpResourcesTool",
+    "ReadMcpResourceTool",
+  ])
+    expect(trimmedBy(name, big(500))).toContain("bash-trim:");
+  for (const name of ["Skill", "ToolSearch", "Read", "Edit"])
+    expect(trimmedBy(name, big(500))).toBeUndefined();
+});
+
+test("GUARDS_MCP_TRIM=0 leaves Grep trimming on", () => {
+  process.env.GUARDS_MCP_TRIM = "0";
+  try {
+    expect(trimmedBy("Grep", big(500))).toContain("bash-trim:");
+  } finally {
+    delete process.env.GUARDS_MCP_TRIM;
+  }
+});
+
+test("hooks.json matches the capped tools and never the uncapped ones", () => {
+  const hooks = JSON.parse(
+    readFileSync(join(import.meta.dir, "hooks.json"), "utf8")
+  );
+  const matcher = hooks.hooks.PostToolUse[0].matcher;
+  expect(matcher).toBe(
+    "Bash|mcp__.*|Grep|Glob|WebFetch|WebSearch|Agent|Task|BashOutput|TaskOutput|ListMcpResourcesTool|ReadMcpResourceTool"
+  );
 });

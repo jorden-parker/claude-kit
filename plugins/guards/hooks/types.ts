@@ -11,6 +11,7 @@ export type HookEvent = {
   tool_response?: unknown;
   tool_use_id?: string;
   agent_id?: string;
+  agent_type?: string;
 };
 
 export type SavedOutput = { path: string; text: string };
@@ -46,7 +47,7 @@ export const ask = (reason: string): HookResult => ({
   },
 });
 
-const TOOLS_THAT_TAKE_A_REWRITE = ["Bash", "Read"];
+const TOOLS_THAT_TAKE_A_REWRITE = ["Bash", "Read", "SubagentHandback"];
 
 export const canRewriteInput = (event: HookEvent) =>
   process.env.CLAUDE_KIT_HOOK_BRIDGE !== "1" &&

@@ -53,7 +53,7 @@ func TestTokenSectionGroupsSessionsByProject(t *testing.T) {
 	writeLedgerFile(t, ledgerRoot, "ccc-333.json", strings.Replace(ledgerSessionText, `"claude-kit"`, `"atlas"`, 1))
 
 	section := loadTokenSection()
-	if section.Id != "tokens" || section.Title != "Token use" || len(section.Entries) != 2 {
+	if section.Identifier != "tokens" || section.Title != "Token use" || len(section.Entries) != 2 {
 		t.Fatalf("section was %+v", section)
 	}
 	atlas, claudeKit := section.Entries[0], section.Entries[1]

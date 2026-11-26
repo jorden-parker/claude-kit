@@ -81,7 +81,7 @@ func TestSectionsAreHandoffsThenProjectNotesThenSmallPlans(t *testing.T) {
 
 	titles := []string{}
 	for _, section := range loadSections() {
-		titles = append(titles, section.Id+"="+section.Title)
+		titles = append(titles, section.Identifier+"="+section.Title)
 	}
 	if strings.Join(titles, ",") != "handoffs=Handoffs,project-notes=Project notes,small-plans=Small plans,brainstorm=Brainstorm plans" {
 		t.Fatalf("sections were %v", titles)
@@ -246,8 +246,8 @@ func TestSectionsDefaultToTheirHomeFolders(t *testing.T) {
 		"small-plans": filepath.Join(home, ".local", "share", "small-plans"),
 	}
 	for _, layout := range sectionLayouts {
-		if wantRoot, isChecked := wantRoots[layout.Id]; isChecked && resolveSectionRoot(layout) != wantRoot {
-			t.Fatalf("%s root was %s, want %s", layout.Id, resolveSectionRoot(layout), wantRoot)
+		if wantRoot, isChecked := wantRoots[layout.Identifier]; isChecked && resolveSectionRoot(layout) != wantRoot {
+			t.Fatalf("%s root was %s, want %s", layout.Identifier, resolveSectionRoot(layout), wantRoot)
 		}
 	}
 }
@@ -314,7 +314,7 @@ func TestDeleteRemovesTheNote(t *testing.T) {
 		t.Fatalf("status was %d", response.Code)
 	}
 	if _, isPresent := readNoteFile(t, "project-notes/claude-kit/finding/2026-11-16-the-cache-is-stale.md"); isPresent {
-		t.Fatal("the note still isPresent")
+		t.Fatal("the note still exists")
 	}
 }
 
@@ -326,7 +326,7 @@ func TestDeletingABrainstormPlanRemovesItsFolder(t *testing.T) {
 		t.Fatalf("status was %d", response.Code)
 	}
 	if _, isPresent := readNoteFile(t, "brainstorm/claude-kit/plans/plan-2026-11-16-1333/01-guard-pipe-stages/step-01.md"); isPresent {
-		t.Fatal("the step file still isPresent")
+		t.Fatal("the step file still exists")
 	}
 	if _, isPresent := readNoteFile(t, "brainstorm/claude-kit/plans/plan-2026-11-16-1333/index.md"); !isPresent {
 		t.Fatal("the run index was removed")
@@ -373,7 +373,7 @@ func TestDeletingASmallPlanGroupRemovesTheWholeSet(t *testing.T) {
 		t.Fatalf("status was %d %s", response.Code, response.Body.String())
 	}
 	if _, isPresent := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); isPresent {
-		t.Fatal("the set still isPresent")
+		t.Fatal("the set still exists")
 	}
 	if _, isPresent := readNoteFile(t, "small-plans/claude-kit/2026-11-18-0900-add-the-viewer/01-serve-the-page.md"); !isPresent {
 		t.Fatal("another set was removed")
@@ -417,7 +417,7 @@ func TestSmallPlansCanBeUpdatedAndDeleted(t *testing.T) {
 		t.Fatalf("delete answered %d", response.Code)
 	}
 	if _, isPresent := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); isPresent {
-		t.Fatal("the plan still isPresent")
+		t.Fatal("the plan still exists")
 	}
 }
 
@@ -463,10 +463,12 @@ func TestToTitleCase(t *testing.T) {
 		{"GitHub sync for the api", "GitHub Sync for the API"},
 		{"the end of the", "The End of The"},
 		{"ios  app", "iOS App"},
+		{"claude-kit notes viewer", "claude-kit Notes Viewer"},
+		{"move notes into claude-kit-private", "Move Notes Into claude-kit-private"},
 	}
-	for _, tc := range cases {
-		if got := toTitleCase(tc.title); got != tc.want {
-			t.Errorf("toTitleCase(%q) = %q, want %q", tc.title, got, tc.want)
+	for _, testCase := range cases {
+		if got := toTitleCase(testCase.title); got != testCase.want {
+			t.Errorf("toTitleCase(%q) = %q, want %q", testCase.title, got, testCase.want)
 		}
 	}
 }

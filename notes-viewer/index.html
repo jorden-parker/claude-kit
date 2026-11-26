@@ -208,10 +208,14 @@
       article [hidden] {
         display: none;
       }
+      :root {
+        --chevron-size: 12px;
+        --chevron-gap: 6px;
+      }
       .collapse-toggle {
         display: flex;
-        align-items: center;
-        gap: 6px;
+        align-items: flex-start;
+        gap: var(--chevron-gap);
         width: 100%;
         padding: 0;
         border: 0;
@@ -226,23 +230,17 @@
       }
       .collapse-toggle svg {
         flex: none;
-        width: 12px;
-        height: 12px;
+        width: var(--chevron-size);
+        height: var(--chevron-size);
+        margin-top: calc((1lh - var(--chevron-size)) / 2);
         transition: transform 150ms ease;
       }
       .collapse-toggle[aria-expanded="false"] svg {
         transform: rotate(-90deg);
       }
       .collapse-toggle .count {
+        align-self: center;
         margin-left: auto;
-      }
-      .entry-title-toggle {
-        align-items: flex-start;
-      }
-      .entry-title-toggle svg {
-        width: 0.6em;
-        height: 0.6em;
-        margin-top: 0.3em;
       }
       nav h3 {
         min-width: 0;
@@ -614,6 +612,73 @@
           transform: translateY(-4px) rotate(-6deg);
         }
       }
+      .toc {
+        margin: 0 0 28px;
+        padding: 12px 16px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .toc summary {
+        padding: 2px 0;
+        font-weight: 600;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .toc ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .toc .toc-nested {
+        padding-left: 14px;
+      }
+      .toc a {
+        display: block;
+        padding: 3px 0 3px 10px;
+        border-left: 2px solid transparent;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .toc a:hover,
+      .toc a[aria-current] {
+        color: var(--text);
+      }
+      .toc a[aria-current] {
+        border-left-color: var(--primary);
+      }
+      .toc a:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 1px;
+      }
+      @media (min-width: 1420px) {
+        .toc {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: calc(100% + 24px);
+          width: 176px;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          pointer-events: none;
+        }
+        .toc details,
+        .toc details::details-content {
+          height: 100%;
+        }
+        .toc summary {
+          display: none;
+        }
+        .toc ul {
+          position: sticky;
+          top: 24px;
+          max-height: calc(100vh - 48px);
+          overflow-y: auto;
+          pointer-events: auto;
+        }
+      }
       .entry-body {
         overflow-wrap: anywhere;
       }
@@ -634,32 +699,35 @@
       .entry-body h2 {
         font-size: 20px;
       }
+      .entry-section {
+        margin: 28px 0 10px;
+      }
       .entry-section > summary {
-        display: flex;
-        align-items: center;
-        gap: 8px;
         list-style: none;
         cursor: pointer;
       }
       .entry-section > summary::-webkit-details-marker {
         display: none;
       }
-      .entry-section > summary::before {
+      .entry-section > summary :is(h2, h3, h4, h5, h6) {
+        position: relative;
+        margin: 0;
+        padding-left: calc(var(--chevron-size) + var(--chevron-gap));
+      }
+      .entry-section > summary :is(h2, h3, h4, h5, h6)::before {
         content: "";
-        flex: none;
-        width: 7px;
-        height: 7px;
-        border-right: 2px solid var(--muted);
-        border-bottom: 2px solid var(--muted);
-        transform: rotate(-45deg);
+        position: absolute;
+        left: 0;
+        top: calc((1lh - var(--chevron-size)) / 2);
+        width: var(--chevron-size);
+        height: var(--chevron-size);
+        background: currentColor;
+        mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>') center / contain no-repeat;
+        transform: rotate(-90deg);
         transition: transform 150ms ease;
       }
-      .entry-section[open] > summary::before {
-        transform: rotate(45deg);
-      }
-      .entry-section > summary :is(h2, h3, h4, h5, h6) {
-        flex: 1;
-        min-width: 0;
+      .entry-section[open] > summary :is(h2, h3, h4, h5, h6)::before {
+        transform: none;
       }
       .entry-body h3 {
         font-size: 17px;
@@ -1305,6 +1373,12 @@
 
       const readStatus = (entry) => entry.fields.status ?? "pending";
 
+      const formatStatusLabel = (status) =>
+        status
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+
       const readKind = (entry) => entry.fields.kind ?? "chore";
 
       const readOrder = (entry) => entry.name.slice(0, 2);
@@ -1319,11 +1393,11 @@
         noun: "plan",
         describeLink: (entry) => ({
           label: `${readOrder(entry)} ${entry.title}`,
-          caption: `${readKind(entry)} · ${readStatus(entry)}`,
+          caption: `${readKind(entry)} · ${formatStatusLabel(readStatus(entry))}`,
           status: readStatus(entry),
         }),
         hasProgress: true,
-        listDetails: (entry) => [entry.group, `plan ${readOrder(entry)}`, readKind(entry), readStatus(entry), readDependency(entry)],
+        listDetails: (entry) => [entry.group, `plan ${readOrder(entry)}`, readKind(entry), formatStatusLabel(readStatus(entry)), readDependency(entry)],
       };
 
       const SECTION_VIEWS = {
@@ -1580,6 +1654,72 @@
         }
       };
 
+      const wideScreen = matchMedia("(min-width: 1420px)");
+      let tocObserver = null;
+
+      wideScreen.addEventListener("change", () => {
+        const disclosure = document.querySelector(".toc details");
+        if (disclosure) disclosure.open = wideScreen.matches;
+      });
+
+      const assignHeadingIds = (body) => {
+        const usedIds = new Set();
+        body.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+          const baseSlug = heading.textContent.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "") || "section";
+          let slug = `section-${baseSlug}`;
+          for (let suffix = 2; usedIds.has(slug); suffix++) slug = `section-${baseSlug}-${suffix}`;
+          usedIds.add(slug);
+          heading.id = slug;
+        });
+      };
+
+      const revealHeading = (heading, titleToggle) => {
+        if (titleToggle.getAttribute("aria-expanded") === "false") titleToggle.click();
+        for (let section = heading.closest("details"); section; section = section.parentElement.closest("details")) {
+          section.open = true;
+        }
+        heading.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+
+      const createContents = (body, titleToggle) => {
+        const headings = [...body.querySelectorAll("h2, h3")];
+        tocObserver?.disconnect();
+        if (headings.length < 2) return null;
+        const contents = createElement("div", "", "toc");
+        contents.setAttribute("role", "navigation");
+        contents.setAttribute("aria-label", "Contents");
+        const disclosure = createElement("details");
+        disclosure.open = wideScreen.matches;
+        disclosure.append(createElement("summary", "Contents"));
+        const list = createElement("ul");
+        const linksById = new Map();
+        headings.forEach((heading) => {
+          const item = createElement("li", "", heading.tagName === "H3" ? "toc-nested" : "");
+          const link = createElement("a", heading.textContent);
+          link.href = `#${heading.id}`;
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            revealHeading(heading, titleToggle);
+          });
+          linksById.set(heading.id, link);
+          item.append(link);
+          list.append(item);
+        });
+        disclosure.append(list);
+        contents.append(disclosure);
+        tocObserver = new IntersectionObserver(
+          (observed) => {
+            const visible = observed.filter((observation) => observation.isIntersecting);
+            if (visible.length === 0) return;
+            linksById.forEach((link) => link.removeAttribute("aria-current"));
+            linksById.get(visible[0].target.id).setAttribute("aria-current", "true");
+          },
+          { root: entryArea, rootMargin: "0px 0px -75% 0px" }
+        );
+        headings.forEach((heading) => tocObserver.observe(heading));
+        return contents;
+      };
+
       const renderEntry = (selectedSection, selectedEntry) => {
         if (!selectedEntry) {
           entryArea.replaceChildren(createEmptyState(selectedSection?.id));
@@ -1598,7 +1738,9 @@
           detailList.hidden = isExpanded;
           body.hidden = isExpanded;
         });
+        assignHeadingIds(body);
         wrapEntrySections(body);
+        const contents = createContents(body, titleToggle);
         const entrySections = [...body.querySelectorAll(".entry-section")];
         if (entrySections.length >= 2) {
           const describeToggle = () => (entrySections.some((entrySection) => entrySection.open) ? "Collapse All" : "Expand All");
@@ -1611,7 +1753,7 @@
           );
           header.querySelector(".entry-actions").prepend(toggleAll);
         }
-        article.append(header, detailList, body);
+        article.append(header, detailList, ...(contents ? [contents] : []), body);
         entryArea.replaceChildren(article);
       };
 

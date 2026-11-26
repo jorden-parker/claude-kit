@@ -39,7 +39,7 @@ var (
 )
 
 type sectionLayout struct {
-	Id                 string
+	Identifier         string
 	Title              string
 	RootVariable       string
 	HomeFolder         string
@@ -52,10 +52,10 @@ type sectionLayout struct {
 }
 
 var sectionLayouts = []sectionLayout{
-	{Id: "handoffs", Title: "Handoffs", RootVariable: "HANDOFFS_DIR", EntryPattern: "*/*.md", IsNewestEntryFirst: true},
-	{Id: "project-notes", Title: "Project notes", RootVariable: "PROJECT_NOTES_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestEntryFirst: true},
-	{Id: "small-plans", Title: "Small plans", RootVariable: "SMALL_PLANS_DIR", HomeFolder: ".local/share/small-plans", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true, HasEditableSets: true},
-	{Id: "brainstorm", Title: "Brainstorm plans", RootVariable: "BRAINSTORM_DIR", EntryPattern: "*/plans/*/*/plan.md", GroupSegment: 2, HasEntryFolder: true, IsNewestGroupFirst: true},
+	{Identifier: "handoffs", Title: "Handoffs", RootVariable: "HANDOFFS_DIR", EntryPattern: "*/*.md", IsNewestEntryFirst: true},
+	{Identifier: "project-notes", Title: "Project notes", RootVariable: "PROJECT_NOTES_DIR", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestEntryFirst: true},
+	{Identifier: "small-plans", Title: "Small plans", RootVariable: "SMALL_PLANS_DIR", HomeFolder: ".local/share/small-plans", EntryPattern: "*/*/*.md", GroupSegment: 1, IsNewestGroupFirst: true, HasEditableSets: true},
+	{Identifier: "brainstorm", Title: "Brainstorm plans", RootVariable: "BRAINSTORM_DIR", EntryPattern: "*/plans/*/*/plan.md", GroupSegment: 2, HasEntryFolder: true, IsNewestGroupFirst: true},
 }
 
 type entryView struct {
@@ -72,9 +72,9 @@ type entryView struct {
 }
 
 type sectionView struct {
-	Id      string      `json:"id"`
-	Title   string      `json:"title"`
-	Entries []entryView `json:"entries"`
+	Identifier string      `json:"id"`
+	Title      string      `json:"title"`
+	Entries    []entryView `json:"entries"`
 }
 
 func splitFrontMatter(text string) (map[string]string, string) {
@@ -148,7 +148,7 @@ func resolveSectionRoot(layout sectionLayout) string {
 	if layout.HomeFolder != "" {
 		return filepath.Join(homeFolder, layout.HomeFolder)
 	}
-	return filepath.Join(homeFolder, ".claude", layout.Id)
+	return filepath.Join(homeFolder, ".claude", layout.Identifier)
 }
 
 func readEntry(layout sectionLayout, sectionRoot string, entryPath string) (entryView, bool) {
@@ -175,7 +175,7 @@ func readEntry(layout sectionLayout, sectionRoot string, entryPath string) (entr
 		group = segments[layout.GroupSegment]
 	}
 	return entryView{
-		Section: layout.Id,
+		Section: layout.Identifier,
 		Project: segments[0],
 		Group:   group,
 		Name:    entryName,
@@ -219,7 +219,7 @@ func loadSection(layout sectionLayout) sectionView {
 	sort.SliceStable(entries, func(first, second int) bool {
 		return isListedBefore(layout, entries[first], entries[second])
 	})
-	return sectionView{Id: layout.Id, Title: layout.Title, Entries: entries}
+	return sectionView{Identifier: layout.Identifier, Title: layout.Title, Entries: entries}
 }
 
 func loadSections() []sectionView {
@@ -240,7 +240,7 @@ func isLocalHost(hostHeader string) bool {
 
 func findSectionLayout(sectionId string) (sectionLayout, bool) {
 	for _, layout := range sectionLayouts {
-		if layout.Id == sectionId {
+		if layout.Identifier == sectionId {
 			return layout, true
 		}
 	}
@@ -331,7 +331,7 @@ func planProjectMove(layout sectionLayout, entryPath string, newProject string) 
 	entryName := strings.TrimSuffix(segments[len(segments)-1], ".md")
 	targetFolder := filepath.Join(append([]string{resolveSectionRoot(layout), newProject}, segments[1:len(segments)-1]...)...)
 	targetFolderPath := strings.Join(append([]string{newProject}, segments[1:len(segments)-1]...), "/")
-	switch layout.Id {
+	switch layout.Identifier {
 	case "handoffs":
 		return targetFolderPath + "/" + findNextHandoffName(targetFolder, entryName), 0, ""
 	case "project-notes":
@@ -424,8 +424,8 @@ func newViewerServer() http.Handler {
 			http.Error(writer, "Note too large.", http.StatusRequestEntityTooLarge)
 			return
 		}
-		if problems := listFormatProblems(layout.Id, targetPath, string(text)); len(problems) > 0 {
-			http.Error(writer, describeFormatRefusal(layout.Id, problems), http.StatusUnprocessableEntity)
+		if problems := listFormatProblems(layout.Identifier, targetPath, string(text)); len(problems) > 0 {
+			http.Error(writer, describeFormatRefusal(layout.Identifier, problems), http.StatusUnprocessableEntity)
 			return
 		}
 		if !isMove {
@@ -556,6 +556,7 @@ func toTitleCase(title string) string {
 		case lower == "ios":
 			words[i] = "iOS"
 		case strings.IndexFunc(string(runes[1:]), unicode.IsUpper) >= 0:
+		case strings.Contains(word, "-") && word == lower:
 		case titleSmallWords[lower] && i != 0 && i != len(words)-1:
 			words[i] = lower
 		default:

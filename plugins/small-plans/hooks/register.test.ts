@@ -655,8 +655,15 @@ test("/small-plans build lists the plans not done with their status and depends_
     [`${SET_FOLDER}/03-test-the-toggle.md`]: "status: blocked\ndepends_on: 2",
   });
 
-  expect(submittedPrompts[0]).toContain("| pending | depends on none");
-  expect(submittedPrompts[0]).toContain("| blocked | depends on 2");
+  expect(submittedPrompts[0]).toContain(
+    "Plans not done (file, title, kind, status, depends on, check command):"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "| pending | depends on none | check: none"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "| blocked | depends on 2 | check: none"
+  );
   expect(submittedPrompts[0]).not.toContain("01-add-the-toggle.md |");
 });
 
@@ -666,7 +673,7 @@ test("/small-plans build has the check tool run the check, lint, fallow and test
   });
 
   expect(submittedPrompts[0]).toContain(
-    `call ${CHECK_TOOL} with the plan's path and the worktree. It runs the plan's check, lint, fallow and the tests`
+    `call ${CHECK_TOOL} with the plan's path, the worktree and the plan's check command as listed above. It runs the plan's check, lint, fallow and the tests`
   );
   expect(submittedPrompts[0]).toContain(
     "When Lint, Fallow or Tests is FAIL, start a new small-plans:small-plan-implementer agent with the two lines, then a line `Fix: <report path>`"
@@ -999,6 +1006,16 @@ test("/small-plans build asks for the whole set or one plan that is not done", a
   );
 });
 
+test("/small-plans build lists a plan's check command in backticks", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: `title: Add the toggle\nkind: feature\nstatus: pending\n${PLAN_BODY}`,
+  });
+
+  expect(submittedPrompts[0]).toContain(
+    "| pending | depends on none | check: `pnpm test auth`"
+  );
+});
+
 test("/small-plans build builds only the plan picked", async ($, on) => {
   answerAskUserQuestion(on, "3 · Test the toggle");
   const { submittedPrompts } = await runCommand($, on, "build", THREE_PLAN_SET);
@@ -1007,7 +1024,7 @@ test("/small-plans build builds only the plan picked", async ($, on) => {
     `Build only the plan at ${SET_FOLDER}/03-test-the-toggle.md.`
   );
   expect(submittedPrompts[0]).toContain(
-    "- 02-store-the-choice.md | Store the choice | feature | pending | depends on none"
+    "- 02-store-the-choice.md | Store the choice | feature | pending | depends on none | check: none"
   );
 });
 
@@ -1498,8 +1515,42 @@ const checkGit = (changedFiles: string): GitAnswer[] => [
   { match: "--name-only", stdout: changedFiles },
 ];
 const CHECK_SEED = { [STANDALONE_SET_PLAN]: PLAN_BODY };
+const CHECK_COMMAND = "pnpm test auth";
 const runCheck = ($: Engine) =>
-  callTool($, CHECK_TOOL, { path: STANDALONE_SET_PLAN, worktree: WORKTREE });
+  callTool($, CHECK_TOOL, {
+    path: STANDALONE_SET_PLAN,
+    worktree: WORKTREE,
+    command: CHECK_COMMAND,
+  });
+
+test("check_small_plan refuses a command that differs from the plan's check command and runs nothing", async ($, on) => {
+  const { runs } = mockGit(on, checkGit("src/auth.ts"), CHECK_SEED);
+
+  const reply = await callTool($, CHECK_TOOL, {
+    path: STANDALONE_SET_PLAN,
+    worktree: WORKTREE,
+    command: "rm -rf /",
+  });
+
+  expect(reply.deny).toBe(
+    `command must be the plan's check command, exactly: ${CHECK_COMMAND}`
+  );
+  expect(runs.filter((run) => run.argv[0] === "sh")).toEqual([]);
+});
+
+test("check_small_plan refuses a call with no command and runs nothing", async ($, on) => {
+  const { runs } = mockGit(on, checkGit("src/auth.ts"), CHECK_SEED);
+
+  const reply = await callTool($, CHECK_TOOL, {
+    path: STANDALONE_SET_PLAN,
+    worktree: WORKTREE,
+  });
+
+  expect(reply.deny).toBe(
+    `command must be the plan's check command, exactly: ${CHECK_COMMAND}`
+  );
+  expect(runs.filter((run) => run.argv[0] === "sh")).toEqual([]);
+});
 
 test("check_small_plan runs the plan's check in the worktree and saves a report beside the plan", async ($, on) => {
   const { files, runs } = mockGit(
@@ -1662,6 +1713,7 @@ test("check_small_plan refuses a plan path outside the plans folder and runs not
   const reply = await callTool($, CHECK_TOOL, {
     path: "/home/tester/notes/01-add-the-toggle.md",
     worktree: WORKTREE,
+    command: CHECK_COMMAND,
   });
 
   expect(reply.deny).toContain(PLANS_FOLDER);

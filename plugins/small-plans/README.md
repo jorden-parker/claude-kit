@@ -81,7 +81,7 @@ The session coordinates; it edits no project file and reads no diff itself. For 
 5. On a FAIL the findings file goes to a new implementer, then the work is checked and reviewed again, up to 3 fix rounds
 6. On a PASS the `finish_small_plan` tool commits and pushes the plan's work from its own worktree on its own branch, removes the worktree and marks the plan done; the branch stays. When the implementer stays blocked or the fix rounds run out, the session works out the root cause and keeps fixing, and the plan ends `done`, or `blocked` only when the fix needs the user or two attempts in a row leave the failure unchanged. A plan that depends on one that is not done waits
 
-The start, check and finish tools run git and the plan's check command from the plugin, not through Claude's Bash tool: they ask no permission prompt and no Bash guard sees them. Build only plans whose check command you would let Claude run.
+The start, check and finish tools run git and the plan's check command from the plugin, not through Claude's Bash tool: no Bash guard sees them. The check tool takes the plan's check command as an input and refuses one that differs from the plan file, so the permission prompt for that tool call shows the exact command before it runs. Build only plans whose check command you would let Claude run.
 
 Work left uncommitted in the checkout where the build started is offered to you, with a question, to commit and push as conventional commits.
 

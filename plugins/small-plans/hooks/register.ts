@@ -179,8 +179,16 @@ const FINISH_TOOL_SCHEMA = {
 
 const CHECK_TOOL_SCHEMA = {
   type: "object",
-  properties: { path: PLAN_PATH_PROPERTY, worktree: WORKTREE_PROPERTY },
-  required: ["path", "worktree"],
+  properties: {
+    path: PLAN_PATH_PROPERTY,
+    worktree: WORKTREE_PROPERTY,
+    command: {
+      type: "string",
+      description:
+        "The plan's check command, exactly as the build instruction lists it.",
+    },
+  },
+  required: ["path", "worktree", "command"],
 };
 
 const trimText = (requestedText: unknown) =>
@@ -834,6 +842,17 @@ const mergeVerdicts = (verdicts: string[]) => {
   return verdicts.includes("PASS") ? "PASS" : "none (no command found)";
 };
 
+const readCheckCommand = (planText: string) =>
+  (readSection(planText, "Check") ?? "")
+    .match(BACKTICKED_TEXT)?.[0]
+    ?.slice(1, -1)
+    .trim() ?? "";
+
+const formatCheckCommand = (planText: string) => {
+  const checkCommand = readCheckCommand(planText);
+  return checkCommand ? `\`${checkCommand}\`` : "none";
+};
+
 const checkSmallPlan = async (
   engine: EngineInterface,
   toolInput: Record<string, unknown>
@@ -852,14 +871,14 @@ const checkSmallPlan = async (
   )
     return { deny: `${worktree} is not a git worktree.` };
   const planText = String(await engine.fs.read(planPath));
-  const checkCommand =
-    (readSection(planText, "Check") ?? "")
-      .match(BACKTICKED_TEXT)?.[0]
-      ?.slice(1, -1)
-      .trim() ?? "";
+  const checkCommand = readCheckCommand(planText);
   if (!checkCommand)
     return {
       deny: `${planPath} has no command in backticks under "## Check".`,
+    };
+  if (trimText(toolInput.command) !== checkCommand)
+    return {
+      deny: `command must be the plan's check command, exactly: ${checkCommand}`,
     };
   const check = await runLongCommand(
     engine,
@@ -966,7 +985,7 @@ const composeBuildInstruction = (
     : `Build the plans in ${setFolder}, in the order listed below. A plan waits until every plan it depends on is done.`
 } You coordinate: never edit project files or read diffs yourself, and read a plan, report or findings file only in step 7. A plan's status changes through ${QUALIFIED_START_TOOL_NAME}, ${QUALIFIED_FINISH_TOOL_NAME} and, for blocked, ${QUALIFIED_STATUS_TOOL_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand. Load those three tools and ${QUALIFIED_CHECK_TOOL_NAME} with one ToolSearch call.
 
-Plans not done (file, title, kind, status, depends on):
+Plans not done (file, title, kind, status, depends on, check command):
 ${planLines.join("\n")}
 
 Each plan is built in its own git worktree, on its own branch:
@@ -976,7 +995,7 @@ Each plan is built in its own git worktree, on its own branch:
 For each plan:
 1. Call ${QUALIFIED_START_TOOL_NAME} with the plan's path, a folder inside the repository, the branch and the base. It marks the plan in-progress, creates the worktree or reuses the one an earlier build left on that branch, and answers \`Worktree: <path>\`.
 2. Start the ${IMPLEMENTER_AGENT} agent. Its prompt is the plan file's absolute path, then a line \`Worktree: <path>\`. It answers DONE or BLOCKED.
-3. On DONE, call ${QUALIFIED_CHECK_TOOL_NAME} with the plan's path and the worktree. It runs the plan's check, lint, fallow and the tests, saves their output to a report file and answers one line for each, then \`Report: <path>\`. When Lint, Fallow or Tests is FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <report path>\`, and call ${QUALIFIED_CHECK_TOOL_NAME} again. Allow at most ${MAX_GUARD_ROUNDS} such rounds, then go to step 7; a failing guard does not count as a fix round.
+3. On DONE, call ${QUALIFIED_CHECK_TOOL_NAME} with the plan's path, the worktree and the plan's check command as listed above. It runs the plan's check, lint, fallow and the tests, saves their output to a report file and answers one line for each, then \`Report: <path>\`. When Lint, Fallow or Tests is FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <report path>\`, and call ${QUALIFIED_CHECK_TOOL_NAME} again. Allow at most ${MAX_GUARD_ROUNDS} such rounds, then go to step 7; a failing guard does not count as a fix round.
 4. Start the ${REVIEWER_AGENT} agent with the two lines, then a line \`Report: <report path>\`. It answers PASS, or FAIL and \`Findings: <path>\`.
 5. On PASS, call ${QUALIFIED_FINISH_TOOL_NAME} with the plan's path, the worktree and one short conventional commit subject in the style of \`git log --oneline -n 10\`. It commits everything changed in the worktree with that subject alone, pushes the branch, removes the worktree, which keeps the branch, and marks the plan done. Never call it before the reviewer answers PASS. When it answers that a git step failed, the worktree is kept: say so in the plan's report line.
 6. On FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <findings path>\`, and go again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
@@ -1230,7 +1249,7 @@ const listPlanLinesNotDone = async (
     return status === "done"
       ? []
       : [
-          `- ${name} | ${readFrontMatterField(planText, "title") || name} | ${readFrontMatterField(planText, "kind")} | ${status} | depends on ${readFrontMatterField(planText, "depends_on") || "none"}`,
+          `- ${name} | ${readFrontMatterField(planText, "title") || name} | ${readFrontMatterField(planText, "kind")} | ${status} | depends on ${readFrontMatterField(planText, "depends_on") || "none"} | check: ${formatCheckCommand(planText)}`,
         ];
   });
 };
@@ -1650,7 +1669,7 @@ export const register: Register = (on) => {
     await $.tool.register({
       name: CHECK_TOOL_NAME,
       description:
-        "Runs one small plan's check command, lint, fallow and tests in its worktree, saves their output to a report file beside the plan and answers one result line for each.",
+        "Runs one small plan's check command, lint, fallow and tests in its worktree, saves their output to a report file beside the plan and answers one result line for each. The command input must match the plan's check command.",
       inputSchema: CHECK_TOOL_SCHEMA,
       isDeferred: true,
     });

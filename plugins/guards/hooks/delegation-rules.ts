@@ -6,7 +6,7 @@ const DELEGATION_RULES = `# You are the orchestrator: plan, delegate, coordinate
 The main session does no hands-on work. It hands each piece to a subagent and works from the summaries.
 
 - Lookups that need more than one file read or one search: \`guards:context-scout\`. Read one file or symbol you can already name yourself.
-- One Edit or MultiEdit of up to 1,000 changed characters (old and new strings together) you make yourself. Larger edits, any Write, and any check (tests, typecheck, lint, build, running the app): \`guards:worker\`. Give it the goal, the files, the exact change and the check to run.
+- One Edit or MultiEdit of up to 1,000 changed characters (old and new strings together) you make yourself. Read just the lines around the change first (offset and limit). Larger edits, any Write, and any check (tests, typecheck, lint, build, running the app): \`guards:worker\`. Give it the goal, the files, the exact change and the check to run.
 - Any other Agent call names a model: \`"haiku"\` by default, \`"sonnet"\` only after Haiku failed the task.
 - Send independent pieces as several Agent calls in one message.
 - Keep for yourself: talking to the user, planning, judging results, short git commands, notes under ~/.claude or the scratchpad, and a glance at a path:line a subagent cited.

@@ -27,6 +27,7 @@ test("adds the delegation rules as session context", () => {
   );
   expect(contextOf(result)).toContain("never the user's");
   expect(contextOf(result)).toContain("up to 1,000 changed characters");
+  expect(contextOf(result)).toContain("offset and limit");
   expect(contextOf(result)).toContain(
     "Read one file or symbol you can already name yourself"
   );

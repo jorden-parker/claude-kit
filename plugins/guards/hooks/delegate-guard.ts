@@ -5,6 +5,7 @@ import { GIT_OPTIONS, withoutQuotedText } from "./bash-guard.ts";
 import { isClaudeLiteSession } from "./claude-lite.ts";
 import { deny, type HookEvent, type HookResult } from "./types.ts";
 
+export const DEFAULT_DELEGATION_MODEL = "haiku";
 const LOOKUP_BUDGET = 20_000;
 const WARNING_LINE = 10_000;
 const SMALL_EDIT_LIMIT = 1_000;
@@ -24,6 +25,10 @@ const LOOKUP_COMMAND = new RegExp(
   String.raw`(?:^|[;&(\n\`]|\|\|)\s*(?:\w+=\S*\s+)*(?:${LOOKUP_PROGRAMS})\b${WRITES_INSTEAD_OF_READING}`
 );
 const HEREDOC = /<<-?\s*(['"]?)(\w+)\1[\s\S]*?\n[ \t]*\2\b/g;
+
+export function resolveDelegationModel(): string {
+  return process.env.GUARDS_DELEGATE_MODEL || DEFAULT_DELEGATION_MODEL;
+}
 
 type TranscriptLine = {
   isSidechain?: boolean;
@@ -69,9 +74,19 @@ function delegationProblem(event: HookEvent): HookResult {
       `The scout prompt is ${promptLength} characters; the limit is ${SCOUT_PROMPT_LIMIT}. Send only the question and the paths to start from.`
     );
   }
+  const delegationModel = resolveDelegationModel();
+  if (
+    [SCOUT_AGENT, WORKER_AGENT].includes(agentType) &&
+    delegationModel !== DEFAULT_DELEGATION_MODEL &&
+    input.model !== delegationModel
+  ) {
+    return deny(
+      `GUARDS_DELEGATE_MODEL is "${delegationModel}". Name model: "${delegationModel}" on this ${agentType} call.`
+    );
+  }
   if (SESSION_MODEL_AGENTS.includes(agentType) && input.model === undefined) {
     return deny(
-      `Use subagent_type: "${WORKER_AGENT}" to write code or run checks, "${SCOUT_AGENT}" to read or search, or name model: "haiku". With no model, this agent runs on the session model, the costliest choice.`
+      `Use subagent_type: "${WORKER_AGENT}" to write code or run checks, "${SCOUT_AGENT}" to read or search, or name model: "${delegationModel}". With no model, this agent runs on the session model, the costliest choice.`
     );
   }
   return null;
@@ -154,7 +169,9 @@ function resultSize(content: unknown): number {
 function isHaikuDelegation(block: any): boolean {
   return (
     DELEGATION_TOOLS.includes(block.name) &&
-    (block.input?.model === "haiku" ||
+    ([DEFAULT_DELEGATION_MODEL, resolveDelegationModel()].includes(
+      block.input?.model
+    ) ||
       [SCOUT_AGENT, WORKER_AGENT].includes(block.input?.subagent_type))
   );
 }

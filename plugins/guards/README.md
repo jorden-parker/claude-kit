@@ -25,6 +25,7 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   (Haiku), sending independent work out in parallel. It also tells Claude to
   run checks itself rather than ask the user to run them. Off with
   `GUARDS_DELEGATE_GUARD=0`, and also off when `ANTHROPIC_BASE_URL` is a loopback address on port 11434 or 8435 (a claude-lite launch).
+  `GUARDS_DELEGATE_MODEL=sonnet` makes delegated subagents (guards:context-scout, guards:worker and other Agent calls) run on that model instead of haiku. Allowed values are the Agent tool's model names: haiku, sonnet, opus, fable.
 - **ci-status** (SessionStart): in a repository whose `origin` is on GitHub,
   asks `gh` for the latest run on `main` and shows one warning line when it
   failed. Silent when `gh` is missing or signed out, when it takes over 10

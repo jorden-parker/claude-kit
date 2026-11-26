@@ -476,3 +476,62 @@ test("lets a subagent edit project files", () => {
     )
   ).toBeNull();
 });
+
+const withDelegationModel = (value: string | undefined, run: () => void) => {
+  const previous = process.env.GUARDS_DELEGATE_MODEL;
+  if (value === undefined) delete process.env.GUARDS_DELEGATE_MODEL;
+  else process.env.GUARDS_DELEGATE_MODEL = value;
+  try {
+    run();
+  } finally {
+    if (previous === undefined) delete process.env.GUARDS_DELEGATE_MODEL;
+    else process.env.GUARDS_DELEGATE_MODEL = previous;
+  }
+};
+
+test("denies a general agent with no model and names the GUARDS_DELEGATE_MODEL model", () => {
+  withDelegationModel("sonnet", () => {
+    const result = decideDelegation(
+      mainEvent("Agent", { subagent_type: "general-purpose", prompt: "x" }),
+      ""
+    );
+    expect(isDenied(result)).toBe(true);
+    expect(reasonOf(result)).toContain('name model: "sonnet"');
+  });
+});
+
+test.each([
+  { subagent_type: "guards:worker" },
+  { subagent_type: "guards:context-scout" },
+])("denies %j with no model and names the sonnet model", (input) => {
+  withDelegationModel("sonnet", () => {
+    const result = decideDelegation(mainEvent("Agent", input), "");
+    expect(isDenied(result)).toBe(true);
+    expect(reasonOf(result)).toContain('model: "sonnet"');
+    expect(
+      decideDelegation(mainEvent("Agent", { ...input, model: "sonnet" }), "")
+    ).toBeNull();
+  });
+});
+
+test.each([
+  { subagent_type: "guards:worker" },
+  { subagent_type: "guards:context-scout" },
+])("allows %j with no model when GUARDS_DELEGATE_MODEL is unset", (input) => {
+  withDelegationModel(undefined, () => {
+    expect(decideDelegation(mainEvent("Agent", input), "")).toBeNull();
+  });
+});
+
+test("allows a Read after a delegation to any agent on the GUARDS_DELEGATE_MODEL model", () => {
+  withDelegationModel("sonnet", () => {
+    const delegated = transcript(
+      ...readPair("r1", LIMIT),
+      toolUseLine("a1", "Agent", {
+        subagent_type: "general-purpose",
+        model: "sonnet",
+      })
+    );
+    expect(decideDelegation(readEvent, delegated)).toBeNull();
+  });
+});

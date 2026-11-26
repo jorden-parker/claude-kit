@@ -42,3 +42,40 @@ test("adds nothing when launched by claude-lite", () => {
   process.env.ANTHROPIC_BASE_URL = "http://127.0.0.1:11434";
   expect(decide(sessionStart)).toBeNull();
 });
+
+const withDelegationModel = (value: string | undefined, run: () => void) => {
+  const previous = process.env.GUARDS_DELEGATE_MODEL;
+  if (value === undefined) delete process.env.GUARDS_DELEGATE_MODEL;
+  else process.env.GUARDS_DELEGATE_MODEL = value;
+  try {
+    run();
+  } finally {
+    if (previous === undefined) delete process.env.GUARDS_DELEGATE_MODEL;
+    else process.env.GUARDS_DELEGATE_MODEL = previous;
+  }
+};
+
+test("names the GUARDS_DELEGATE_MODEL model on every Agent call", () => {
+  withDelegationModel("sonnet", () => {
+    const context = contextOf(decide(sessionStart));
+    expect(context).toContain(
+      '- Every Agent call names model: `"sonnet"`, including `guards:context-scout` and `guards:worker`.'
+    );
+    expect(context).not.toContain("haiku");
+    expect(context).not.toContain("Haiku delegation");
+    expect(context).toContain("since the last delegation");
+  });
+});
+
+test.each([undefined, ""])(
+  "keeps the Haiku rules when GUARDS_DELEGATE_MODEL is %s",
+  (value) => {
+    withDelegationModel(value, () => {
+      const context = contextOf(decide(sessionStart));
+      expect(context).toContain(
+        '- Any other Agent call names a model: `"haiku"` by default, `"sonnet"` only after Haiku failed the task.'
+      );
+      expect(context).toContain("since the last Haiku delegation");
+    });
+  }
+);

@@ -96,15 +96,15 @@ claude plugin marketplace update
 updated_items=()
 update_pattern='updated from ([^[:space:]]+) to ([^[:space:]]+)'
 while IFS=$'\t' read -r plugin_id plugin_scope; do
-  echo "Updating $plugin_id"
   if update_output="$(claude plugin update "$plugin_id" --scope "$plugin_scope" 2>&1)"; then
     if [[ "$update_output" =~ $update_pattern ]]; then
       updated_items+=("${plugin_id%@*} ${BASH_REMATCH[1]} to ${BASH_REMATCH[2]}")
+      echo "Updated ${plugin_id%@*} from ${BASH_REMATCH[1]} to ${BASH_REMATCH[2]}"
     fi
   else
+    echo "$update_output" >&2
     failed_steps+=("update $plugin_id")
   fi
-  echo "$update_output"
 done < <(claude plugin list --available --json | jq -r '.installed[] | select(.id | endswith("@claude-kit")) | [.id, .scope] | @tsv')
 
 move_small_plans_folder || failed_steps+=("move small plans")

@@ -139,6 +139,9 @@ status=$?
 expect "an updated plugin exits 0" [ "$status" -eq 0 ]
 expect "an updated plugin is recorded as a fix once" [ "$(grep -c '' "$ledger_calls")" -eq 1 ]
 expect "the fix names the update from and to versions" grep -qF -- "--fixed claude-kit-update: guards 0.8.0 to 0.11.1" "$ledger_calls"
+expect "the output names the updated plugin and its versions" grep -qxF "Updated guards from 0.8.0 to 0.11.1" <<<"$output"
+expect "the output leaves out plugins that were not updated" [ -z "$(grep -F handoff <<<"$output")" ]
+expect "the output leaves out the per-plugin progress lines" [ -z "$(grep -E '^Updating .+@' <<<"$output")" ]
 
 output="$(LEDGER_FAILS=1 run_update)"
 status=$?

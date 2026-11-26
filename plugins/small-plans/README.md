@@ -57,7 +57,7 @@ Plans used to live in `~/.claude/small-plans`; `claude-kit-update` moves that fo
 - `<set>` groups the plans of one planning run: the date and time (UTC), then a slug of the work, such as `2026-11-19-1542-add-a-dark-mode-toggle`. A set planned from a handoff ends in `handoff-<handoff file name>`, such as `2026-11-19-1542-handoff-007-fix-login`
 - `<order>` is the plan's place in the build order, two digits; `<slug>` comes from the title
 - Each file starts with front matter: `title`, `project`, `set`, `order`, `kind`, `status`, `depends_on` when it has any, and `created`
-- `status` is `pending`, `in-progress`, `done` or `blocked`. The `set_small_plan_status` tool changes it, and only for files under the plans folder
+- `status` is `pending`, `in-progress`, `done` or `blocked`. The `set_small_plan_status`, `start_small_plan` and `finish_small_plan` tools change it, and only for files under the plans folder
 - `index.md` lists every plan of the set in build order: order, linked title, kind, status and depends on. The plugin rewrites it each time a plan is saved, changes status, or is changed with Edit or Write. Do not edit it by hand: the next rewrite replaces it
 - Set `SMALL_PLANS_DIR` to keep the plans in another folder. Handoffs are read from `~/.claude/handoffs`, or `HANDOFFS_DIR` when set
 
@@ -74,11 +74,14 @@ Before a plan starts, and again when a step or a failure shows one, the build lo
 
 The session coordinates; it edits no project file and reads no diff itself. For each plan, in order, the way shadcn's [improve](https://github.com/shadcn/improve) `execute` works:
 
-1. The `small-plan-implementer` agent (Haiku) gets the plan's path and its worktree, makes the edits and runs the check. It answers `DONE` or `BLOCKED`
-2. The `small-plan-checker` agent (Haiku, read-only) runs the check, `git diff --stat`, lint, fallow and the tests, and answers PASS or FAIL for each with the output lines that show it, so that output stays out of the session's context. A failing lint, fallow or test run goes to a new implementer agent to fix
-3. The `small-plan-reviewer` agent (Sonnet, read-only) reviews the work like a pull request: it confirms the check passed and only files the plan names changed, reads the diff against each step and `## Review` line, and reads what new tests assert. It answers PASS or FAIL with numbered findings
-4. On a FAIL the findings go to a new implementer, then the work is checked and reviewed again, up to 3 fix rounds
-5. On a PASS the plan's work is committed and pushed from its own worktree on its own branch, which is then removed; the branch stays. When the implementer stays blocked or the fix rounds run out, the session works out the root cause and keeps fixing, and the plan ends `done`, or `blocked` only when the fix needs the user or two attempts in a row leave the failure unchanged. A plan that depends on one that is not done waits
+1. The `start_small_plan` tool marks the plan in-progress and creates its worktree, or reuses the one an earlier build left on that branch
+2. The `small-plan-implementer` agent (Haiku) gets the plan's path and its worktree, makes the edits and runs the check. It answers `DONE` or `BLOCKED`
+3. The `check_small_plan` tool runs the plan's check, lint, fallow and the tests itself, with no agent. It saves their output to `<plan>.check.txt` beside the plan and gives the session one line for each, so that output stays out of the session's context. A failing lint, fallow or test run goes to a new implementer agent to fix, up to 3 rounds
+4. The `small-plan-reviewer` agent (Sonnet, read-only) reviews the work like a pull request: it reads the check report, confirms the check passed and only files the plan names changed, reads the diff against each step and `## Review` line, and reads what new tests assert. It answers PASS or FAIL with numbered findings; the plugin saves the findings to `<plan>.review.txt` and hands the session only the path
+5. On a FAIL the findings file goes to a new implementer, then the work is checked and reviewed again, up to 3 fix rounds
+6. On a PASS the `finish_small_plan` tool commits and pushes the plan's work from its own worktree on its own branch, removes the worktree and marks the plan done; the branch stays. When the implementer stays blocked or the fix rounds run out, the session works out the root cause and keeps fixing, and the plan ends `done`, or `blocked` only when the fix needs the user or two attempts in a row leave the failure unchanged. A plan that depends on one that is not done waits
+
+The start, check and finish tools run git and the plan's check command from the plugin, not through Claude's Bash tool: they ask no permission prompt and no Bash guard sees them. Build only plans whose check command you would let Claude run.
 
 Work left uncommitted in the checkout where the build started is offered to you, with a question, to commit and push as conventional commits.
 

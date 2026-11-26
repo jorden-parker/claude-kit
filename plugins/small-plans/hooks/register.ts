@@ -64,11 +64,30 @@ const WRITE_TOOL_NAME = "write_small_plan";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
 const STATUS_TOOL_NAME = "set_small_plan_status";
 const QUALIFIED_STATUS_TOOL_NAME = `mcp__small-plans__${STATUS_TOOL_NAME}`;
-const WORKTREE_TOOL_NAME = "small_plan_worktree";
-const QUALIFIED_WORKTREE_TOOL_NAME = `mcp__small-plans__${WORKTREE_TOOL_NAME}`;
+const START_TOOL_NAME = "start_small_plan";
+const QUALIFIED_START_TOOL_NAME = `mcp__small-plans__${START_TOOL_NAME}`;
+const CHECK_TOOL_NAME = "check_small_plan";
+const QUALIFIED_CHECK_TOOL_NAME = `mcp__small-plans__${CHECK_TOOL_NAME}`;
+const FINISH_TOOL_NAME = "finish_small_plan";
+const QUALIFIED_FINISH_TOOL_NAME = `mcp__small-plans__${FINISH_TOOL_NAME}`;
+const MAX_GUARD_ROUNDS = 3;
+const COMMAND_TIMEOUT_MS = 600_000;
+const FAILURE_TAIL_LINES = 5;
+const CHECK_OUTPUT_LINES = 40;
+const GUARD_OUTPUT_LINES = 20;
+const MISSING_COMMAND_EXIT_CODE = 127;
+const FALLOW_COMMAND =
+  "command -v fallow >/dev/null || exit 127; fallow audit --format compact";
+const PACKAGE_RUNNERS = [
+  ["pnpm-lock.yaml", "pnpm"],
+  ["yarn.lock", "yarn"],
+  ["bun.lock", "bun"],
+  ["bun.lockb", "bun"],
+] as const;
+const GUARD_LABELS = ["Lint", "Fallow", "Tests"];
 const IMPLEMENTER_AGENT = "small-plans:small-plan-implementer";
-const CHECKER_AGENT = "small-plans:small-plan-checker";
-const REVIEWER_AGENT = "small-plans:small-plan-reviewer";
+const REVIEWER_AGENT_NAME = "small-plan-reviewer";
+const REVIEWER_AGENT = `small-plans:${REVIEWER_AGENT_NAME}`;
 const BRANCH_CONVENTION_FILE_NAME = "branch-convention.md";
 const PLAN_SHAPE = `The body holds these "## " headings, in this order: ${PLAN_SECTIONS.join(", ")}.
 - Goal: one sentence on what is true when the plan is done.
@@ -120,20 +139,48 @@ const STATUS_TOOL_SCHEMA = {
   required: ["path", "status"],
 };
 
-const WORKTREE_TOOL_SCHEMA = {
+const PLAN_PATH_PROPERTY = {
+  type: "string",
+  description: "The plan file's absolute path.",
+};
+const WORKTREE_PROPERTY = {
+  type: "string",
+  description: "The plan's worktree folder, as start_small_plan returned it.",
+};
+const START_TOOL_SCHEMA = {
   type: "object",
   properties: {
+    path: PLAN_PATH_PROPERTY,
     repository: {
       type: "string",
       description:
         "An absolute folder path inside the repository the plan changes.",
     },
-    slug: {
+    branch: { type: "string", description: "The branch the plan is built on." },
+    base: {
       type: "string",
-      description: "The plan slug, such as add-login.",
+      description: "The branch a new plan branch starts from.",
     },
   },
-  required: ["repository", "slug"],
+  required: ["path", "repository", "branch", "base"],
+};
+const FINISH_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    path: PLAN_PATH_PROPERTY,
+    worktree: WORKTREE_PROPERTY,
+    subject: {
+      type: "string",
+      description: "The commit subject: one short conventional commit line.",
+    },
+  },
+  required: ["path", "worktree", "subject"],
+};
+
+const CHECK_TOOL_SCHEMA = {
+  type: "object",
+  properties: { path: PLAN_PATH_PROPERTY, worktree: WORKTREE_PROPERTY },
+  required: ["path", "worktree"],
 };
 
 const trimText = (requestedText: unknown) =>
@@ -400,6 +447,20 @@ const findPlanSetFolder = (plansRoot: string, filePath: string) => {
   return isPlanFile ? filePath.slice(0, filePath.lastIndexOf("/")) : undefined;
 };
 
+const findPlanPathProblem = async (
+  engine: EngineInterface,
+  planPath: string
+) => {
+  const plansRoot = await resolvePlansRoot(engine);
+  const isPlanFile =
+    planPath.startsWith(`${plansRoot}/`) &&
+    planPath.endsWith(".md") &&
+    !planPath.split("/").includes("..");
+  return isPlanFile && (await engine.fs.exists(planPath))
+    ? ""
+    : `path must be a saved plan file under ${plansRoot}.`;
+};
+
 const setPlanStatus = async (
   engine: EngineInterface,
   toolInput: Record<string, unknown>
@@ -409,12 +470,8 @@ const setPlanStatus = async (
   const plansRoot = await resolvePlansRoot(engine);
   if (!STATUSES.includes(status))
     return { deny: `status must be one of: ${STATUSES.join(", ")}.` };
-  const isPlanFile =
-    planPath.startsWith(`${plansRoot}/`) &&
-    planPath.endsWith(".md") &&
-    !planPath.split("/").includes("..");
-  if (!isPlanFile || !(await engine.fs.exists(planPath)))
-    return { deny: `path must be a saved plan file under ${plansRoot}.` };
+  const pathProblem = await findPlanPathProblem(engine, planPath);
+  if (pathProblem) return { deny: pathProblem };
   const planText = String(await engine.fs.read(planPath));
   if (!STATUS_LINE.test(planText))
     return { deny: `${planPath} has no "status:" line in its front matter.` };
@@ -440,14 +497,33 @@ const gitOutput = (
     .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
     .catch(() => "");
 
-const worktreeFolder = async (
+type CommandOutcome = { exitCode: number; output: string };
+
+const runLongCommand = (
   engine: EngineInterface,
-  toolInput: Record<string, unknown>
+  argv: string[],
+  folder?: string
+): Promise<CommandOutcome> =>
+  engine.process
+    .run(argv, {
+      env: { GIT_TERMINAL_PROMPT: "0" },
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      ...(folder ? { cwd: folder } : {}),
+    })
+    .then(({ exitCode, stdout, stderr }) => ({
+      exitCode,
+      output: `${stdout}\n${stderr}`.trim(),
+    }))
+    .catch((failure: unknown) => ({ exitCode: 1, output: String(failure) }));
+
+const keepLastLines = (output: string, lineCount: number) =>
+  output.split("\n").slice(-lineCount).join("\n");
+
+const pickWorktreeFolder = async (
+  engine: EngineInterface,
+  repository: string,
+  slug: string
 ) => {
-  const repository = trimText(toolInput.repository);
-  const slug = trimText(toolInput.slug);
-  if (!slug || slug.includes("/") || slug === "." || slug === "..")
-    return { deny: `The slug must be one folder name, such as add-login.` };
   const top =
     (await gitOutput(engine, repository, "rev-parse", "--show-toplevel")) ||
     (await gitOutput(
@@ -457,12 +533,405 @@ const worktreeFolder = async (
       "--path-format=absolute",
       "--git-common-dir"
     ));
-  if (!top) return { deny: `${repository} is not inside a git repository.` };
+  if (!top) return "";
   const parent = top.slice(0, top.lastIndexOf("/"));
   let candidate = `${parent}/${slug}`;
   for (let copy = 2; await engine.fs.exists(candidate); copy++)
     candidate = `${parent}/${slug}-${copy}`;
-  return { result: `Worktree folder: ${candidate}` };
+  return candidate;
+};
+
+const findBranchWorktree = (worktreeList: string, branch: string) =>
+  worktreeList
+    .split("\n\n")
+    .find((entry) => entry.split("\n").includes(`branch refs/heads/${branch}`))
+    ?.split("\n")[0]
+    ?.replace(/^worktree /, "") ?? "";
+
+const addPlanWorktree = async (
+  engine: EngineInterface,
+  repository: string,
+  planPath: string,
+  branch: string,
+  base: string
+): Promise<{ folder: string } | { deny: string }> => {
+  const slug = planPath
+    .slice(planPath.lastIndexOf("/") + 1)
+    .replace(/^\d+-/, "")
+    .replace(/\.md$/, "");
+  const folder = await pickWorktreeFolder(engine, repository, slug);
+  if (!folder) return { deny: `${repository} is not inside a git repository.` };
+  const hasBranch =
+    (await gitOutput(
+      engine,
+      repository,
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `refs/heads/${branch}`
+    )) !== "";
+  const added = await runLongCommand(engine, [
+    "git",
+    "-C",
+    repository,
+    "worktree",
+    "add",
+    ...(hasBranch ? [folder, branch] : ["-b", branch, folder, base]),
+  ]);
+  return added.exitCode === 0
+    ? { folder }
+    : {
+        deny: `git worktree add failed:\n${keepLastLines(added.output, FAILURE_TAIL_LINES)}`,
+      };
+};
+
+const startSmallPlan = async (
+  engine: EngineInterface,
+  toolInput: Record<string, unknown>
+) => {
+  const planPath = trimText(toolInput.path);
+  const repository = trimText(toolInput.repository);
+  const branch = trimText(toolInput.branch);
+  const base = trimText(toolInput.base);
+  const pathProblem = await findPlanPathProblem(engine, planPath);
+  if (pathProblem) return { deny: pathProblem };
+  if (!branch || !base || branch.startsWith("-") || base.startsWith("-"))
+    return { deny: "branch and base must be branch names." };
+  const reusedFolder = findBranchWorktree(
+    await gitOutput(engine, repository, "worktree", "list", "--porcelain"),
+    branch
+  );
+  const added = reusedFolder
+    ? { folder: reusedFolder }
+    : await addPlanWorktree(engine, repository, planPath, branch, base);
+  if ("deny" in added) return added;
+  const marked = await setPlanStatus(engine, {
+    path: planPath,
+    status: "in-progress",
+  });
+  return "deny" in marked ? marked : { result: `Worktree: ${added.folder}` };
+};
+
+const findFirstFailure = async (
+  engine: EngineInterface,
+  gitSteps: { label: string; argv: string[] }[]
+) => {
+  for (const { label, argv } of gitSteps) {
+    const outcome = await runLongCommand(engine, argv);
+    if (outcome.exitCode !== 0) return { label, output: outcome.output };
+  }
+  return undefined;
+};
+
+const finishSmallPlan = async (
+  engine: EngineInterface,
+  toolInput: Record<string, unknown>
+) => {
+  const planPath = trimText(toolInput.path);
+  const worktree = trimText(toolInput.worktree);
+  const subject = trimText(toolInput.subject);
+  const pathProblem = await findPlanPathProblem(engine, planPath);
+  if (pathProblem) return { deny: pathProblem };
+  if (!subject || subject.includes("\n"))
+    return { deny: "subject must be one line." };
+  const branch = await gitOutput(
+    engine,
+    worktree,
+    "rev-parse",
+    "--abbrev-ref",
+    "HEAD"
+  );
+  const commonGitFolder = await gitOutput(
+    engine,
+    worktree,
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir"
+  );
+  const ownGitFolder = await gitOutput(
+    engine,
+    worktree,
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-dir"
+  );
+  if (
+    !branch ||
+    branch === "HEAD" ||
+    !commonGitFolder ||
+    ownGitFolder === commonGitFolder
+  )
+    return { deny: `${worktree} is not a plan worktree on a branch.` };
+  const hasChanges =
+    (await gitOutput(engine, worktree, "status", "--porcelain")) !== "";
+  const failure = await findFirstFailure(engine, [
+    ...(hasChanges
+      ? [
+          { label: "git add", argv: ["git", "-C", worktree, "add", "-A"] },
+          {
+            label: "git commit",
+            argv: ["git", "-C", worktree, "commit", "-m", subject],
+          },
+        ]
+      : []),
+    {
+      label: "git push",
+      argv: ["git", "-C", worktree, "push", "-u", "origin", branch],
+    },
+    {
+      label: "git worktree remove",
+      argv: [
+        "git",
+        `--git-dir=${commonGitFolder}`,
+        "worktree",
+        "remove",
+        worktree,
+      ],
+    },
+  ]);
+  const marked = await setPlanStatus(engine, {
+    path: planPath,
+    status: "done",
+  });
+  if ("deny" in marked) return marked;
+  return {
+    result: failure
+      ? `Plan marked done, but ${failure.label} failed and the worktree is kept at ${worktree}:\n${keepLastLines(failure.output, FAILURE_TAIL_LINES)}`
+      : `Plan marked done: ${branch} is committed and pushed, and the worktree is removed.`,
+  };
+};
+
+const readJsonFile = (engine: EngineInterface, filePath: string) =>
+  engine.fs
+    .read(filePath)
+    .then((fileText) => JSON.parse(String(fileText)) as Record<string, unknown>)
+    .catch(() => ({}) as Record<string, unknown>);
+
+const listChangedFiles = async (engine: EngineInterface, worktree: string) =>
+  [
+    await gitOutput(engine, worktree, "diff", "--name-only", "HEAD"),
+    await gitOutput(
+      engine,
+      worktree,
+      "ls-files",
+      "--others",
+      "--exclude-standard"
+    ),
+  ]
+    .join("\n")
+    .split("\n")
+    .filter(Boolean);
+
+const findPackageFolder = async (
+  engine: EngineInterface,
+  worktree: string,
+  changedFile: string
+) => {
+  const segments = changedFile.split("/").slice(0, -1);
+  for (let depth = segments.length; depth > 0; depth--) {
+    const folder = [worktree, ...segments.slice(0, depth)].join("/");
+    if (await engine.fs.exists(`${folder}/package.json`)) return folder;
+  }
+  return worktree;
+};
+
+const pickPackageRunner = async (
+  engine: EngineInterface,
+  folder: string,
+  worktree: string
+) => {
+  for (const [lockFile, runner] of PACKAGE_RUNNERS)
+    if (
+      (await engine.fs.exists(`${folder}/${lockFile}`)) ||
+      (await engine.fs.exists(`${worktree}/${lockFile}`))
+    )
+      return runner;
+  return "npm";
+};
+
+const findGuardCommands = async (
+  engine: EngineInterface,
+  folder: string,
+  worktree: string
+) => {
+  const readSetting = async (fileName: string, settingName: string) =>
+    trimText(
+      (await readJsonFile(engine, `${folder}/.claude/${fileName}`))[settingName]
+    ) ||
+    trimText(
+      (await readJsonFile(engine, `${worktree}/.claude/${fileName}`))[
+        settingName
+      ]
+    );
+  const packageJson = await readJsonFile(engine, `${folder}/package.json`);
+  const scripts = (packageJson.scripts ?? {}) as Record<string, unknown>;
+  const runner = await pickPackageRunner(engine, folder, worktree);
+  const hasPackage = Object.keys(packageJson).length > 0;
+  return [
+    {
+      label: "Lint",
+      command:
+        (await readSetting("quality.json", "lintCommand")) ||
+        (scripts.lint ? `${runner} run lint` : ""),
+    },
+    {
+      label: "Fallow",
+      command:
+        (await readSetting("quality.json", "fallowCommand")) ||
+        (hasPackage ? FALLOW_COMMAND : ""),
+    },
+    {
+      label: "Tests",
+      command:
+        (await readSetting("tdd.json", "testCommand")) ||
+        (scripts.test ? `${runner} run test` : ""),
+    },
+  ];
+};
+
+type GuardResult = { label: string; verdict: string; detail: string };
+
+const runGuard = async (
+  engine: EngineInterface,
+  folder: string,
+  label: string,
+  command: string
+): Promise<GuardResult> => {
+  if (!command) return { label, verdict: "none", detail: "" };
+  const outcome = await runLongCommand(engine, ["sh", "-c", command], folder);
+  if (
+    command === FALLOW_COMMAND &&
+    outcome.exitCode === MISSING_COMMAND_EXIT_CODE
+  )
+    return { label, verdict: "none", detail: "" };
+  return outcome.exitCode === 0
+    ? { label, verdict: "PASS", detail: `$ ${command} (in ${folder})` }
+    : {
+        label,
+        verdict: "FAIL",
+        detail: `$ ${command} (in ${folder})\n${keepLastLines(outcome.output, GUARD_OUTPUT_LINES)}`,
+      };
+};
+
+const runGuards = async (
+  engine: EngineInterface,
+  worktree: string,
+  guardFolders: string[]
+) => {
+  const guardResults: GuardResult[] = [];
+  for (const folder of guardFolders)
+    for (const { label, command } of await findGuardCommands(
+      engine,
+      folder,
+      worktree
+    ))
+      guardResults.push(await runGuard(engine, folder, label, command));
+  return guardResults;
+};
+
+const mergeVerdicts = (verdicts: string[]) => {
+  if (verdicts.includes("FAIL")) return "FAIL";
+  return verdicts.includes("PASS") ? "PASS" : "none (no command found)";
+};
+
+const checkSmallPlan = async (
+  engine: EngineInterface,
+  toolInput: Record<string, unknown>
+) => {
+  const planPath = trimText(toolInput.path);
+  const worktree = trimText(toolInput.worktree);
+  const pathProblem = await findPlanPathProblem(engine, planPath);
+  if (pathProblem) return { deny: pathProblem };
+  if (
+    (await gitOutput(
+      engine,
+      worktree,
+      "rev-parse",
+      "--is-inside-work-tree"
+    )) !== "true"
+  )
+    return { deny: `${worktree} is not a git worktree.` };
+  const planText = String(await engine.fs.read(planPath));
+  const checkCommand =
+    (readSection(planText, "Check") ?? "")
+      .match(BACKTICKED_TEXT)?.[0]
+      ?.slice(1, -1)
+      .trim() ?? "";
+  if (!checkCommand)
+    return {
+      deny: `${planPath} has no command in backticks under "## Check".`,
+    };
+  const check = await runLongCommand(
+    engine,
+    ["sh", "-c", checkCommand],
+    worktree
+  );
+  const changedFiles = await listChangedFiles(engine, worktree);
+  const fileLines = changedFiles.map((changedFile) =>
+    planText.includes(changedFile)
+      ? changedFile
+      : `${changedFile} (not in plan)`
+  );
+  const guardFolders = [
+    ...new Set(
+      await Promise.all(
+        changedFiles.map((changedFile) =>
+          findPackageFolder(engine, worktree, changedFile)
+        )
+      )
+    ),
+  ];
+  const guardResults = await runGuards(
+    engine,
+    worktree,
+    guardFolders.length > 0 ? guardFolders : [worktree]
+  );
+  const guardBlocks = GUARD_LABELS.map((label) => {
+    const labelResults = guardResults.filter(
+      (guardResult) => guardResult.label === label
+    );
+    return {
+      summary: `${label}: ${mergeVerdicts(labelResults.map((guardResult) => guardResult.verdict))}`,
+      details: labelResults
+        .map((guardResult) => guardResult.detail)
+        .filter(Boolean),
+    };
+  });
+  const reportPath = planPath.replace(/\.md$/, ".check.txt");
+  await engine.fs.write(
+    reportPath,
+    [
+      `Check: exit ${check.exitCode}\n$ ${checkCommand}\n${keepLastLines(check.output, CHECK_OUTPUT_LINES)}`,
+      `Files:\n${fileLines.join("\n")}`,
+      ...guardBlocks.map(({ summary, details }) =>
+        [summary, ...details].join("\n")
+      ),
+    ].join("\n\n")
+  );
+  return {
+    result: [
+      `Check: exit ${check.exitCode}`,
+      `Files: ${changedFiles.length} changed, ${fileLines.length - changedFiles.filter((changedFile) => planText.includes(changedFile)).length} not in plan`,
+      ...guardBlocks.map(({ summary }) => summary),
+      `Report: ${reportPath}`,
+    ].join("\n"),
+  };
+};
+
+const saveReviewFindings = async (
+  engine: EngineInterface,
+  reviewText: string
+) => {
+  const planPath = /^Plan: (.+)$/m.exec(reviewText)?.[1]?.trim() ?? "";
+  if (!planPath || (await findPlanPathProblem(engine, planPath)))
+    return reviewText;
+  const lastLine =
+    reviewText.trimEnd().split("\n").pop()?.replace(/[`*]/g, "").trim() ?? "";
+  if (lastLine === "PASS") return "PASS";
+  if (!/^[`*]*FAIL\b/m.test(reviewText)) return reviewText;
+  const findingsPath = planPath.replace(/\.md$/, ".review.txt");
+  await engine.fs.write(findingsPath, reviewText);
+  return `FAIL\nFindings: ${findingsPath}`;
 };
 
 const askClaude = (engine: EngineInterface, instruction: string) => {
@@ -489,31 +958,29 @@ const composePlanInstruction = (
 const composeBuildInstruction = (
   setFolder: string,
   planName: string,
-  projectFolder: string
+  projectFolder: string,
+  planLines: string[]
 ) => `${
   planName
-    ? `Build only the plan at ${setFolder}/${planName}.md. If its depends_on names a plan in ${setFolder} that is not done, stop and say which.`
-    : `Build the plans in ${setFolder}.`
-} You coordinate: never edit project files or read diffs yourself. Change a plan's status only with ${QUALIFIED_STATUS_TOOL_NAME}, which also rewrites the set's ${INDEX_FILE_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand.
+    ? `Build only the plan at ${setFolder}/${planName}.md. If it depends on another plan listed below, which is not done, stop and say which.`
+    : `Build the plans in ${setFolder}, in the order listed below. A plan waits until every plan it depends on is done.`
+} You coordinate: never edit project files or read diffs yourself, and read a plan, report or findings file only in step 7. A plan's status changes through ${QUALIFIED_START_TOOL_NAME}, ${QUALIFIED_FINISH_TOOL_NAME} and, for blocked, ${QUALIFIED_STATUS_TOOL_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand. Load those three tools and ${QUALIFIED_CHECK_TOOL_NAME} with one ToolSearch call.
 
-${
-  planName
-    ? ""
-    : "Read each plan file's front matter and take the plans in file-name order. Skip a plan whose status is done. A plan whose depends_on names a plan that is not done waits until that plan is done.\n\n"
-}Each plan is built in its own git worktree, on its own branch:
+Plans not done (file, title, kind, status, depends on):
+${planLines.join("\n")}
+
+Each plan is built in its own git worktree, on its own branch:
 - Branch name: when ${projectFolder}/${BRANCH_CONVENTION_FILE_NAME} exists, follow the convention it states. Otherwise start an Explore agent with model "haiku" to read the repository's CONTRIBUTING.md, CLAUDE.md, AGENTS.md, the guides under .github/ and docs/, and \`git branch -a --sort=-committerdate | head -n 20\`, and reply with the branch naming convention in one line, or "none"; write that line to the file with Write. When the convention is none, name the branch \`<type>/<plan slug>\`, the type from the plan's kind: feat for a feature, bug for a fix, refactor, test, docs or chore.
 - Base: the branch of the plan it depends on, when it depends on one; otherwise the branch checked out where the build started.
-- Place: when \`git worktree list\` shows a worktree on that branch, left by an earlier build, reuse it. Otherwise call ${QUALIFIED_WORKTREE_TOOL_NAME} with the repository and the plan slug, and run \`git worktree add -b <branch> <path> <base>\` with the folder it returns.
-- Run every git command of the plan in its worktree, as \`cd <path> && ...\` or \`git -C <path> ...\`.
 
 For each plan:
-1. Set its status to in-progress with ${QUALIFIED_STATUS_TOOL_NAME}. Create or reuse the plan's worktree.
+1. Call ${QUALIFIED_START_TOOL_NAME} with the plan's path, a folder inside the repository, the branch and the base. It marks the plan in-progress, creates the worktree or reuses the one an earlier build left on that branch, and answers \`Worktree: <path>\`.
 2. Start the ${IMPLEMENTER_AGENT} agent. Its prompt is the plan file's absolute path, then a line \`Worktree: <path>\`. It answers DONE or BLOCKED.
-3. On DONE, start the ${CHECKER_AGENT} agent with the same two lines. When its Lint, Fallow or Tests result is FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, a blank line, then the failing lines, to fix every reported failure, then start the checker again. Repeat until they pass; a failing guard never sets a plan to blocked or counts as a fix round.
-4. Start the ${REVIEWER_AGENT} agent with the two lines, a blank line, then the checker's reply. It answers PASS or FAIL with numbered findings.
-5. On PASS, commit and push in the plan's worktree: stage everything changed there; commit with one short conventional subject line in the style of \`git log --oneline -n 10\`, with no body and no Co-Authored-By or other attribution line; run \`git push -u origin <branch>\` and \`git worktree remove <path>\`, which keeps the branch. Never commit work the review has not passed. If the commit or push fails, keep the worktree and say so in the plan's report line. Then set the status to done.
-6. On FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, a blank line, then the findings, and go again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
-7. When the implementer answers BLOCKED, or the work still fails after ${MAX_FIX_ROUNDS} fix rounds, find the root cause from the reported output and the plan: when another plan provides the missing piece, build that plan first and base this branch on it; when the plan is wrong, correct the plan file; otherwise start a new ${IMPLEMENTER_AGENT} agent with the failure and the cause. Keep going while each attempt changes the failure. Set the status to blocked only when the fix needs something only the user can give, or two attempts in a row leave the failure unchanged; the reason says what you tried and what is still needed. Keep its worktree and go on with the next plan that does not depend on it.
+3. On DONE, call ${QUALIFIED_CHECK_TOOL_NAME} with the plan's path and the worktree. It runs the plan's check, lint, fallow and the tests, saves their output to a report file and answers one line for each, then \`Report: <path>\`. When Lint, Fallow or Tests is FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <report path>\`, and call ${QUALIFIED_CHECK_TOOL_NAME} again. Allow at most ${MAX_GUARD_ROUNDS} such rounds, then go to step 7; a failing guard does not count as a fix round.
+4. Start the ${REVIEWER_AGENT} agent with the two lines, then a line \`Report: <report path>\`. It answers PASS, or FAIL and \`Findings: <path>\`.
+5. On PASS, call ${QUALIFIED_FINISH_TOOL_NAME} with the plan's path, the worktree and one short conventional commit subject in the style of \`git log --oneline -n 10\`. It commits everything changed in the worktree with that subject alone, pushes the branch, removes the worktree, which keeps the branch, and marks the plan done. Never call it before the reviewer answers PASS. When it answers that a git step failed, the worktree is kept: say so in the plan's report line.
+6. On FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, then a line \`Fix: <findings path>\`, and go again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
+7. When the implementer answers BLOCKED, or the work still fails after ${MAX_FIX_ROUNDS} fix rounds, find the root cause: for this step only, read the plan and its report or findings file. When another plan provides the missing piece, build that plan first and base this branch on it; when the plan is wrong, correct the plan file; otherwise start a new ${IMPLEMENTER_AGENT} agent with the two lines, a \`Fix: <path>\` line and the cause. Keep going while each attempt changes the failure. Set the status to blocked only when the fix needs something only the user can give, or two attempts in a row leave the failure unchanged; the reason says what you tried and what is still needed. Keep its worktree and go on with the next plan that does not depend on it.
 
 When every plan is handled, run \`git status --short\` in the checkout where the build started. When it shows changes, ask the user with AskUserQuestion whether to commit and push them as logical conventional commits, never a file that holds a secret such as \`.env\`.
 
@@ -752,6 +1219,22 @@ const listPlanNamesNotDone = async (
     .map((name) => name.replace(/\.md$/, ""));
 };
 
+const listPlanLinesNotDone = async (
+  engine: EngineInterface,
+  setFolder: string
+) => {
+  const { planNames, planTexts } = await readSetPlans(engine, setFolder);
+  return planNames.flatMap((name, i) => {
+    const planText = planTexts[i] ?? "";
+    const status = readFrontMatterField(planText, "status");
+    return status === "done"
+      ? []
+      : [
+          `- ${name} | ${readFrontMatterField(planText, "title") || name} | ${readFrontMatterField(planText, "kind")} | ${status} | depends on ${readFrontMatterField(planText, "depends_on") || "none"}`,
+        ];
+  });
+};
+
 const findPlanName = (planNames: string[], requestedPlan: string) => {
   const wantedText = requestedPlan.trim();
   return /^\d+$/.test(wantedText)
@@ -837,7 +1320,12 @@ const buildPlans = async (
   await startBoard(engine, setFolder, setName);
   askClaude(
     engine,
-    composeBuildInstruction(setFolder, planName, projectFolder)
+    composeBuildInstruction(
+      setFolder,
+      planName,
+      projectFolder,
+      await listPlanLinesNotDone(engine, setFolder)
+    )
   );
   return {
     text: planName
@@ -1146,10 +1634,24 @@ export const register: Register = (on) => {
       isDeferred: true,
     });
     await $.tool.register({
-      name: WORKTREE_TOOL_NAME,
+      name: START_TOOL_NAME,
       description:
-        "Returns the folder to create a small plan's git worktree in: beside the repository's top folder, or beside the bare repository, named after the slug, with -2, -3 added when that folder already exists.",
-      inputSchema: WORKTREE_TOOL_SCHEMA,
+        "Starts one small plan's build: marks it in-progress and creates its git worktree beside the repository, or reuses the worktree already on that branch. Returns the worktree folder.",
+      inputSchema: START_TOOL_SCHEMA,
+      isDeferred: true,
+    });
+    await $.tool.register({
+      name: FINISH_TOOL_NAME,
+      description:
+        "Finishes one reviewed small plan: commits everything changed in its worktree with the given subject, pushes the branch, removes the worktree and marks the plan done.",
+      inputSchema: FINISH_TOOL_SCHEMA,
+      isDeferred: true,
+    });
+    await $.tool.register({
+      name: CHECK_TOOL_NAME,
+      description:
+        "Runs one small plan's check command, lint, fallow and tests in its worktree, saves their output to a report file beside the plan and answers one result line for each.",
+      inputSchema: CHECK_TOOL_SCHEMA,
       isDeferred: true,
     });
     return next(e);
@@ -1180,8 +1682,12 @@ export const register: Register = (on) => {
       return writeSmallPlan($, toolInput);
     if (e.tool === (QUALIFIED_STATUS_TOOL_NAME as string))
       return setPlanStatus($, toolInput);
-    if (e.tool === (QUALIFIED_WORKTREE_TOOL_NAME as string))
-      return worktreeFolder($, toolInput);
+    if (e.tool === (QUALIFIED_START_TOOL_NAME as string))
+      return startSmallPlan($, toolInput);
+    if (e.tool === (QUALIFIED_FINISH_TOOL_NAME as string))
+      return finishSmallPlan($, toolInput);
+    if (e.tool === (QUALIFIED_CHECK_TOOL_NAME as string))
+      return checkSmallPlan($, toolInput);
     if (!FILE_EDITING_TOOLS.includes(e.tool)) return next(e);
     const toolResult = await next(e);
     const setFolder = findPlanSetFolder(
@@ -1190,6 +1696,16 @@ export const register: Register = (on) => {
     );
     if (setFolder) await writeSetIndex($, setFolder);
     return toolResult;
+  });
+
+  on("agent.report", async ($, e, next) => {
+    const report = await next(e);
+    if (
+      !e.subagentType.endsWith(REVIEWER_AGENT_NAME) ||
+      report.consumed !== undefined
+    )
+      return report;
+    return { ...report, text: await saveReviewFindings($, report.text) };
   });
 
   on("prompt.autocomplete", async (_, e, next) => {

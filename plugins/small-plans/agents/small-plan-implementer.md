@@ -13,7 +13,7 @@ Your prompt is the absolute path of a plan file. Read it first. The plan is self
 
 After the path comes a line `Worktree: <absolute path>`: the git worktree this plan is built in. Do all the work there. The file paths in the plan are relative to the repository: read and edit them under the worktree, and an absolute path into another checkout of the same repository means the same file under the worktree. Start every command with `cd <worktree> && `.
 
-Your prompt may also hold review findings after the `Worktree:` line: an earlier implementer did this plan and the review failed. Each finding names something the plan asked for that the work does not do. Fix those and nothing else, then run the check again.
+Your prompt may also hold a line `Fix: <absolute path>` after the `Worktree:` line: an earlier implementer did this plan and a check or the review failed. Read that file. It holds the failing lint, fallow or test output, or a reviewer's numbered findings, each naming something the plan asked for that the work does not do. Fix those and nothing else, then run the check again.
 
 ## How to work
 

@@ -7,6 +7,9 @@ import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const WRITE_TOOL = "mcp__small-plans__write_small_plan";
 const STATUS_TOOL = "mcp__small-plans__set_small_plan_status";
+const START_TOOL = "mcp__small-plans__start_small_plan";
+const CHECK_TOOL = "mcp__small-plans__check_small_plan";
+const FINISH_TOOL = "mcp__small-plans__finish_small_plan";
 const PLANS_FOLDER = "/home/tester/.local/share/small-plans";
 const PROJECT_FOLDER = `${PLANS_FOLDER}/claude-kit`;
 const HANDOFFS_FOLDER = "/home/tester/.claude/handoffs/claude-kit";
@@ -45,10 +48,13 @@ const VALID_PLAN = {
   depends_on: [] as number[],
 };
 
+type ProcessRun = { argv: string[]; cwd?: string };
+
 type Recorded = {
   files: Map<string, string>;
   submittedPrompts: string[];
   commands: string[][];
+  runs: ProcessRun[];
 };
 
 const moveFolder = (files: Map<string, string>, from: string, to: string) => {
@@ -59,17 +65,11 @@ const moveFolder = (files: Map<string, string>, from: string, to: string) => {
   }
 };
 
-const mockEngine = (
+const mockFiles = (
   on: On,
-  seededFiles: Record<string, string> = {},
-  commonGitFolder = "/work/claude-kit/.git\n",
+  recorded: Recorded,
   sessionRoot = "/work/claude-kit"
-): Recorded => {
-  const recorded: Recorded = {
-    files: new Map(Object.entries(seededFiles)),
-    submittedPrompts: [],
-    commands: [],
-  };
+) => {
   on("env.get", (_, e) => ({
     value: { HOME: "/home/tester" }[e.name],
   }));
@@ -94,8 +94,24 @@ const mockEngine = (
       })),
     };
   });
+};
+
+const mockEngine = (
+  on: On,
+  seededFiles: Record<string, string> = {},
+  commonGitFolder = "/work/claude-kit/.git\n",
+  sessionRoot = "/work/claude-kit"
+): Recorded => {
+  const recorded: Recorded = {
+    files: new Map(Object.entries(seededFiles)),
+    submittedPrompts: [],
+    commands: [],
+    runs: [],
+  };
+  mockFiles(on, recorded, sessionRoot);
   on("process.run", (_, e) => {
     recorded.commands.push([...e.argv]);
+    recorded.runs.push({ argv: [...e.argv], cwd: e.init?.cwd });
     if (e.argv[0] === "mv")
       moveFolder(recorded.files, e.argv[1] ?? "", e.argv[2] ?? "");
     const isFailedGit = e.argv[0] === "git" && !commonGitFolder;
@@ -600,11 +616,11 @@ test("/small-plans build has a reviewer agent review each plan and send fixes to
     "Start the small-plans:small-plan-reviewer agent with the two lines"
   );
   expect(submittedPrompts[0]).toContain(
-    "start a new small-plans:small-plan-implementer agent with the two lines, a blank line, then the findings"
+    "start a new small-plans:small-plan-implementer agent with the two lines, then a line `Fix: <findings path>`, and go again from step 3"
   );
   expect(submittedPrompts[0]).toContain("at most 3 fix rounds");
   expect(submittedPrompts[0]).toContain(
-    "find the root cause from the reported output and the plan"
+    "find the root cause: for this step only, read the plan and its report or findings file"
   );
   expect(submittedPrompts[0]).toContain(
     "only when the fix needs something only the user can give"
@@ -615,7 +631,7 @@ test("/small-plans build has a reviewer agent review each plan and send fixes to
   expect(submittedPrompts[0]).not.toContain("general-purpose");
 });
 
-test("/small-plans build names the reviewer, the branch convention file and the worktree tool", async ($, on) => {
+test("/small-plans build names the start, check and finish tools, the reviewer and the branch convention file", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "build", {
     [STANDALONE_SET_PLAN]: "status: pending",
   });
@@ -624,54 +640,58 @@ test("/small-plans build names the reviewer, the branch convention file and the 
   expect(submittedPrompts[0]).toContain(
     `${PROJECT_FOLDER}/branch-convention.md`
   );
+  expect(submittedPrompts[0]).toContain(START_TOOL);
+  expect(submittedPrompts[0]).toContain(CHECK_TOOL);
+  expect(submittedPrompts[0]).toContain(FINISH_TOOL);
+  expect(submittedPrompts[0]).not.toContain("small-plan-checker");
+  expect(submittedPrompts[0]).not.toContain("small_plan_worktree");
+  expect(submittedPrompts[0]).not.toContain("general-purpose");
+});
+
+test("/small-plans build lists the plans not done with their status and depends_on", async ($, on) => {
+  answerAskUserQuestion(on, "Whole set");
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    ...THREE_PLAN_SET,
+    [`${SET_FOLDER}/03-test-the-toggle.md`]: "status: blocked\ndepends_on: 2",
+  });
+
+  expect(submittedPrompts[0]).toContain("| pending | depends on none");
+  expect(submittedPrompts[0]).toContain("| blocked | depends on 2");
+  expect(submittedPrompts[0]).not.toContain("01-add-the-toggle.md |");
+});
+
+test("/small-plans build has the check tool run the check, lint, fallow and tests, and a subagent fix a failing guard", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
   expect(submittedPrompts[0]).toContain(
-    "mcp__small-plans__small_plan_worktree"
+    `call ${CHECK_TOOL} with the plan's path and the worktree. It runs the plan's check, lint, fallow and the tests`
+  );
+  expect(submittedPrompts[0]).toContain(
+    "When Lint, Fallow or Tests is FAIL, start a new small-plans:small-plan-implementer agent with the two lines, then a line `Fix: <report path>`"
+  );
+  expect(submittedPrompts[0]).toContain(`and call ${CHECK_TOOL} again`);
+  expect(submittedPrompts[0]).toContain("at most 3 such rounds");
+  expect(submittedPrompts[0]).toContain(
+    "a failing guard does not count as a fix round"
   );
   expect(submittedPrompts[0]).not.toContain("general-purpose");
 });
 
-test("/small-plans build has a Haiku checker run the check, lint, fallow and tests", async ($, on) => {
+test("/small-plans build finishes each plan with the finish tool, only after the review passes", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "build", {
     [STANDALONE_SET_PLAN]: "status: pending",
   });
 
   expect(submittedPrompts[0]).toContain(
-    "start the small-plans:small-plan-checker agent"
+    `On PASS, call ${FINISH_TOOL} with the plan's path, the worktree and one short conventional commit subject`
   );
   expect(submittedPrompts[0]).toContain(
-    "When its Lint, Fallow or Tests result is FAIL, start a new small-plans:small-plan-implementer agent"
-  );
-  expect(submittedPrompts[0]).toContain("then start the checker again");
-});
-
-test("/small-plans build has a failing guard fixed by a subagent instead of blocking the plan", async ($, on) => {
-  const { submittedPrompts } = await runCommand($, on, "build", {
-    [STANDALONE_SET_PLAN]: "status: pending",
-  });
-
-  expect(submittedPrompts[0]).toContain(
-    "start a new small-plans:small-plan-implementer agent with the two lines, a blank line, then the failing lines, to fix every reported failure"
+    "It commits everything changed in the worktree with that subject alone, pushes the branch, removes the worktree, which keeps the branch, and marks the plan done."
   );
   expect(submittedPrompts[0]).toContain(
-    "a failing guard never sets a plan to blocked or counts as a fix round"
-  );
-  expect(submittedPrompts[0]).not.toContain("general-purpose");
-});
-
-test("/small-plans build commits and pushes each approved plan with a one-line subject", async ($, on) => {
-  const { submittedPrompts } = await runCommand($, on, "build", {
-    [STANDALONE_SET_PLAN]: "status: pending",
-  });
-
-  expect(submittedPrompts[0]).toContain(
-    "On PASS, commit and push in the plan's worktree"
-  );
-  expect(submittedPrompts[0]).toContain("one short conventional subject line");
-  expect(submittedPrompts[0]).toContain(
-    "no body and no Co-Authored-By or other attribution line"
-  );
-  expect(submittedPrompts[0]).toContain(
-    "Never commit work the review has not passed."
+    "Never call it before the reviewer answers PASS."
   );
 });
 
@@ -704,97 +724,264 @@ test("/small-plans build builds each plan in its own worktree on a branch named 
   );
   expect(submittedPrompts[0]).toContain("name the branch `<type>/<plan slug>`");
   expect(submittedPrompts[0]).toContain(
-    "call mcp__small-plans__small_plan_worktree with the repository and the plan slug"
+    `Call ${START_TOOL} with the plan's path, a folder inside the repository, the branch and the base`
   );
-  expect(submittedPrompts[0]).toContain("git worktree list");
   expect(submittedPrompts[0]).toContain("then a line `Worktree: <path>`");
-  expect(submittedPrompts[0]).toContain("git push -u origin <branch>");
-  expect(submittedPrompts[0]).toContain("git worktree remove <path>");
   expect(submittedPrompts[0]).toContain("bug for a fix");
 });
 
-const WORKTREE_TOOL = "mcp__small-plans__small_plan_worktree";
+type GitAnswer = { match: string; exitCode?: number; stdout?: string };
 
-const mockWorktreeGit = (
+const mockGit = (
   on: On,
-  topLevel: string,
-  commonGitFolder: string,
-  existingFolders: string[] = []
+  answers: GitAnswer[],
+  seededFiles: Record<string, string> = {}
 ) => {
+  const recorded: Recorded = {
+    files: new Map(Object.entries(seededFiles)),
+    submittedPrompts: [],
+    commands: [],
+    runs: [],
+  };
+  mockFiles(on, recorded);
   on("process.run", (_, e) => {
-    const stdout = e.argv.includes("--show-toplevel")
-      ? topLevel
-      : commonGitFolder;
+    recorded.commands.push([...e.argv]);
+    recorded.runs.push({ argv: [...e.argv], cwd: e.init?.cwd });
+    const answer = answers.find(({ match }) => e.argv.includes(match));
     return {
       value: {
-        exitCode: stdout ? 0 : 128,
-        stdout: stdout ? `${stdout}\n` : "",
+        exitCode: answer?.exitCode ?? 0,
+        stdout: answer?.stdout ?? "",
         stderr: "",
         isStdoutTruncated: false,
         isStderrTruncated: false,
       },
     };
   });
-  on("fs.exists", (_, e) => ({ value: existingFolders.includes(e.path) }));
-  on("tool.call", () => ({ result: {} }));
+  return recorded;
 };
 
-test("a worktree folder for a plan sits beside the repository's top folder", async ($, on) => {
-  mockWorktreeGit(on, "/work/claude-kit", "/work/claude-kit/.git");
+const REPOSITORY = "/work/claude-kit";
+const WORKTREE = "/work/add-the-toggle";
+const BRANCH = "feat/add-the-toggle";
 
-  const reply = await callTool($, WORKTREE_TOOL, {
-    repository: "/work/claude-kit",
-    slug: "add-login",
+test("start_small_plan adds a worktree beside the repository on a new branch and marks the plan in-progress", async ($, on) => {
+  const { files, commands } = mockGit(
+    on,
+    [{ match: "--show-toplevel", stdout: REPOSITORY }],
+    { [STANDALONE_SET_PLAN]: "status: pending" }
+  );
+
+  const reply = await callTool($, START_TOOL, {
+    path: STANDALONE_SET_PLAN,
+    repository: REPOSITORY,
+    branch: BRANCH,
+    base: "main",
   });
 
-  expect(reply.result).toBe("Worktree folder: /work/add-login");
-});
-
-test("a worktree folder for a bare repository sits beside the bare repository", async ($, on) => {
-  mockWorktreeGit(on, "", "/work/claude-kit.git");
-
-  const reply = await callTool($, WORKTREE_TOOL, {
-    repository: "/work/claude-kit.git",
-    slug: "add-login",
-  });
-
-  expect(reply.result).toBe("Worktree folder: /work/add-login");
-});
-
-test("a worktree folder that already exists gets -2, then -3", async ($, on) => {
-  mockWorktreeGit(on, "/work/claude-kit", "/work/claude-kit/.git", [
-    "/work/add-login",
-    "/work/add-login-2",
+  expect(commands).toContainEqual([
+    "git",
+    "-C",
+    REPOSITORY,
+    "worktree",
+    "add",
+    "-b",
+    BRANCH,
+    WORKTREE,
+    "main",
   ]);
-
-  const reply = await callTool($, WORKTREE_TOOL, {
-    repository: "/work/claude-kit",
-    slug: "add-login",
-  });
-
-  expect(reply.result).toBe("Worktree folder: /work/add-login-3");
+  expect(files.get(STANDALONE_SET_PLAN)).toContain("status: in-progress");
+  expect(reply.result).toBe(`Worktree: ${WORKTREE}`);
 });
 
-test("a worktree folder is refused outside a git repository and for a slug that is not one folder name", async ($, on) => {
-  mockWorktreeGit(on, "", "");
+test("start_small_plan reuses the worktree already on the branch and adds none", async ($, on) => {
+  const { commands } = mockGit(
+    on,
+    [
+      { match: "--show-toplevel", stdout: REPOSITORY },
+      {
+        match: "--porcelain",
+        stdout: `worktree ${REPOSITORY}\nHEAD abc\nbranch refs/heads/main\n\nworktree /work/earlier\nHEAD def\nbranch refs/heads/${BRANCH}`,
+      },
+    ],
+    { [STANDALONE_SET_PLAN]: "status: pending" }
+  );
 
-  const outside = await callTool($, WORKTREE_TOOL, {
-    repository: "/work/notes",
-    slug: "add-login",
-  });
-  const nested = await callTool($, WORKTREE_TOOL, {
-    repository: "/work/notes",
-    slug: "../add-login",
+  const reply = await callTool($, START_TOOL, {
+    path: STANDALONE_SET_PLAN,
+    repository: REPOSITORY,
+    branch: BRANCH,
+    base: "main",
   });
 
-  expect(outside.deny).toBe("/work/notes is not inside a git repository.");
-  expect(nested.deny).toContain("one folder name");
+  expect(reply.result).toBe("Worktree: /work/earlier");
+  expect(
+    commands.some((argv) => argv.includes("worktree") && argv.includes("add"))
+  ).toBe(false);
+});
+
+test("start_small_plan checks out an existing branch that has no worktree without -b", async ($, on) => {
+  const { commands } = mockGit(
+    on,
+    [
+      { match: "--show-toplevel", stdout: REPOSITORY },
+      { match: "--verify", stdout: "abc123" },
+    ],
+    { [STANDALONE_SET_PLAN]: "status: pending" }
+  );
+
+  await callTool($, START_TOOL, {
+    path: STANDALONE_SET_PLAN,
+    repository: REPOSITORY,
+    branch: BRANCH,
+    base: "main",
+  });
+
+  expect(commands).toContainEqual([
+    "git",
+    "-C",
+    REPOSITORY,
+    "worktree",
+    "add",
+    WORKTREE,
+    BRANCH,
+  ]);
+});
+
+test("start_small_plan refuses a branch that starts with a dash and runs no git", async ($, on) => {
+  const { commands } = mockGit(on, [], {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  const reply = await callTool($, START_TOOL, {
+    path: STANDALONE_SET_PLAN,
+    repository: REPOSITORY,
+    branch: "-f",
+    base: "main",
+  });
+
+  expect(reply.deny).toBe("branch and base must be branch names.");
+  expect(commands).toEqual([]);
+});
+
+test("start_small_plan refuses a plan path outside the plans folder", async ($, on) => {
+  mockGit(on, []);
+
+  const reply = await callTool($, START_TOOL, {
+    path: "/home/tester/notes/01-add-the-toggle.md",
+    repository: REPOSITORY,
+    branch: BRANCH,
+    base: "main",
+  });
+
+  expect(reply.deny).toContain(PLANS_FOLDER);
+});
+
+const FINISH_SEED = { [STANDALONE_SET_PLAN]: "status: in-progress" };
+const FINISH_GIT: GitAnswer[] = [
+  { match: "--abbrev-ref", stdout: BRANCH },
+  { match: "--git-common-dir", stdout: `${REPOSITORY}/.git` },
+  { match: "--git-dir", stdout: `${REPOSITORY}/.git/worktrees/add-the-toggle` },
+];
+const FINISH_INPUT = {
+  path: STANDALONE_SET_PLAN,
+  worktree: WORKTREE,
+  subject: "feat: add the toggle",
+};
+
+test("finish_small_plan commits, pushes, removes the worktree and marks the plan done, in that order", async ($, on) => {
+  const { files, commands } = mockGit(
+    on,
+    [{ match: "--porcelain", stdout: " M src/toggle.ts" }, ...FINISH_GIT],
+    FINISH_SEED
+  );
+
+  const reply = await callTool($, FINISH_TOOL, FINISH_INPUT);
+
+  expect(commands.slice(-4)).toEqual([
+    ["git", "-C", WORKTREE, "add", "-A"],
+    ["git", "-C", WORKTREE, "commit", "-m", "feat: add the toggle"],
+    ["git", "-C", WORKTREE, "push", "-u", "origin", BRANCH],
+    ["git", `--git-dir=${REPOSITORY}/.git`, "worktree", "remove", WORKTREE],
+  ]);
+  expect(files.get(STANDALONE_SET_PLAN)).toContain("status: done");
+  expect(reply.result).toBe(
+    `Plan marked done: ${BRANCH} is committed and pushed, and the worktree is removed.`
+  );
+});
+
+test("finish_small_plan skips add and commit when the worktree is clean", async ($, on) => {
+  const { commands } = mockGit(on, FINISH_GIT, FINISH_SEED);
+
+  await callTool($, FINISH_TOOL, FINISH_INPUT);
+
+  expect(
+    commands.some((argv) => argv.includes("add") || argv.includes("commit"))
+  ).toBe(false);
+  expect(commands).toContainEqual([
+    "git",
+    "-C",
+    WORKTREE,
+    "push",
+    "-u",
+    "origin",
+    BRANCH,
+  ]);
+});
+
+test("finish_small_plan keeps the worktree when the push fails, and still marks the plan done", async ($, on) => {
+  const { files, commands } = mockGit(
+    on,
+    [
+      { match: "push", exitCode: 1 },
+      { match: "--porcelain", stdout: " M src/toggle.ts" },
+      ...FINISH_GIT,
+    ],
+    FINISH_SEED
+  );
+
+  const reply = await callTool($, FINISH_TOOL, FINISH_INPUT);
+
+  expect(commands.some((argv) => argv.includes("remove"))).toBe(false);
+  expect(files.get(STANDALONE_SET_PLAN)).toContain("status: done");
+  expect(reply.result).toContain("git push failed");
+  expect(reply.result).toContain(WORKTREE);
+});
+
+test("finish_small_plan refuses the main checkout and commits nothing", async ($, on) => {
+  const { commands } = mockGit(
+    on,
+    [
+      { match: "--git-dir", stdout: `${REPOSITORY}/.git` },
+      { match: "--porcelain", stdout: " M src/toggle.ts" },
+      ...FINISH_GIT,
+    ],
+    FINISH_SEED
+  );
+
+  const reply = await callTool($, FINISH_TOOL, FINISH_INPUT);
+
+  expect(reply.deny).toBe(`${WORKTREE} is not a plan worktree on a branch.`);
+  expect(commands.some((argv) => argv.includes("commit"))).toBe(false);
+});
+
+test("finish_small_plan refuses a subject with a newline and runs no git", async ($, on) => {
+  const { commands } = mockGit(on, FINISH_GIT, FINISH_SEED);
+
+  const reply = await callTool($, FINISH_TOOL, {
+    ...FINISH_INPUT,
+    subject: "feat: add the toggle\n\nlong body",
+  });
+
+  expect(reply.deny).toBe("subject must be one line.");
+  expect(commands).toEqual([]);
 });
 
 const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;
 const THREE_PLAN_SET = {
   [`${SET_FOLDER}/01-add-the-toggle.md`]: "status: done",
-  [`${SET_FOLDER}/02-store-the-choice.md`]: "status: pending",
+  [`${SET_FOLDER}/02-store-the-choice.md`]:
+    "title: Store the choice\nkind: feature\nstatus: pending",
   [`${SET_FOLDER}/03-test-the-toggle.md`]: "status: blocked",
 };
 
@@ -807,7 +994,9 @@ test("/small-plans build asks for the whole set or one plan that is not done", a
     "2 · Store the choice",
     "3 · Test the toggle",
   ]);
-  expect(submittedPrompts[0]).toContain(`Build the plans in ${SET_FOLDER}.`);
+  expect(submittedPrompts[0]).toContain(
+    `Build the plans in ${SET_FOLDER}, in the order listed below.`
+  );
 });
 
 test("/small-plans build builds only the plan picked", async ($, on) => {
@@ -817,7 +1006,9 @@ test("/small-plans build builds only the plan picked", async ($, on) => {
   expect(submittedPrompts[0]).toContain(
     `Build only the plan at ${SET_FOLDER}/03-test-the-toggle.md.`
   );
-  expect(submittedPrompts[0]).not.toContain("02-store-the-choice");
+  expect(submittedPrompts[0]).toContain(
+    "- 02-store-the-choice.md | Store the choice | feature | pending | depends on none"
+  );
 });
 
 test("/small-plans build builds nothing when the plan list is dismissed", async ($, on) => {
@@ -1297,4 +1488,241 @@ test("the build board keeps one row above it and none below, so stacked band row
   const board = await drawing.find({ key: "small-plans-board" });
   expect(board?.props).toMatchObject({ marginTop: 1 });
   expect(board?.props).not.toHaveProperty("paddingBottom");
+});
+
+const FALLOW_SHELL =
+  "command -v fallow >/dev/null || exit 127; fallow audit --format compact";
+const CHECK_REPORT = STANDALONE_SET_PLAN.replace(/\.md$/, ".check.txt");
+const checkGit = (changedFiles: string): GitAnswer[] => [
+  { match: "--is-inside-work-tree", stdout: "true" },
+  { match: "--name-only", stdout: changedFiles },
+];
+const CHECK_SEED = { [STANDALONE_SET_PLAN]: PLAN_BODY };
+const runCheck = ($: Engine) =>
+  callTool($, CHECK_TOOL, { path: STANDALONE_SET_PLAN, worktree: WORKTREE });
+
+test("check_small_plan runs the plan's check in the worktree and saves a report beside the plan", async ($, on) => {
+  const { files, runs } = mockGit(
+    on,
+    [
+      ...checkGit("src/auth.ts"),
+      { match: "pnpm test auth", stdout: "auth passed" },
+    ],
+    { ...CHECK_SEED, [`${WORKTREE}/package.json`]: '{"name":"app"}' }
+  );
+
+  const reply = await runCheck($);
+
+  expect(runs).toContainEqual({
+    argv: ["sh", "-c", "pnpm test auth"],
+    cwd: WORKTREE,
+  });
+  expect(files.get(CHECK_REPORT)).toContain(
+    "Check: exit 0\n$ pnpm test auth\nauth passed"
+  );
+  expect(reply.result).toBe(
+    [
+      "Check: exit 0",
+      "Files: 1 changed, 0 not in plan",
+      "Lint: none (no command found)",
+      "Fallow: PASS",
+      "Tests: none (no command found)",
+      `Report: ${CHECK_REPORT}`,
+    ].join("\n")
+  );
+});
+
+test("check_small_plan runs the package scripts with the runner the lock file names and keeps the output of a failing lint", async ($, on) => {
+  const { files, runs } = mockGit(
+    on,
+    [
+      ...checkGit("src/auth.ts"),
+      { match: "pnpm test auth", stdout: "auth passed" },
+      {
+        match: "pnpm run lint",
+        exitCode: 1,
+        stdout: "src/auth.ts: unused variable",
+      },
+    ],
+    {
+      ...CHECK_SEED,
+      [`${WORKTREE}/package.json`]:
+        '{"scripts":{"lint":"eslint .","test":"vitest"}}',
+      [`${WORKTREE}/pnpm-lock.yaml`]: "lockfileVersion: 9",
+    }
+  );
+
+  const reply = await runCheck($);
+
+  expect(runs).toContainEqual({
+    argv: ["sh", "-c", "pnpm run lint"],
+    cwd: WORKTREE,
+  });
+  expect(runs).toContainEqual({
+    argv: ["sh", "-c", "pnpm run test"],
+    cwd: WORKTREE,
+  });
+  expect(reply.result).toContain("Lint: FAIL");
+  expect(reply.result).toContain("Tests: PASS");
+  expect(files.get(CHECK_REPORT)).toContain("src/auth.ts: unused variable");
+});
+
+test("check_small_plan takes the lint and test commands from .claude settings over the package scripts", async ($, on) => {
+  const { runs } = mockGit(
+    on,
+    [...checkGit("src/auth.ts"), { match: "pnpm test auth" }],
+    {
+      ...CHECK_SEED,
+      [`${WORKTREE}/package.json`]:
+        '{"scripts":{"lint":"eslint .","test":"vitest"}}',
+      [`${WORKTREE}/pnpm-lock.yaml`]: "lockfileVersion: 9",
+      [`${WORKTREE}/.claude/quality.json`]: '{"lintCommand":"biome check ."}',
+      [`${WORKTREE}/.claude/tdd.json`]: '{"testCommand":"vitest run"}',
+    }
+  );
+
+  await runCheck($);
+
+  expect(runs).toContainEqual({
+    argv: ["sh", "-c", "biome check ."],
+    cwd: WORKTREE,
+  });
+  expect(runs).toContainEqual({
+    argv: ["sh", "-c", "vitest run"],
+    cwd: WORKTREE,
+  });
+  expect(runs.map((run) => run.argv[2])).not.toContain("pnpm run lint");
+  expect(runs.map((run) => run.argv[2])).not.toContain("pnpm run test");
+});
+
+test("check_small_plan reports Lint, Fallow and Tests as none when the project names no command", async ($, on) => {
+  mockGit(
+    on,
+    [...checkGit("src/auth.ts"), { match: "pnpm test auth" }],
+    CHECK_SEED
+  );
+
+  const reply = await runCheck($);
+
+  expect(reply.result).toContain("Lint: none (no command found)");
+  expect(reply.result).toContain("Fallow: none (no command found)");
+  expect(reply.result).toContain("Tests: none (no command found)");
+});
+
+test("check_small_plan lists a changed file the plan does not name as not in plan", async ($, on) => {
+  const { files } = mockGit(
+    on,
+    [...checkGit("src/auth.ts\nsrc/extra.ts"), { match: "pnpm test auth" }],
+    CHECK_SEED
+  );
+
+  const reply = await runCheck($);
+
+  expect(files.get(CHECK_REPORT)).toContain("src/extra.ts (not in plan)");
+  expect(reply.result).toContain("Files: 2 changed, 1 not in plan");
+});
+
+test("check_small_plan runs the guards in the folder of the nearest package.json of a changed file", async ($, on) => {
+  const { runs } = mockGit(
+    on,
+    [...checkGit("packages/app/src/index.ts"), { match: "pnpm test auth" }],
+    {
+      ...CHECK_SEED,
+      [`${WORKTREE}/packages/app/package.json`]: '{"name":"app"}',
+    }
+  );
+
+  await runCheck($);
+
+  expect(runs).toContainEqual({
+    argv: ["sh", "-c", FALLOW_SHELL],
+    cwd: `${WORKTREE}/packages/app`,
+  });
+});
+
+test("check_small_plan reports Fallow as none when fallow is not installed", async ($, on) => {
+  mockGit(
+    on,
+    [
+      ...checkGit("src/auth.ts"),
+      { match: "pnpm test auth" },
+      { match: FALLOW_SHELL, exitCode: 127 },
+    ],
+    { ...CHECK_SEED, [`${WORKTREE}/package.json`]: '{"name":"app"}' }
+  );
+
+  const reply = await runCheck($);
+
+  expect(reply.result).toContain("Fallow: none (no command found)");
+});
+
+test("check_small_plan refuses a plan path outside the plans folder and runs nothing", async ($, on) => {
+  const { runs } = mockGit(on, []);
+
+  const reply = await callTool($, CHECK_TOOL, {
+    path: "/home/tester/notes/01-add-the-toggle.md",
+    worktree: WORKTREE,
+  });
+
+  expect(reply.deny).toContain(PLANS_FOLDER);
+  expect(runs).toEqual([]);
+});
+
+const REVIEWER = "small-plans:small-plan-reviewer";
+const REVIEW_FINDINGS = STANDALONE_SET_PLAN.replace(/\.md$/, ".review.txt");
+const mockReviewerReports = (on: On) =>
+  on("agent.report", (_, e) => ({ text: e.text }));
+const deliverReport = ($: Engine, subagentType: string, text: string) =>
+  $.agent.report({
+    agentId: "reviewer-1",
+    subagentType,
+    status: "completed",
+    text,
+  } as never) as Promise<{ text?: string }>;
+
+test("a reviewer's FAIL is saved beside the plan and the parent gets the findings path", async ($, on) => {
+  mockReviewerReports(on);
+  const { files } = mockEngine(on, { [STANDALONE_SET_PLAN]: PLAN_BODY });
+  const text = `Plan: ${STANDALONE_SET_PLAN}\n\n- refreshToken clears cachedToken: false\nFAIL\n1. src/auth.ts does not clear the cache.`;
+
+  const reply = await deliverReport($, REVIEWER, text);
+
+  expect(files.get(REVIEW_FINDINGS)).toBe(text);
+  expect(reply.text).toBe(`FAIL\nFindings: ${REVIEW_FINDINGS}`);
+});
+
+test("a reviewer's PASS is delivered as PASS and saves no file", async ($, on) => {
+  mockReviewerReports(on);
+  const { files } = mockEngine(on, { [STANDALONE_SET_PLAN]: PLAN_BODY });
+
+  const reply = await deliverReport(
+    $,
+    REVIEWER,
+    `Plan: ${STANDALONE_SET_PLAN}\n\n- refreshToken clears cachedToken: true\nPASS`
+  );
+
+  expect(reply.text).toBe("PASS");
+  expect(files.has(REVIEW_FINDINGS)).toBe(false);
+});
+
+test("a reviewer report without a Plan line is delivered unchanged", async ($, on) => {
+  mockReviewerReports(on);
+  const { files } = mockEngine(on, { [STANDALONE_SET_PLAN]: PLAN_BODY });
+  const text = "FAIL\n1. src/auth.ts does not clear the cache.";
+
+  const reply = await deliverReport($, REVIEWER, text);
+
+  expect(reply.text).toBe(text);
+  expect(files.has(REVIEW_FINDINGS)).toBe(false);
+});
+
+test("a report from another subagent type is delivered unchanged", async ($, on) => {
+  mockReviewerReports(on);
+  const { files } = mockEngine(on, { [STANDALONE_SET_PLAN]: PLAN_BODY });
+  const text = `Plan: ${STANDALONE_SET_PLAN}\n\nFAIL\n1. something`;
+
+  const reply = await deliverReport($, "Explore", text);
+
+  expect(reply.text).toBe(text);
+  expect(files.has(REVIEW_FINDINGS)).toBe(false);
 });

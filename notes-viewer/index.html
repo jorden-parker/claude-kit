@@ -156,111 +156,251 @@
       .topbar {
         display: none;
       }
+      /*
+        Sidebar: sections > projects > groups > notes.
+        One 36px row (32px visible + 2px transparent border), one 16px indent step,
+        one hover / selected / focus treatment shared by every row.
+      */
       nav {
+        --row: 36px;
+        --step: 16px;
+        --inset: 10px;
+        --chevron: 16px;
+        --gap: 4px;
+        --text-x: calc(var(--inset) + var(--chevron) + var(--gap));
+        --line-x: calc(var(--inset) + var(--chevron) / 2);
         grid-area: sidebar;
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: none;
-        padding: 0 12px calc(24px + env(safe-area-inset-bottom));
-        padding-left: max(12px, env(safe-area-inset-left));
+        scroll-padding-top: 280px;
+        padding: 0 8px calc(16px + env(safe-area-inset-bottom));
+        padding-left: max(8px, env(safe-area-inset-left));
         background: var(--sidebar);
         border-right: 1px solid var(--border);
       }
       nav::-webkit-scrollbar {
         display: none;
       }
-      .sidebar-header {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        margin: 0 -12px 8px;
-        padding: 18px 20px 14px;
-        background: var(--sidebar);
-        border-bottom: 1px solid var(--border);
+      nav [hidden] {
+        display: none !important;
       }
-      .greeting {
-        margin: 2px 0 0 28px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-      nav h2 {
-        margin: 22px 10px 6px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text);
-        overflow-wrap: anywhere;
-      }
-      .group-heading {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 4px 8px;
-        margin: 10px 4px 0 calc(10px + var(--chevron-size) + var(--chevron-gap));
-      }
-      .project-heading {
-        margin: 10px 4px 0 10px;
-      }
-      .group-heading + a {
-        margin-top: 2px;
-      }
-      .project-heading h2 {
-        min-width: 0;
-        margin: 0;
-      }
-      nav [hidden],
       article [hidden] {
         display: none;
       }
-      :root {
-        --chevron-size: 12px;
-        --chevron-gap: 6px;
+      .sidebar-top {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        margin: 0 -8px;
+        padding: 0 8px 12px;
+        background: var(--sidebar);
+        border-bottom: 1px solid var(--border);
+      }
+      .sidebar-header {
+        padding: 16px var(--inset) 8px;
+      }
+      .greeting {
+        margin: 0 0 0 32px;
+        font-size: 12px;
+        line-height: 16px;
+        color: var(--muted);
+      }
+      .filter-field {
+        position: relative;
+        margin-top: 8px;
+      }
+      .filter-field::before {
+        content: "";
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        width: 16px;
+        height: 16px;
+        margin-top: -8px;
+        background: var(--muted);
+        pointer-events: none;
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") center / contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") center / contain no-repeat;
+      }
+
+      /* shared row: sections, note links and project / group toggles */
+      nav a,
+      .collapse-toggle {
+        border: 2px solid transparent;
+        border-radius: 8px;
+        background-color: transparent;
+        background-clip: padding-box;
+        color: var(--text-soft);
+        text-decoration: none;
+        touch-action: manipulation;
+        transition:
+          background-color 120ms ease,
+          color 120ms ease;
+      }
+      nav a:hover,
+      .collapse-toggle:hover {
+        background-color: var(--hover);
+        color: var(--text);
+      }
+      nav a[aria-current] {
+        background-color: var(--selected);
+        color: var(--text);
+        box-shadow: inset 2px 0 0 var(--accent);
+      }
+      nav a:focus-visible,
+      .collapse-toggle:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: -2px;
+      }
+
+      .count {
+        flex: none;
+        min-width: 3ch;
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 16px;
+        text-align: right;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      a[aria-current] .count {
+        color: var(--text);
+      }
+
+      .sections {
+        display: grid;
+        margin: 0;
+      }
+      .sections a {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        font-size: 14px;
+        line-height: 20px;
+        font-weight: 500;
+      }
+
+      /* project and group headings */
+      .group-heading {
+        --indent: 0px;
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 4px;
+      }
+      .project-heading {
+        margin-top: 8px;
+      }
+      .group-heading:not(.project-heading) {
+        --indent: var(--step);
+      }
+      .group-heading:not(.project-heading)::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: var(--line-x);
+        width: 1px;
+        background: var(--border-strong);
+        pointer-events: none;
+      }
+      .group-heading > h2,
+      .group-heading > h3 {
+        flex: 1 0 100%;
+        min-width: 0;
+        margin: 0;
+        font-family: var(--sans);
+        letter-spacing: 0;
+      }
+      nav h2 {
+        font-size: 13px;
+        line-height: 20px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      nav h3 {
+        font-size: 12px;
+        line-height: 16px;
+        font-weight: 500;
+        color: var(--muted);
       }
       .collapse-toggle {
         display: flex;
-        align-items: flex-start;
-        gap: var(--chevron-gap);
+        align-items: center;
+        gap: var(--gap);
         width: 100%;
-        padding: 0;
-        border: 0;
-        background: none;
-        color: inherit;
+        min-height: var(--row);
+        padding: 0 8px 0 calc(8px + var(--indent));
         font: inherit;
         letter-spacing: inherit;
         text-align: left;
-        text-transform: inherit;
+        color: inherit;
         cursor: pointer;
-        overflow-wrap: anywhere;
+      }
+      .collapse-toggle > span:not(.count) {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .collapse-toggle svg {
         flex: none;
-        width: var(--chevron-size);
-        height: var(--chevron-size);
-        margin-top: calc((1lh - var(--chevron-size)) / 2);
+        width: var(--chevron);
+        height: var(--chevron);
+        color: var(--muted);
         transition: transform 150ms ease;
       }
       .collapse-toggle[aria-expanded="false"] svg {
         transform: rotate(-90deg);
       }
-      .collapse-toggle .count {
-        align-self: center;
-        margin-left: auto;
+
+      /* row actions overlay the count while the heading is hovered or focused */
+      .group-actions {
+        position: absolute;
+        top: 2px;
+        right: 4px;
+        display: flex;
+        gap: 2px;
       }
-      nav h3 {
-        min-width: 0;
-        margin: 0;
-        font-family: var(--mono);
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-        color: var(--muted);
-        overflow-wrap: anywhere;
+      @media (hover: hover) and (pointer: fine) {
+        .group-actions {
+          opacity: 0;
+          transition: opacity 120ms ease;
+        }
+        .group-heading:hover .group-actions,
+        .group-heading:focus-within .group-actions {
+          opacity: 1;
+        }
+        .group-heading:hover .count,
+        .group-heading:focus-within .count {
+          opacity: 0;
+        }
+      }
+      @media (pointer: coarse) {
+        .group-actions {
+          top: -4px;
+          right: 0;
+        }
+        .group-heading:has(.group-actions) .count {
+          margin-right: 44px;
+        }
+        .group-heading:has(.icon-button + .icon-button) .count {
+          margin-right: 92px;
+        }
       }
       .progress {
         display: flex;
         align-items: center;
         gap: 8px;
-        grid-column: 1 / -1;
+        flex: 1 0 100%;
+        padding: 0 8px 4px calc(var(--text-x) + var(--indent) - 2px);
         font-size: 11px;
+        line-height: 16px;
         color: var(--muted);
         font-variant-numeric: tabular-nums;
       }
@@ -288,62 +428,56 @@
       .progress[data-complete] {
         color: var(--done);
       }
-      .group-actions {
-        display: flex;
-        gap: 2px;
-        grid-row: 1;
-        grid-column: 2;
-      }
-      @media (hover: hover) and (pointer: fine) {
-        .group-actions {
-          opacity: 0;
-          transition: opacity 150ms ease;
-        }
-        .group-heading:hover .group-actions,
-        .group-heading:focus-within .group-actions {
-          opacity: 1;
-        }
-      }
-      nav a {
+
+      /* note links: title on one truncated line, optional muted caption under it */
+      nav a[data-depth] {
+        position: relative;
         display: block;
         min-width: 0;
-        padding: 5px 10px;
-        border-radius: 6px;
-        color: var(--text-soft);
-        text-decoration: none;
+        padding: 6px 8px;
+        font-size: 13px;
+        line-height: 20px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        touch-action: manipulation;
-        transition:
-          background-color 150ms ease,
-          color 150ms ease,
-          transform 200ms var(--spring);
       }
-      nav a + a {
-        margin-top: 2px;
+      /* tree guide lines are background layers so they run through the transparent border and overflow clipping */
+      nav a[data-depth="1"],
+      nav a[data-depth="2"] {
+        --guide: linear-gradient(var(--border-strong), var(--border-strong));
+        background-repeat: no-repeat;
+        background-size: 1px 100%;
+        background-origin: border-box;
       }
-      /* link text lines up with the heading text after its chevron */
-      .project-heading ~ a {
-        padding-left: calc(10px + var(--chevron-size) + var(--chevron-gap));
+      nav a[data-depth="1"] {
+        padding-left: calc(var(--text-x) - 2px);
+        background-image: var(--guide);
+        background-position: var(--line-x) 0;
+        background-clip: border-box, padding-box;
       }
-      .project-heading ~ a[data-group] {
-        padding-left: calc(10px + 2 * (var(--chevron-size) + var(--chevron-gap)));
+      nav a[data-depth="2"] {
+        padding-left: calc(var(--text-x) + var(--step) - 2px);
+        background-image: var(--guide), var(--guide);
+        background-position: var(--line-x) 0, calc(var(--line-x) + var(--step)) 0;
+        background-clip: border-box, border-box, padding-box;
       }
       nav a small {
-        display: flex;
-        align-items: center;
-        gap: 6px;
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
         font-size: 12px;
+        line-height: 16px;
         color: var(--muted);
       }
       nav a[data-status] small::before {
         content: "";
-        flex: none;
-        width: 7px;
-        height: 7px;
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-right: 6px;
         border-radius: 50%;
         background: var(--pending);
+        vertical-align: baseline;
       }
       nav a[data-status="done"] {
         color: var(--muted);
@@ -365,56 +499,6 @@
         50% {
           opacity: 0.35;
         }
-      }
-      .sections {
-        display: grid;
-        gap: 2px;
-        margin-bottom: 8px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid var(--border);
-      }
-      .sections a {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 10px;
-        font-weight: 500;
-      }
-      .count {
-        flex: none;
-        min-width: 24px;
-        padding: 0 7px;
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        background: var(--background);
-        color: var(--muted);
-        font-family: var(--mono);
-        font-size: 11px;
-        text-align: center;
-        font-variant-numeric: tabular-nums;
-      }
-      nav a:hover {
-        background: var(--hover);
-        color: var(--text);
-      }
-      @media (hover: hover) {
-        nav a:not(.sections a):hover {
-          transform: translateX(2px);
-        }
-      }
-      nav a[aria-current] {
-        background: var(--selected);
-        color: var(--text);
-        font-weight: 600;
-      }
-      .sections a[aria-current] .count {
-        border-color: var(--primary);
-        background: var(--primary);
-        color: var(--on-primary);
-      }
-      nav a:focus-visible {
-        outline-offset: -2px;
       }
       main {
         grid-area: note;
@@ -870,13 +954,13 @@
       }
       .note-filter {
         display: block;
-        min-height: 36px;
+        min-height: var(--row, 36px);
         margin-bottom: 0;
-        padding: 0 12px;
+        padding: 0 12px 0 36px;
         font-size: 13px;
       }
       .no-matches {
-        margin: 12px 10px;
+        margin: 12px var(--inset, 10px);
         font-size: 13px;
         color: var(--muted);
       }
@@ -1087,8 +1171,15 @@
         .backdrop[hidden] {
           display: none;
         }
-        nav a {
-          padding: 10px 12px;
+        nav {
+          --row: 44px;
+        }
+        nav a,
+        nav a[data-depth] {
+          padding-block: 12px;
+        }
+        .collapse-toggle {
+          min-height: 48px;
         }
         main {
           padding: 28px 16px 96px;
@@ -1513,6 +1604,7 @@
         const toggle = createElement("button", "", "collapse-toggle");
         toggle.type = "button";
         toggle.dataset.key = key;
+        toggle.title = text;
         toggle.append(createIcon("chevron"), createElement("span", text), createElement("span", "", "count"));
         toggle.addEventListener("click", () => {
           if (!collapsedKeys.delete(key)) collapsedKeys.add(key);
@@ -1551,8 +1643,7 @@
           const isProjectCollapsed = collapsedKeys.has(heading.dataset.project);
           const countBadge = toggle.querySelector(".count");
           toggle.setAttribute("aria-expanded", String(!isCollapsed || isFiltering));
-          countBadge.textContent = String(hiddenCount);
-          countBadge.hidden = isFiltering || !isCollapsed;
+          countBadge.textContent = String(members.length - (isFiltering ? hiddenCount : 0));
           heading.hidden = isFiltering ? !hasVisibleMember : isProjectCollapsed;
         });
         sidebar.querySelector(".no-matches").hidden = !isFiltering || links.some((link) => !link.hidden);
@@ -1594,11 +1685,19 @@
         return header;
       };
 
+      const createSidebarTop = (selectedSection) => {
+        const top = createElement("div", "", "sidebar-top");
+        const filterField = createElement("div", "", "filter-field");
+        filterField.append(filterInput);
+        top.append(createSidebarHeader(), createSectionLinks(selectedSection), filterField);
+        return top;
+      };
+
       const renderSidebar = (selectedSection, selectedEntry) => {
         const scrollPosition = sidebar.scrollTop;
         const hadFocus = document.activeElement === filterInput;
         const { selectionStart, selectionEnd } = filterInput;
-        sidebar.replaceChildren(createSidebarHeader(), createSectionLinks(selectedSection), filterInput);
+        sidebar.replaceChildren(createSidebarTop(selectedSection));
         const entries = selectedSection?.entries ?? [];
         entries.forEach((entry, entryIndex) => {
           const previousEntry = entries[entryIndex - 1] ?? {};
@@ -1608,6 +1707,7 @@
           const link = createEntryLink(selectedSection, entry, selectedEntry);
           link.dataset.project = buildProjectKey(selectedSection, entry);
           if (entry.group) link.dataset.group = buildGroupKey(selectedSection, entry);
+          link.dataset.depth = SECTION_VIEWS[selectedSection.id].isReadOnly ? "0" : entry.group ? "2" : "1";
           sidebar.append(link);
         });
         sidebar.append(createElement("p", "No matching notes", "no-matches"));

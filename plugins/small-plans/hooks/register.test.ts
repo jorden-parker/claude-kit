@@ -780,7 +780,7 @@ test("/small-plans <work> that starts with a command word is still planned as wo
 });
 
 test("/small-plans handoff lists the handoffs newest first and splits the one picked", async ($, on) => {
-  const askedQuestions = answerAskUserQuestion(on, "#1 · Add the viewer");
+  const askedQuestions = answerAskUserQuestion(on, "#1 · Add the Viewer");
   const { reply, submittedPrompts } = await runCommand($, on, "handoff", {
     [OLDER_HANDOFF]: "older",
     [NEWER_HANDOFF]: "newer",
@@ -788,8 +788,8 @@ test("/small-plans handoff lists the handoffs newest first and splits the one pi
 
   const setPattern = `${NEW_SET_STAMP}-handoff-001-add-the-viewer`;
   expect(askedLabels(askedQuestions)).toEqual([
-    "#2 · Fix login",
-    "#1 · Add the viewer",
+    "#2 · Fix Login",
+    "#1 · Add the Viewer",
   ]);
   expect(reply.text).toMatch(new RegExp(setPattern));
   expect(submittedPrompts).toHaveLength(1);
@@ -880,7 +880,7 @@ const askedLabels = (askedQuestions: AskedQuestion[]) =>
 test("/small-plans build lists the sets newest first and builds the one picked", async ($, on) => {
   const askedQuestions = answerAskUserQuestion(
     on,
-    "Handoff 002 fix login · Nov 18, 09:00"
+    "Handoff 002 Fix Login · Nov 18, 09:00"
   );
   const { submittedPrompts } = await runCommand($, on, "build", {
     [HANDOFF_SET_PLAN]: "older, from a handoff",
@@ -888,11 +888,25 @@ test("/small-plans build lists the sets newest first and builds the one picked",
   });
 
   expect(askedLabels(askedQuestions)).toEqual([
-    "Add a dark mode toggle · Nov 19, 10:00",
-    "Handoff 002 fix login · Nov 18, 09:00",
+    "Add a Dark Mode Toggle · Nov 19, 10:00",
+    "Handoff 002 Fix Login · Nov 18, 09:00",
   ]);
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${HANDOFF_SET}`);
+});
+
+test("/small-plans build labels a set in title case, keeping acronyms and small words", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  await runCommand($, on, "build", {
+    [`${PROJECT_FOLDER}/2026-11-20-1100-ai-meal-suggestion-disclosure/01-add-the-toggle.md`]:
+      "plan",
+    [STANDALONE_SET_PLAN]: "older",
+  });
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "AI Meal Suggestion Disclosure · Nov 20, 11:00",
+    "Add a Dark Mode Toggle · Nov 19, 10:00",
+  ]);
 });
 
 test("/small-plans build builds nothing when the list is dismissed", async ($, on) => {
@@ -1310,8 +1324,8 @@ test("/small-plans build asks for the whole set or one plan that is not done", a
 
   expect(askedLabels(askedQuestions)).toEqual([
     "Whole set",
-    "2 · Store the choice",
-    "3 · Test the toggle",
+    "2 · Store the Choice",
+    "3 · Test the Toggle",
   ]);
   expect(submittedPrompts[0]).toContain(
     `Build the plans in ${SET_FOLDER}, in the order listed below.`
@@ -1329,7 +1343,7 @@ test("/small-plans build lists a plan's check command in backticks", async ($, o
 });
 
 test("/small-plans build builds only the plan picked", async ($, on) => {
-  answerAskUserQuestion(on, "3 · Test the toggle");
+  answerAskUserQuestion(on, "3 · Test the Toggle");
   const { submittedPrompts } = await runCommand($, on, "build", THREE_PLAN_SET);
 
   expect(submittedPrompts[0]).toContain(
@@ -1730,7 +1744,7 @@ const mountQuestion = ($: Engine, question: string) =>
   } as never);
 
 test("the small-plans pickers ask in a friendly voice", async ($, on) => {
-  const askedQuestions = answerAskUserQuestion(on, "3 · Test the toggle");
+  const askedQuestions = answerAskUserQuestion(on, "3 · Test the Toggle");
   await runCommand($, on, "build", {
     ...THREE_PLAN_SET,
     [HANDOFF_SET_PLAN]: "status: pending",

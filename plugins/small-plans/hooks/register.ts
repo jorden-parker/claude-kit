@@ -1599,22 +1599,76 @@ const MONTH_NAMES = [
 const STAMPED_SET_NAME = /^\d{4}-(\d{2})-(\d{2})-(\d{2})(\d{2})-(.+)$/;
 const NUMBERED_NAME = /^(\d+)-(.+)$/;
 
-const toSentence = (slug: string) => {
-  const words = slug.replace(/[-_]+/g, " ").trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
+const ACRONYMS = new Set([
+  "ai",
+  "api",
+  "ui",
+  "ux",
+  "cli",
+  "ci",
+  "pr",
+  "url",
+  "id",
+  "mcp",
+  "sdk",
+  "json",
+  "html",
+  "css",
+  "llm",
+  "pdf",
+  "sql",
+  "csv",
+  "ios",
+]);
+const SMALL_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "but",
+  "or",
+  "nor",
+  "for",
+  "so",
+  "yet",
+  "as",
+  "at",
+  "by",
+  "in",
+  "of",
+  "on",
+  "to",
+  "up",
+  "via",
+  "vs",
+]);
+
+const toTitleCase = (slug: string) => {
+  const words = slug.replace(/[-_]+/g, " ").trim().split(/\s+/);
+  return words
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (ACRONYMS.has(lower))
+        return lower === "ios" ? "iOS" : word.toUpperCase();
+      if (/[A-Z]/.test(word.slice(1))) return word;
+      if (SMALL_WORDS.has(lower) && index > 0 && index < words.length - 1)
+        return lower;
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
 };
 
 const labelSet = (setName: string) => {
   const stamp = setName.match(STAMPED_SET_NAME);
-  if (!stamp) return toSentence(setName);
+  if (!stamp) return toTitleCase(setName);
   const [, month, day, hour, minute, slug] = stamp;
-  return `${toSentence(slug ?? "")} · ${MONTH_NAMES[Number(month) - 1]} ${Number(day)}, ${hour}:${minute}`;
+  return `${toTitleCase(slug ?? "")} · ${MONTH_NAMES[Number(month) - 1]} ${Number(day)}, ${hour}:${minute}`;
 };
 
 const labelNumbered = (prefix: string) => (name: string) => {
   const numbered = name.match(NUMBERED_NAME);
   return numbered
-    ? `${prefix}${Number(numbered[1])} · ${toSentence(numbered[2] ?? "")}`
+    ? `${prefix}${Number(numbered[1])} · ${toTitleCase(numbered[2] ?? "")}`
     : name;
 };
 

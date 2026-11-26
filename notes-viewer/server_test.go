@@ -128,7 +128,7 @@ func TestFrontMatterFillsTheEntryAndIsNotRendered(t *testing.T) {
 	seedNotes(t)
 
 	plan := loadSections()[2].Entries[1]
-	if plan.Title != "Clear the cached token" || plan.Group != "2026-11-19-1000-fix-login" || plan.Fields["status"] != "in-progress" || plan.Fields["depends_on"] != "1" {
+	if plan.Title != "Clear the Cached Token" || plan.Group != "2026-11-19-1000-fix-login" || plan.Fields["status"] != "in-progress" || plan.Fields["depends_on"] != "1" {
 		t.Fatalf("plan was %+v", plan)
 	}
 	if strings.Contains(plan.Html, "kind: fix") || strings.Contains(plan.Html, "<script") {
@@ -156,7 +156,7 @@ func TestBrainstormPlansAreReadFromTheirHeadingAndShowTheirSteps(t *testing.T) {
 		t.Fatalf("paths were %s", listPaths(brainstorm))
 	}
 	plan := brainstorm.Entries[1]
-	if plan.Title != "Let the guard see pipes" || plan.Name != "01-guard-pipe-stages" || plan.Group != "plan-2026-11-16-1333" || plan.Fields["status"] != "done" || plan.Fields["depends_on"] != "none" {
+	if plan.Title != "Let the Guard See Pipes" || plan.Name != "01-guard-pipe-stages" || plan.Group != "plan-2026-11-16-1333" || plan.Fields["status"] != "done" || plan.Fields["depends_on"] != "none" {
 		t.Fatalf("plan was %+v", plan)
 	}
 	if !strings.Contains(plan.Html, "The guard reads later stages.") || !strings.Contains(plan.Html, "Step 01: Add the pipeline tests") {
@@ -196,7 +196,7 @@ func TestServerListsSectionsAsJsonAndServesThePage(t *testing.T) {
 	if err := json.Unmarshal(listing.Body.Bytes(), &sections); err != nil {
 		t.Fatal(err)
 	}
-	if len(sections) != 4 || len(sections[0].Entries) != 3 || sections[2].Entries[0].Title != "Add the test" {
+	if len(sections) != 4 || len(sections[0].Entries) != 3 || sections[2].Entries[0].Title != "Add the Test" {
 		t.Fatalf("sections were %+v", sections)
 	}
 
@@ -442,5 +442,20 @@ func TestPostRefusesExistingPlansMissingSetsAndOtherSections(t *testing.T) {
 	}
 	if text, _ := readNoteFile(t, "small-plans/claude-kit/2026-11-19-1000-fix-login/01-add-the-test.md"); strings.Contains(text, "Overwritten") {
 		t.Fatal("an existing plan was overwritten")
+	}
+}
+
+func TestToTitleCase(t *testing.T) {
+	cases := []struct{ title, want string }{
+		{"Ai meal suggestion disclosure", "AI Meal Suggestion Disclosure"},
+		{"add the viewer", "Add the Viewer"},
+		{"GitHub sync for the api", "GitHub Sync for the API"},
+		{"the end of the", "The End of The"},
+		{"ios  app", "iOS App"},
+	}
+	for _, tc := range cases {
+		if got := toTitleCase(tc.title); got != tc.want {
+			t.Errorf("toTitleCase(%q) = %q, want %q", tc.title, got, tc.want)
+		}
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
@@ -178,7 +179,7 @@ func readEntry(layout sectionLayout, sectionRoot string, entryPath string) (entr
 		Project: segments[0],
 		Group:   group,
 		Name:    entryName,
-		Title:   readField(fields, "title", entryName),
+		Title:   toTitleCase(readField(fields, "title", entryName)),
 		Created: readField(fields, "created", datePrefixPattern.FindString(entryName)),
 		Fields:  fields,
 		Path:    strings.Join(segments, "/"),
@@ -531,4 +532,36 @@ func newViewerServer() http.Handler {
 		}
 		routes.ServeHTTP(writer, request)
 	})
+}
+
+var titleAcronyms = map[string]bool{
+	"ai": true, "api": true, "ui": true, "ux": true, "cli": true, "ci": true, "pr": true, "url": true, "id": true,
+	"mcp": true, "sdk": true, "json": true, "html": true, "css": true, "llm": true, "pdf": true, "sql": true, "csv": true,
+}
+
+var titleSmallWords = map[string]bool{
+	"a": true, "an": true, "the": true, "and": true, "but": true, "or": true, "nor": true, "for": true, "so": true,
+	"yet": true, "as": true, "at": true, "by": true, "in": true, "of": true, "on": true, "to": true, "up": true,
+	"via": true, "vs": true,
+}
+
+func toTitleCase(title string) string {
+	words := strings.Fields(title)
+	for i, word := range words {
+		lower := strings.ToLower(word)
+		runes := []rune(word)
+		switch {
+		case titleAcronyms[lower]:
+			words[i] = strings.ToUpper(word)
+		case lower == "ios":
+			words[i] = "iOS"
+		case strings.IndexFunc(string(runes[1:]), unicode.IsUpper) >= 0:
+		case titleSmallWords[lower] && i != 0 && i != len(words)-1:
+			words[i] = lower
+		default:
+			runes[0] = unicode.ToUpper(runes[0])
+			words[i] = string(runes)
+		}
+	}
+	return strings.Join(words, " ")
 }

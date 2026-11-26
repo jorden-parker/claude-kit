@@ -13,7 +13,7 @@ type HandoffTestBody = (
 ) => unknown;
 
 const NOVEMBER_NINTH = Date.UTC(2026, 10, 9, 14, 32);
-const HANDOFFS_ROOT = "/home/tester/.claude/handoffs";
+const HANDOFFS_ROOT = "/home/tester/.local/share/handoffs";
 
 const parentFolder = (path: string) => path.slice(0, path.lastIndexOf("/"));
 
@@ -1593,6 +1593,25 @@ test(
   }
 );
 
+test(
+  "with no HANDOFFS_DIR a handoff is saved under the local share folder",
+  { options: { writer: "haiku", hasConversationTurns: false } },
+  async ($, on) => {
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    mockStore(on);
+    answerRecap(on);
+    const handoffFiles = mockHandoffFiles(on, "/repo/.git");
+
+    await $.command.run(handoff("save"));
+
+    expect([...handoffFiles.keys()]).toEqual([
+      "/home/tester/.local/share/handoffs/repo/001-resume-prompt.md",
+    ]);
+  }
+);
+
 const PLAN_SEPARATOR = "---handoff---";
 
 const autocompleteAt = (text: string) => {
@@ -2048,6 +2067,28 @@ testWithSession(
       "clear",
       resumeRequestFill("First recap", "skip the docs"),
     ]);
+  }
+);
+
+testWithSession(
+  "the resume box lists every saved handoff, not only the newest ten",
+  [],
+  async ($, on, handoffFiles) => {
+    ignoreToasts(on);
+    useBand(on);
+    for (let handoffId = 1; handoffId <= 12; handoffId += 1) {
+      seedHandoff(handoffFiles, handoffId, `Recap ${handoffId}`);
+    }
+
+    await $.command.run(handoff("resume"));
+
+    const box = await $.ui.mount(BOX_BAND);
+    const picker = await box.find({ type: "Select" });
+    const pickerOptions = picker?.props.options as { value: string }[];
+    const optionValues = pickerOptions.map((option) => option.value);
+    expect(optionValues).toEqual(
+      Array.from({ length: 12 }, (_, index) => String(12 - index))
+    );
   }
 );
 
@@ -2552,5 +2593,160 @@ testWithQuestionTurn(
     await band.unmount();
     const abortedBand = await $.ui.mount(BOX_BAND);
     expect(await abortedBand.find({ type: "Text" })).toBeUndefined();
+  }
+);
+
+const TOPIC_FOLDER_RECAP = "Compare the vendors";
+
+const testOutsideRepository = (
+  name: string,
+  messages: SessionMessageRow[],
+  body: (...args: [Engine, On, Map<string, string>]) => Promise<unknown>
+) =>
+  test(
+    name,
+    { options: { writer: "haiku", hasConversationTurns: false } },
+    ($, on) => {
+      on("session.cwd", () => ({ value: "/repo" }));
+      on("session.messages", () => ({ value: messages }));
+      mockStore(on);
+      return body($, on, mockHandoffFiles(on, ""));
+    }
+  );
+
+testOutsideRepository(
+  "/handoff save --topic research saves under the topic folder with a topic line, outside any repository",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    answerRecap(on, TOPIC_FOLDER_RECAP);
+    const gitCallsBefore = ranCommands.length;
+
+    await $.command.run(handoff("save --topic research"));
+
+    const savedText =
+      handoffFiles.get(handoffPath(1, "compare-the-vendors", "research")) ?? "";
+    expect(savedText).toContain("cwd: /repo\ntopic: research\n");
+    expect(savedText).toContain("project: research");
+    expect(ranCommands.length).toBe(gitCallsBefore);
+  }
+);
+
+testOutsideRepository(
+  "/handoff list --topic research lists that topic's handoffs",
+  [],
+  async ($, on, handoffFiles) => {
+    ignoreToasts(on);
+    handoffFiles.set(
+      handoffPath(1, "compare-the-vendors", "research"),
+      handoffText(TOPIC_FOLDER_RECAP, NOVEMBER_NINTH, "", "research")
+    );
+
+    const reply = await $.command.run(handoff("list --topic research"));
+
+    expect(reply.text).toContain("Handoffs for research, newest first:");
+    expect(reply.text).toContain(`#1  `);
+    expect(reply.text).toContain(TOPIC_FOLDER_RECAP);
+  }
+);
+
+testOutsideRepository(
+  "/handoff resume --topic research resumes from that topic",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    handoffFiles.set(
+      handoffPath(1, "compare-the-vendors", "research"),
+      handoffText(TOPIC_FOLDER_RECAP, NOVEMBER_NINTH, "", "research")
+    );
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("resume --topic research 1"));
+    await clock.settle();
+
+    expect(handoffSteps).toEqual(["clear", `fill:${TOPIC_FOLDER_RECAP}`]);
+  }
+);
+
+test(
+  "a topic skips the repository question",
+  { options: { writer: "haiku", hasConversationTurns: false } },
+  async ($, on) => {
+    on("session.cwd", () => ({ value: "/repo" }));
+    on("session.messages", () => ({ value: CONVERSATION }));
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    mockStore(on);
+    ignoreToasts(on);
+    answerRecap(
+      on,
+      "Fix the login\nRepository: /src/notes-app | /src/billing\n\nGoal: the login works."
+    );
+    const askedOptions = answerQuestions(on, {});
+    const handoffFiles = mockHandoffFiles(on, "");
+
+    await $.command.run(handoff("save --topic research"));
+
+    expect(askedOptions).toEqual({});
+    expect([...handoffFiles.keys()]).toEqual([
+      handoffPath(1, "fix-the-login", "research"),
+    ]);
+  }
+);
+
+testWithSession(
+  "/handoff save --topic with no name asks for a name and saves nothing",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    let modelCalls = 0;
+    on("model.complete", () => {
+      modelCalls += 1;
+      return { value: { isAnswered: true, text: "x", usage: MODEL_USAGE } };
+    });
+
+    const reply = await $.command.run(handoff("save --topic"));
+
+    expect(reply.text).toBe("--topic needs a name.");
+    expect(modelCalls).toBe(0);
+    expect(handoffFiles.size).toBe(0);
+  }
+);
+
+testWithSession(
+  "/handoff resume --topic with no name asks for a name and resumes nothing",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    let modelCalls = 0;
+    on("model.complete", () => {
+      modelCalls += 1;
+      return { value: { isAnswered: true, text: "x", usage: MODEL_USAGE } };
+    });
+
+    const reply = await $.command.run(handoff("resume --topic"));
+
+    expect(reply.text).toBe("--topic needs a name.");
+    expect(modelCalls).toBe(0);
+    expect(handoffFiles.size).toBe(0);
+  }
+);
+
+testWithSession(
+  "a handoff saved without a topic has no topic line",
+  CONVERSATION,
+  async ($, on, handoffFiles) => {
+    mock.clock(on, { now: NOVEMBER_NINTH });
+    ignoreToasts(on);
+    answerRecap(on);
+
+    await $.command.run(handoff("save"));
+
+    expect(handoffFiles.get(handoffPath(1, "resume-prompt"))).not.toContain(
+      "topic:"
+    );
   }
 );

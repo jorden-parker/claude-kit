@@ -79,7 +79,7 @@ const WRITE_TOOL_SCHEMA = {
     project: {
       type: "string",
       description:
-        "The repository the note is about, as an absolute folder path inside it. Choose it from the note's subject (the files, services and repositories it names), not from the working directory. Leave it out only when the note is about the working directory's repository. When the note could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
+        "The repository the note is about, as an absolute folder path inside it (resolved to its repository), or a plain name used as given for a topic that is not a repository. Choose it from the note's subject (the files, services and repositories it names), not from the working directory. Leave it out only when the note is about the working directory's repository. When the note could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
     },
     created: {
       type: "string",
@@ -128,7 +128,7 @@ const readHomeFolder = async (engine: EngineInterface) =>
 
 const resolveNotesRoot = async (engine: EngineInterface) =>
   (await engine.env.get("PROJECT_NOTES_DIR")) ??
-  `${await readHomeFolder(engine)}/.claude/project-notes`;
+  `${await readHomeFolder(engine)}/.local/share/project-notes`;
 
 const findFreeNotePath = async (engine: EngineInterface, basePath: string) => {
   let notePath = `${basePath}.md`;
@@ -357,7 +357,7 @@ export const register: Register = (on) => {
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
-      description: `Saves one note about a project as a Markdown file under ~/.claude/project-notes/<project>/<category>/, where <project> is the repository the note is about, chosen from its subject rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it when the user asks for a project note, or when the work turned up something a later session on this project should know. One note per separate thing. ${DEBUGGING_RULES}`,
+      description: `Saves one note about a project as a Markdown file under ~/.local/share/project-notes/<project>/<category>/, where <project> is the repository the note is about (or a plain topic name used as given when it is not a repository), chosen from its subject rather than the working directory; when that is unclear, ask the user with AskUserQuestion before saving. Call it when the user asks for a project note, or when the work turned up something a later session on this project should know. One note per separate thing. ${DEBUGGING_RULES}`,
       inputSchema: WRITE_TOOL_SCHEMA,
       isDeferred: true,
     });

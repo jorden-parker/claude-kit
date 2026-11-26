@@ -172,7 +172,7 @@ Vague wording is refused outside code fences: ${BANNED_PHRASES.join(", ")}. Say 
 const PROJECT_PROPERTY = {
   type: "string",
   description:
-    "The repository the plan changes, as an absolute folder path inside it. Leave it out when that is the working directory's repository.",
+    "The repository the plan changes, as an absolute folder path that is resolved to its repository. A plain name is used as given, for a topic that is not a repository. Leave it out when the plan is for the working directory's repository.",
 };
 const KIND_DESCRIPTION =
   "feature: new behaviour. fix: a bug. refactor: same behaviour, better code. test: tests only. docs: documentation only. chore: tooling, config, releases.";
@@ -363,9 +363,6 @@ const resolveProjectName = async (
   );
 };
 
-const readClaudeFolder = async (engine: EngineInterface) =>
-  `${(await engine.env.get("HOME")) ?? ""}/.claude`;
-
 const resolvePlansRoot = async (engine: EngineInterface) =>
   (await engine.env.get("SMALL_PLANS_DIR")) ??
   `${(await engine.env.get("HOME")) ?? ""}/.local/share/small-plans`;
@@ -386,7 +383,7 @@ const resolveRequestedProjectFolder = async (
 
 const resolveHandoffsRoot = async (engine: EngineInterface) =>
   (await engine.env.get("HANDOFFS_DIR")) ??
-  `${await readClaudeFolder(engine)}/handoffs`;
+  `${(await engine.env.get("HOME")) ?? ""}/.local/share/handoffs`;
 
 const listNames = async (engine: EngineInterface, folderPath: string) =>
   (await engine.fs.list(folderPath).catch(() => [])).map((entry) => entry.name);

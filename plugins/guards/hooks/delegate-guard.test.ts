@@ -469,6 +469,23 @@ test.each([
   ).toBeNull();
 });
 
+test.each(["handoffs", "project-notes", "small-plans", "brainstorm"])(
+  "a main-session Write under a note store in ~/.local/share is allowed (%s)",
+  (storeName) => {
+    const filePath = join(homedir(), ".local/share", storeName, "a/note.md");
+    expect(
+      decideDelegation(mainEvent("Write", { file_path: filePath }), "")
+    ).toBeNull();
+  }
+);
+
+test("a Write elsewhere under ~/.local/share is still denied", () => {
+  const filePath = join(homedir(), ".local/share/other/note.md");
+  expect(
+    isDenied(decideDelegation(mainEvent("Write", { file_path: filePath }), ""))
+  ).toBe(true);
+});
+
 test("lets a subagent edit project files", () => {
   expect(
     decideDelegation(

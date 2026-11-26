@@ -18,7 +18,7 @@ install any of them on its own. Sync scripts install the same plugins into
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
 | [guards](plugins/guards/) | Command guards: caps unbounded git log, diff and find at 150 lines, trims long Bash and MCP output and saves the full text to a file, caps Reads of large files at 300 lines, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and, opted in, asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
-| [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.claude/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
+| [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.local/share/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
 | [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.local/share/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement a whole set or one plan while the session reviews and sends back fixes; `rename <set> <new name>` renames a set. |
 | [token-ledger](plugins/token-ledger/) | Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool), shows a one-line summary after each turn, prints a report of recent sessions, and suggests `/handoff` then `/clear` when the context grows large. |
 | [ledger-tune](plugins/ledger-tune/) | Reads the token-ledger data, recommends changes that cut context, tokens and cost, applies the ones you pick and verifies them against later sessions. |
@@ -29,13 +29,14 @@ Four plugins save Markdown, and they follow one layout:
 
 | Kind | Saved at | Name |
 | --- | --- | --- |
-| Handoffs | `~/.claude/handoffs/<project>/` | `NNN-<slug>.md` |
-| Project notes | `~/.claude/project-notes/<project>/<category>/` | `YYYY-MM-DD-<slug>.md` |
+| Handoffs | `~/.local/share/handoffs/<project>/` | `NNN-<slug>.md` |
+| Project notes | `~/.local/share/project-notes/<project>/<category>/` | `YYYY-MM-DD-<slug>.md` |
 | Small plans | `~/.local/share/small-plans/<project>/<YYYY-MM-DD-HHMM-slug>/` | `NN-<slug>.md` |
-| Brainstorm plans | `~/.claude/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/` | `NN-<slug>/plan.md` |
+| Brainstorm plans | `~/.local/share/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/` | `NN-<slug>/plan.md` |
 
 - `<project>` is the name of the folder that holds the repository, shared by its git worktrees, or the working folder's name outside git. A session in a Claude Code worktree that git no longer knows (`<repo>/.claude/worktrees/<name>`) still files under `<repo>`
 - Small plans used to live in `~/.claude/small-plans`; `claude-kit-update` moves that folder to `~/.local/share/small-plans` after its plugin updates, and leaves any project that already has a folder there in place.
+- Handoffs, project notes and brainstorm plans used to live under `~/.claude/` too; `claude-kit-update` moves `~/.claude/handoffs`, `~/.claude/project-notes` and `~/.claude/brainstorm` to `~/.local/share/` the same way, and skips a folder whose `HANDOFFS_DIR`, `PROJECT_NOTES_DIR` or `BRAINSTORM_DIR` is set.
 - `/project-notes audit` finds notes, handoffs, plans and brainstorms saved under a worktree's or other folder's name and moves them under the repository's name
 - A slug is the title in lowercase letters, digits and hyphens, 60 characters at most
 - Handoffs, project notes and small plans start with front matter: `title`, `project`, `created` (UTC), then the fields of their kind. The title is a short name of the work

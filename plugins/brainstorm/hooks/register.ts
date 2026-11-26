@@ -9,6 +9,9 @@ import {
   PLAN_STATUSES_AS_TEXT,
   PLAN_STATUSES,
   PLAN_FILE_NAME,
+  INDEX_FILE_NAME,
+  readIndexEntries,
+  readPlanStatus,
   readPlanFolderName,
   setPlanStatus,
   type StatusFiles,
@@ -17,6 +20,12 @@ import {
 const BRAINSTORM_COMMAND = "brainstorm";
 const PLAN_MODE = "plan";
 const BUILD_MODE = "build";
+const MAX_ASKED_OPTIONS = 4;
+const PICKER_HEADING = "🧠 Brainstorm";
+const RUN_QUESTION = "🧺 Which run shall we build?";
+const RUN_FOLDER_PATTERN = /^plan-/;
+const PICKER_PANE_ID = "brainstorm-picker-pane";
+const PICK_IN_PANE_TEXT = "Pick one in the pane below…";
 const BRAINSTORM_COMMAND_PREFIX = "/brainstorm ";
 
 const BRAINSTORM_MODE_SUGGESTIONS = [
@@ -26,6 +35,7 @@ const BRAINSTORM_MODE_SUGGESTIONS = [
     description: "Implement plans with small-model subagents",
   },
 ];
+const TOPIC_FLAG_PATTERN = /(?:^|\s)--topic(?:\s+(\S+))?(?=\s|$)/;
 const PLAN_INVOCATION = `/${BRAINSTORM_COMMAND} ${PLAN_MODE}`;
 const BUILD_INVOCATION = `/${BRAINSTORM_COMMAND} ${BUILD_MODE}`;
 const ALL_KEYWORD = "all";
@@ -44,7 +54,7 @@ const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
 const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
 const RUN_FILE_TOOLS = ["Read", "Write", "Edit"];
 const OWN_FOLDER_REASON =
-  "The file is in the brainstorm plugin's own folder under ~/.claude/brainstorm.";
+  "The file is in the brainstorm plugin's own folder under ~/.local/share/brainstorm.";
 const FILE_STAMP_PATTERN = String.raw`\d{4}-\d{2}-\d{2}-\d{4}`;
 const SAVED_BRAINSTORM_PATTERN = new RegExp(
   `^brainstorm-${FILE_STAMP_PATTERN}\\.json$`
@@ -127,10 +137,14 @@ const BRAINSTORM_INSTRUCTIONS = `Brainstorm improvements for the project the foc
 
 When done, call the ${QUALIFIED_TOOL_NAME} tool once with every idea, and pass as folder a folder of the repository you brainstormed when it is not the working directory's. It writes the page and opens it in the browser. Then reply with the page's path and the top three ideas in one line each.`;
 
-const buildBrainstormPrompt = (focus: string) =>
-  focus
-    ? `${BRAINSTORM_INSTRUCTIONS}\n\nCenter the brainstorm on this focus, and keep the rest brief:\n<focus>\n${focus}\n</focus>`
+const buildBrainstormPrompt = (focus: string, topic = "") => {
+  const instructions = topic
+    ? `${BRAINSTORM_INSTRUCTIONS}\n\nThis brainstorm belongs to the topic "${topic}", which is not a repository. Pass folder "${topic}" exactly as written to the ${QUALIFIED_TOOL_NAME} tool.`
     : BRAINSTORM_INSTRUCTIONS;
+  return focus
+    ? `${instructions}\n\nCenter the brainstorm on this focus, and keep the rest brief:\n<focus>\n${focus}\n</focus>`
+    : instructions;
+};
 
 const RENDER_TOOL_SCHEMA = {
   type: "object",
@@ -139,7 +153,7 @@ const RENDER_TOOL_SCHEMA = {
     folder: {
       type: "string",
       description:
-        "The repository the ideas are about, as an absolute folder path inside it. Choose it from what was brainstormed, not from the working directory. Leave it out only when the ideas are about the working directory's repository. When they could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
+        "Where the ideas belong. For a topic that is not a repository, a plain name, used as given. For a repository, an absolute folder path inside it, resolved to that repository. Choose it from what was brainstormed, not from the working directory. Leave it out only when the ideas are about the working directory's repository. When they could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
     },
     summary: {
       type: "string",
@@ -186,7 +200,7 @@ const CHECK_TOOL_SCHEMA = {
     path: {
       type: "string",
       description:
-        "The run folder to check. A relative path is under this project's brainstorm folder, ~/.claude/brainstorm/<project>/.",
+        "The run folder to check. A relative path is under this project's brainstorm folder, ~/.local/share/brainstorm/<project>/.",
     },
   },
   required: ["path"],
@@ -198,7 +212,7 @@ const STATUS_TOOL_SCHEMA = {
     path: {
       type: "string",
       description:
-        "The plan folder (NN-slug) inside a run folder. A relative path is under this project's brainstorm folder, ~/.claude/brainstorm/<project>/.",
+        "The plan folder (NN-slug) inside a run folder. A relative path is under this project's brainstorm folder, ~/.local/share/brainstorm/<project>/.",
     },
     status: { type: "string", enum: PLAN_STATUSES },
   },
@@ -748,13 +762,20 @@ const resolveProjectName = async (
 
 const readBrainstormRoot = async (engine: EngineInterface) =>
   (await engine.env.get("BRAINSTORM_DIR")) ??
-  `${(await engine.env.get("HOME")) ?? ""}/.claude/brainstorm`;
+  `${(await engine.env.get("HOME")) ?? ""}/.local/share/brainstorm`;
+
+const isTopicName = (requestedFolder?: string) =>
+  Boolean(requestedFolder) && !requestedFolder?.startsWith("/");
 
 const resolveBrainstormFolder = async (
   engine: EngineInterface,
   requestedFolder?: string
 ) =>
-  `${await readBrainstormRoot(engine)}/${await resolveProjectName(engine, requestedFolder)}`;
+  `${await readBrainstormRoot(engine)}/${
+    isTopicName(requestedFolder)
+      ? toProjectName(requestedFolder ?? "")
+      : await resolveProjectName(engine, requestedFolder)
+  }`;
 
 const moveLegacyBrainstormFolder = async (engine: EngineInterface) => {
   const legacyFolder = `${await engine.session.cwd()}/${LEGACY_BRAINSTORM_FOLDER}`;
@@ -1202,8 +1223,12 @@ const submitPromptAfterReply = (engine: EngineInterface, prompt: string) => {
   engine.clock.after(0, () => void engine.prompt.submit({ text: prompt }));
 };
 
-const startBrainstorm = (engine: EngineInterface, focus: string) => {
-  submitPromptAfterReply(engine, buildBrainstormPrompt(focus));
+const startBrainstorm = (
+  engine: EngineInterface,
+  focus: string,
+  topic: string
+) => {
+  submitPromptAfterReply(engine, buildBrainstormPrompt(focus, topic));
   return { text: "Brainstorming improvements for this project…" };
 };
 
@@ -1221,9 +1246,10 @@ const describeUnknownPicks = (
 
 const startPlanning = async (
   engine: EngineInterface,
-  requestedPicksText: string
+  requestedPicksText: string,
+  topic: string
 ) => {
-  const brainstormFolder = await resolveBrainstormFolder(engine);
+  const brainstormFolder = await resolveBrainstormFolder(engine, topic);
   const brainstorm = await loadNewestBrainstorm(engine, brainstormFolder);
   if (!brainstorm) {
     return {
@@ -1251,8 +1277,172 @@ const startPlanning = async (
   };
 };
 
-const startBuild = async (engine: EngineInterface, requestedRuns: string) => {
-  const plansFolder = `${await resolveBrainstormFolder(engine)}/${PLANS_FOLDER_NAME}`;
+const askFromList = async (
+  engine: EngineInterface,
+  question: string,
+  header: string,
+  names: string[],
+  labelName: (name: string) => string
+): Promise<string | undefined> => {
+  const isPaged = names.length > MAX_ASKED_OPTIONS;
+  const askedNames = isPaged ? names.slice(0, MAX_ASKED_OPTIONS - 1) : names;
+  const remainingNames = names.slice(askedNames.length);
+  const moreLabel = `${remainingNames.length} more…`;
+  try {
+    const answer = await engine.ui.ask(question, {
+      header,
+      options: [...askedNames.map(labelName), ...(isPaged ? [moreLabel] : [])],
+    });
+    if (isPaged && answer === moreLabel)
+      return await askFromList(
+        engine,
+        question,
+        header,
+        remainingNames,
+        labelName
+      );
+    return names.find((name) => labelName(name) === answer) ?? answer;
+  } catch {
+    return undefined;
+  }
+};
+
+const picker = {
+  rows: [] as { value: string; label: string }[],
+  choose: undefined as ((value: string) => Promise<void>) | undefined,
+};
+
+const openPickerPane = async (
+  engine: EngineInterface,
+  header: string,
+  rows: { value: string; label: string }[],
+  choose: (value: string) => Promise<void>
+) => {
+  picker.rows = rows;
+  picker.choose = choose;
+  try {
+    const openResult = await engine.ui.open({
+      id: PICKER_PANE_ID,
+      title: header,
+      focus: true,
+      closeOnEscape: true,
+      holdToasts: true,
+      rows: rows.length + 3,
+    });
+    if (openResult?.isPlaced) return true;
+    if (openResult) await engine.ui.close({ id: PICKER_PANE_ID });
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+const pickRow = async (engine: EngineInterface, value: string) => {
+  await engine.ui.close({ id: PICKER_PANE_ID });
+  await picker.choose?.(value);
+};
+
+const chooseFromList = async (
+  engine: EngineInterface,
+  header: string,
+  question: string,
+  names: string[],
+  labelName: (name: string) => string,
+  onChoose: (name: string | undefined) => Promise<{ text: string }>
+): Promise<{ text: string }> => {
+  const isPaneOpen = await openPickerPane(
+    engine,
+    header,
+    names.map((name) => ({ value: name, label: labelName(name) })),
+    async (name) => {
+      const { text } = await onChoose(name);
+      await engine.ui.toast(text);
+    }
+  );
+  if (isPaneOpen) return { text: PICK_IN_PANE_TEXT };
+  return onChoose(
+    await askFromList(engine, question, header, names, labelName)
+  );
+};
+
+const matchSetNames = (setNames: string[], wantedName: string) => {
+  const exactNames = setNames.filter((name) => name === wantedName);
+  return exactNames.length > 0
+    ? exactNames
+    : setNames.filter((name) => name.includes(wantedName.trim()));
+};
+
+const hasUnfinishedPlan = async (
+  engine: EngineInterface,
+  runFolderPath: string
+) => {
+  const planFiles = readPlanFiles(engine);
+  const indexText = await planFiles.read(`${runFolderPath}/${INDEX_FILE_NAME}`);
+  const planStatuses = await Promise.all(
+    readIndexEntries(indexText ?? "").map(async ({ planFolder }) =>
+      readPlanStatus(
+        (await planFiles.read(
+          `${runFolderPath}/${planFolder}/${PLAN_FILE_NAME}`
+        )) ?? ""
+      )
+    )
+  );
+  return (
+    planStatuses.length === 0 ||
+    planStatuses.some((status) => status !== "done")
+  );
+};
+
+const listRunNamesNotDone = async (
+  engine: EngineInterface,
+  plansFolder: string
+) => {
+  const runNames = (await readPlanFiles(engine).list(plansFolder))
+    .filter((name) => RUN_FOLDER_PATTERN.test(name))
+    .sort()
+    .reverse();
+  const unfinishedFlags = await Promise.all(
+    runNames.map((name) => hasUnfinishedPlan(engine, `${plansFolder}/${name}`))
+  );
+  return runNames.filter((_, index) => unfinishedFlags[index]);
+};
+
+const startBuild = async (
+  engine: EngineInterface,
+  requestedRuns: string,
+  topic: string
+) => {
+  const plansFolder = `${await resolveBrainstormFolder(engine, topic)}/${PLANS_FOLDER_NAME}`;
+  const runNames = await listRunNamesNotDone(engine, plansFolder);
+  const buildRun = async (runName: string | undefined) => {
+    if (runName === undefined) return { text: "Nothing picked." };
+    const runFolderPath = `${plansFolder}/${runName}`;
+    submitPromptAfterReply(
+      engine,
+      buildImplementationPrompt(runFolderPath, plansFolder)
+    );
+    return {
+      text: `Building ${runFolderPath} with small-model implementers and a strong reviewer…`,
+    };
+  };
+  const matchedRunNames = requestedRuns
+    ? matchSetNames(runNames, requestedRuns)
+    : [];
+  if (runNames.length > 1 && matchedRunNames.length === 1)
+    return buildRun(matchedRunNames[0]);
+  if (runNames.length > 1 && requestedRuns)
+    return {
+      text: `No unfinished run is named like "${requestedRuns}". Run /${BRAINSTORM_COMMAND} ${BUILD_MODE} <run> with one of: ${runNames.join(", ")}.`,
+    };
+  if (runNames.length > 1)
+    return chooseFromList(
+      engine,
+      PICKER_HEADING,
+      RUN_QUESTION,
+      runNames,
+      (name) => name,
+      buildRun
+    );
   submitPromptAfterReply(
     engine,
     buildImplementationPrompt(requestedRuns, plansFolder)
@@ -1263,16 +1453,36 @@ const startBuild = async (engine: EngineInterface, requestedRuns: string) => {
 };
 
 export const register: Register = (on) => {
+  on("ui.render", { component: "Pane", requestId: PICKER_PANE_ID }, ($, e) => {
+    const { Box, Button, Text } = $.ui.resolve(e);
+    return h(
+      Box,
+      { flexDirection: "column" },
+      ...picker.rows.map((row) =>
+        h(
+          Button,
+          {
+            key: `pick-${row.value}`,
+            plain: true,
+            onPress: () => pickRow($, row.value),
+          },
+          row.label
+        )
+      ),
+      h(Text, { dimColor: true }, "Tab moves · Enter picks · Esc closes")
+    ) as RenderElement;
+  });
+
   on("session.start", async ($, e, next) => {
     await $.command.register({
       name: BRAINSTORM_COMMAND,
       description: `Brainstorm ideas for this project, shown in the browser. "${PLAN_MODE} <picks>" turns picked ideas into small-step plans, and "${BUILD_MODE}" has small models build them and a strong model review the result`,
-      argumentHint: `[focus] | ${PLAN_MODE} <picks> | ${BUILD_MODE} [runs]`,
+      argumentHint: `[focus] | ${PLAN_MODE} <picks> | ${BUILD_MODE} [runs] [--topic <name>]`,
     });
     await $.tool.register({
       name: TOOL_NAME,
       description:
-        "Renders brainstormed project ideas as a self-contained, ADHD-friendly HTML page, saves it under ~/.claude/brainstorm/<project>/ and opens it in the browser. Call it once, with every idea, at the end of a /brainstorm.",
+        "Renders brainstormed project ideas as a self-contained, ADHD-friendly HTML page, saves it under ~/.local/share/brainstorm/<project>/ and opens it in the browser. Call it once, with every idea, at the end of a /brainstorm.",
       inputSchema: RENDER_TOOL_SCHEMA,
       isDeferred: true,
     });
@@ -1307,12 +1517,16 @@ export const register: Register = (on) => {
 
   on("command.run", { command: BRAINSTORM_COMMAND }, async ($, e) => {
     await moveLegacyBrainstormFolder($).catch(() => undefined);
-    const commandArguments = e.args.trim();
+    const topic = e.args.match(TOPIC_FLAG_PATTERN)?.[1] ?? "";
+    if (TOPIC_FLAG_PATTERN.test(e.args) && !topic)
+      return { text: "--topic needs a name." };
+    const commandArguments = e.args.replace(TOPIC_FLAG_PATTERN, "").trim();
     const [firstWord = ""] = commandArguments.split(/\s+/, 1);
     const wordsAfterFirst = commandArguments.slice(firstWord.length).trim();
-    if (firstWord === PLAN_MODE) return startPlanning($, wordsAfterFirst);
-    if (firstWord === BUILD_MODE) return startBuild($, wordsAfterFirst);
-    return startBrainstorm($, commandArguments);
+    if (firstWord === PLAN_MODE)
+      return startPlanning($, wordsAfterFirst, topic);
+    if (firstWord === BUILD_MODE) return startBuild($, wordsAfterFirst, topic);
+    return startBrainstorm($, commandArguments, topic);
   });
 
   on("tool.call", { tool: QUALIFIED_TOOL_NAME }, async ($, e) => {
@@ -1327,7 +1541,7 @@ export const register: Register = (on) => {
       const pagePath = await writeBrainstormPage(
         $,
         brainstorm,
-        requestedFolder.startsWith("/") ? requestedFolder : ""
+        requestedFolder
       );
       const isOpened = await openInBrowser($, pagePath);
       return {

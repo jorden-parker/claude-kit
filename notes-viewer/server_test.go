@@ -29,10 +29,7 @@ created: 2026-11-19T10:00:00.000Z
 
 func noteFilePath(relativePath string) string {
 	home := os.Getenv("HOME")
-	if strings.HasPrefix(relativePath, "small-plans/") {
-		return filepath.Join(home, ".local", "share", relativePath)
-	}
-	return filepath.Join(home, ".claude", relativePath)
+	return filepath.Join(home, ".local", "share", relativePath)
 }
 
 func writeNoteFile(t *testing.T, relativePath string, text string) {
@@ -287,15 +284,12 @@ func TestMissingFoldersListEmptySections(t *testing.T) {
 func TestSectionsDefaultToTheirHomeFolders(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	for _, rootVariable := range []string{"HANDOFFS_DIR", "SMALL_PLANS_DIR"} {
+	for _, rootVariable := range []string{"HANDOFFS_DIR", "PROJECT_NOTES_DIR", "SMALL_PLANS_DIR", "BRAINSTORM_DIR"} {
 		t.Setenv(rootVariable, "")
 	}
-	wantRoots := map[string]string{
-		"handoffs":    filepath.Join(home, ".claude", "handoffs"),
-		"small-plans": filepath.Join(home, ".local", "share", "small-plans"),
-	}
 	for _, layout := range sectionLayouts {
-		if wantRoot, isChecked := wantRoots[layout.Identifier]; isChecked && resolveSectionRoot(layout) != wantRoot {
+		wantRoot := filepath.Join(home, ".local", "share", layout.Identifier)
+		if resolveSectionRoot(layout) != wantRoot {
 			t.Fatalf("%s root was %s, want %s", layout.Identifier, resolveSectionRoot(layout), wantRoot)
 		}
 	}
@@ -535,5 +529,25 @@ func TestToTitleCase(t *testing.T) {
 		if got := toTitleCase(testCase.title); got != testCase.want {
 			t.Errorf("toTitleCase(%q) = %q, want %q", testCase.title, got, testCase.want)
 		}
+	}
+}
+
+func TestAHandoffTopicFolderThatIsNotARepositoryIsListedAndItsNoteIsServed(t *testing.T) {
+	seedNotes(t)
+	topicHandoff := "---\ntitle: Compare the vendors\nproject: research\ncreated: 2026-11-18T09:00:00.000Z\ncwd: /Users/me/notes\ntopic: research\n---\n\nThe shortlist is ready.\n"
+	writeNoteFile(t, "handoffs/research/001-compare-the-vendors.md", topicHandoff)
+
+	var topicEntry *entryView
+	handoffs := loadSections()[0]
+	for index := range handoffs.Entries {
+		if handoffs.Entries[index].Project == "research" {
+			topicEntry = &handoffs.Entries[index]
+		}
+	}
+	if topicEntry == nil {
+		t.Fatalf("no research entry in %s", listPaths(handoffs))
+	}
+	if topicEntry.Title != "Compare the Vendors" || topicEntry.Source != topicHandoff || !strings.Contains(topicEntry.Html, "The shortlist is ready.") {
+		t.Fatalf("entry was %+v", topicEntry)
 	}
 }

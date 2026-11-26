@@ -134,6 +134,7 @@ type HandoffDraft = {
   focus: string;
   cwd: string;
   createdAt: number;
+  topic?: string;
 };
 
 type LegacyHandoff = {
@@ -204,17 +205,31 @@ const buildConversationPreamble = (toolRule: string) =>
 The conversation above is what the rules below call "the conversation below".`;
 
 type HandoffArguments =
-  | { action: "list" }
-  | { action: "resume"; handoffId: number | undefined; extraContext: string }
+  | { action: "list"; topic?: string }
+  | {
+      action: "resume";
+      handoffId: number | undefined;
+      extraContext: string;
+      topic?: string;
+    }
   | {
       action: "recap";
       isSaveOnly: boolean;
       focus: string;
       notes: string;
       decisionLines?: string;
+      topic?: string;
     };
 
+const TOPIC_FLAG = /(?:^|\s)--topic(?=\s|$)(?:\s+(\S+))?/;
+
 const parseHandoffArguments = (args: string): HandoffArguments => {
+  const flag = TOPIC_FLAG.exec(args);
+  const parsed = parseSubcommand(args.replace(TOPIC_FLAG, ""));
+  return flag === null ? parsed : { ...parsed, topic: flag[1] ?? "" };
+};
+
+const parseSubcommand = (args: string): HandoffArguments => {
   const [, firstWord = "", laterWords = ""] =
     FIRST_WORD_AND_REST.exec(args.trim()) ?? [];
   const subcommand = firstWord.replace(/^--/, "");
@@ -288,10 +303,16 @@ const resolveProjectName = async (engine: EngineInterface, folder: string) => {
 
 const readHandoffsRoot = async (engine: EngineInterface) =>
   (await engine.env.get("HANDOFFS_DIR")) ??
-  `${(await engine.env.get("HOME")) ?? ""}/.claude/handoffs`;
+  `${(await engine.env.get("HOME")) ?? ""}/.local/share/handoffs`;
 
-const findHandoffFolder = async (engine: EngineInterface, folder: string) => {
-  const projectName = await resolveProjectName(engine, folder);
+const findHandoffFolder = async (
+  engine: EngineInterface,
+  folder: string,
+  topic?: string
+) => {
+  const projectName = topic
+    ? toProjectName(topic)
+    : await resolveProjectName(engine, folder);
   return {
     projectName,
     folderPath: `${await readHandoffsRoot(engine)}/${projectName}`,
@@ -324,7 +345,8 @@ const saveHandoff = async (
 ): Promise<HandoffFile> => {
   const { projectName, folderPath } = await findHandoffFolder(
     engine,
-    draft.cwd
+    draft.cwd,
+    draft.topic
   );
   const [newestFile] = await listHandoffFiles(engine, folderPath);
   const handoffId = (newestFile?.handoffId ?? 0) + 1;
@@ -335,6 +357,7 @@ const saveHandoff = async (
     `project: ${projectName}`,
     `created: ${new Date(draft.createdAt).toISOString()}`,
     `cwd: ${draft.cwd}`,
+    ...(draft.topic ? [`topic: ${draft.topic}`] : []),
     ...(draft.focus ? [`focus: ${draft.focus.replace(/\s+/g, " ")}`] : []),
   ].join("\n");
   const path = `${folderPath}/${fileName}`;
@@ -369,15 +392,16 @@ const chooseRepositoryFolder = async (
 const saveSessionHandoff = async (
   engine: EngineInterface,
   recap: string,
-  focus: string
+  focus: string,
+  topic?: string
 ) => {
-  const repositoryFolder = await chooseRepositoryFolder(
-    engine,
-    readRepositoryCandidates(recap)
-  );
+  const repositoryFolder = topic
+    ? undefined
+    : await chooseRepositoryFolder(engine, readRepositoryCandidates(recap));
   return saveHandoff(engine, {
     recap: recap.replace(REPOSITORY_LINE, ""),
     focus,
+    topic,
     cwd: repositoryFolder || (await engine.session.cwd()),
     createdAt: await engine.clock.now(),
   });
@@ -423,10 +447,11 @@ const describeListedHandoff = (handoff: {
 }) =>
   `#${handoff.handoffId}  ${handoff.created.slice(0, 16).replace("T", " ")}  ${summarizeRecap(handoff.recap)}`;
 
-const listProjectHandoffs = async (engine: EngineInterface) => {
+const listProjectHandoffs = async (engine: EngineInterface, topic?: string) => {
   const { projectName, folderPath } = await findHandoffFolder(
     engine,
-    await engine.session.cwd()
+    await engine.session.cwd(),
+    topic
   );
   const handoffFiles = await listHandoffFiles(engine, folderPath);
   if (handoffFiles.length === 0) {
@@ -756,7 +781,8 @@ const deliverRecap = async (
   const saveOutcome = await saveSessionHandoff(
     engine,
     recapText,
-    request.focus
+    request.focus,
+    request.topic
   ).catch(describeError);
   const saveFailure =
     typeof saveOutcome === "string"
@@ -775,19 +801,19 @@ const deliverRecap = async (
 };
 
 const buildResumeBox = async (
-  engine: EngineInterface
+  engine: EngineInterface,
+  topic?: string
 ): Promise<HandoffBox | undefined> => {
   const { folderPath } = await findHandoffFolder(
     engine,
-    await engine.session.cwd()
+    await engine.session.cwd(),
+    topic
   );
   const handoffFiles = await listHandoffFiles(engine, folderPath);
   const [latestFile] = handoffFiles;
   if (!latestFile) return undefined;
   const listedHandoffs = await Promise.all(
-    handoffFiles
-      .slice(0, LISTED_HANDOFF_LIMIT)
-      .map((file) => readHandoff(engine, file))
+    handoffFiles.map((file) => readHandoff(engine, file))
   );
   return {
     kind: "resume",
@@ -837,11 +863,13 @@ const appendExtraContext = (recap: string, extraContext: string) =>
 const resumeSavedHandoff = async (
   engine: EngineInterface,
   handoffId: number | undefined,
-  extraContext: string
+  extraContext: string,
+  topic?: string
 ) => {
   const { projectName, folderPath } = await findHandoffFolder(
     engine,
-    await engine.session.cwd()
+    await engine.session.cwd(),
+    topic
   );
   const handoffFiles = await listHandoffFiles(engine, folderPath);
   const chosenFile =
@@ -1186,7 +1214,8 @@ export const register: Register = (on, options) => {
       name: "handoff",
       description:
         "Record the session as background context for a later session. save: only save it; list: this project's handoffs; resume [id] [extra context]: load the latest or a chosen one",
-      argumentHint: "[save] [focus] | list | resume [id] [extra context]",
+      argumentHint:
+        "[save] [focus] | list | resume [id] [extra context] (add --topic <name> to file by topic)",
     });
     await resumePendingHandoff($);
 
@@ -1195,13 +1224,17 @@ export const register: Register = (on, options) => {
 
   on("command.run", { command: "handoff" }, async ($, e) => {
     const handoffArguments = parseHandoffArguments(e.args);
+    if (handoffArguments.topic === "") return { text: "--topic needs a name." };
     await fileLegacyHandoffs($);
-    if (handoffArguments.action === "list") return listProjectHandoffs($);
+    if (handoffArguments.action === "list")
+      return listProjectHandoffs($, handoffArguments.topic);
     if (handoffArguments.action === "resume") {
       const isBareResume =
         handoffArguments.handoffId === undefined &&
         !handoffArguments.extraContext;
-      const resumeBox = isBareResume ? await buildResumeBox($) : undefined;
+      const resumeBox = isBareResume
+        ? await buildResumeBox($, handoffArguments.topic)
+        : undefined;
       if (
         resumeBox &&
         (await showBox($, progress, RESUME_BOX_TITLE, resumeBox))
@@ -1211,7 +1244,8 @@ export const register: Register = (on, options) => {
       return resumeSavedHandoff(
         $,
         handoffArguments.handoffId,
-        handoffArguments.extraContext
+        handoffArguments.extraContext,
+        handoffArguments.topic
       );
     }
     const isBareRecapAction =

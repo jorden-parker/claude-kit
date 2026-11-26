@@ -7,7 +7,7 @@ import { expect, mock, test, type Engine } from "claude-code/testing";
 
 const WRITE_TOOL = "mcp__project-notes__write_project_note";
 const LIST_TOOL = "mcp__project-notes__list_legacy_notes";
-const NOTES_ROOT = "/home/tester/.claude/project-notes";
+const NOTES_ROOT = "/home/tester/.local/share/project-notes";
 const SESSION_NOTES_STORE =
   "/home/tester/.claude/plugins/store/session-notes_claude-kit-abc.json";
 
@@ -168,6 +168,21 @@ test("a note without a date is dated today", async ($, on) => {
     expect.stringMatching(
       /\/claude-kit\/decision\/\d{4}-\d{2}-\d{2}-use-go-for-the-viewer\.md$/
     ),
+  ]);
+});
+
+test("with no PROJECT_NOTES_DIR a note is saved under the local share folder", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  await callTool($, WRITE_TOOL, {
+    category: "reference",
+    title: "Types file",
+    body: "The API types are in claude-code.d.ts.",
+    created: "2026-11-19",
+  });
+
+  expect([...files.keys()]).toEqual([
+    "/home/tester/.local/share/project-notes/claude-kit/reference/2026-11-19-types-file.md",
   ]);
 });
 
@@ -473,7 +488,7 @@ test("later words, /project-note topics and other commands get no /project-notes
 
 const AUDIT_TOOL = "mcp__project-notes__audit_note_folders";
 const MOVE_TOOL = "mcp__project-notes__move_note_folder";
-const CLAUDE_ROOT = "/home/tester/.claude";
+const CLAUDE_ROOT = "/home/tester/.local/share";
 const SMALL_PLANS_ROOT = "/home/tester/.local/share/small-plans";
 const WORKTREE_FOLDER = "/work/claude-kit/.claude/worktrees/feature-x";
 
@@ -574,6 +589,22 @@ test("a note about another repository's folder is filed under that repository's 
   ]);
 });
 
+test("write_project_note saves under a plain topic name with no repository", async ($, on) => {
+  const { files } = mockStores(on, {});
+
+  await callTool($, WRITE_TOOL, {
+    category: "fact",
+    title: "Topic note",
+    body: "B.",
+    created: "2026-11-19",
+    project: "research",
+  });
+
+  expect([...files.keys()]).toEqual([
+    `${NOTES_ROOT}/research/fact/2026-11-19-topic-note.md`,
+  ]);
+});
+
 test("a note written in a deleted worktree is filed under the main repository's name", async ($, on) => {
   const { files } = mockStores(on, {}, {}, "", WORKTREE_FOLDER);
 
@@ -635,6 +666,30 @@ test("the audit lists folders it cannot tie to a repository", async ($, on) => {
 
   expect(result).toContain("No repository found");
   expect(result).toContain("handoffs/tmp.abc");
+});
+
+test("a topic: line in a handoff body does not hide its cwd from the audit", async ($, on) => {
+  mockStores(on, {
+    [`${CLAUDE_ROOT}/handoffs/tmp.abc/001-x.md`]:
+      "---\ntitle: Resume\nproject: tmp.abc\ncwd: /tmp/tmp.abc\n---\n\nNotes:\ntopic: not a header\n",
+  });
+
+  const { result } = await callTool($, AUDIT_TOOL);
+
+  expect(result).toContain("No repository found");
+  expect(result).toContain("handoffs/tmp.abc");
+});
+
+test("the audit counts a handoff topic folder as in place", async ($, on) => {
+  mockStores(on, {
+    [`${CLAUDE_ROOT}/handoffs/research/001-x.md`]:
+      "---\ntitle: Resume\nproject: research\ncwd: /somewhere/not-a-repository\ntopic: research\n---\n\nResume.\n",
+  });
+
+  const { result } = await callTool($, AUDIT_TOOL);
+
+  expect(result).not.toContain("No repository found");
+  expect(result).not.toContain("handoffs/research");
 });
 
 test("moving a handoff folder renumbers after the target's handoffs and rewrites the project", async ($, on) => {
@@ -717,7 +772,7 @@ test("/project-notes audit asks Claude to audit the note folders", async ($, on)
 
 test("editing a saved note, handoff, plan or brainstorm needs no permission", async ($, on) => {
   mockEngine(on, {
-    "/home/tester/.claude/handoffs/claude-kit/003-auth.md": "handoff",
+    "/home/tester/.local/share/handoffs/claude-kit/003-auth.md": "handoff",
     "/home/tester/.local/share/small-plans/claude-kit/set/01-a.md": "plan",
   });
   on("tool.check", () => ({ decision: "ask" }));
@@ -725,7 +780,7 @@ test("editing a saved note, handoff, plan or brainstorm needs no permission", as
   const handoffEdit = await $.tool.check({
     tool: "Edit",
     input: {
-      file_path: "/home/tester/.claude/handoffs/claude-kit/003-auth.md",
+      file_path: "/home/tester/.local/share/handoffs/claude-kit/003-auth.md",
     },
   });
   const planWrite = await $.tool.check({
@@ -763,6 +818,33 @@ test("the small-plans store defaults to ~/.local/share/small-plans", async ($, o
 
   expect(defaultPlanEdit.decision).toBe("allow");
   expect(oldPlanEdit.decision).toBe("ask");
+});
+
+test("every store defaults to ~/.local/share and the old ~/.claude folders ask", async ($, on) => {
+  mockEngine(on);
+  on("tool.check", () => ({ decision: "ask" }));
+
+  for (const store of [
+    "handoffs",
+    "project-notes",
+    "small-plans",
+    "brainstorm",
+  ]) {
+    const defaultEdit = await $.tool.check({
+      tool: "Edit",
+      input: {
+        file_path: `/home/tester/.local/share/${store}/claude-kit/set/01-a.md`,
+      },
+    });
+    const oldEdit = await $.tool.check({
+      tool: "Edit",
+      input: {
+        file_path: `/home/tester/.claude/${store}/claude-kit/set/01-a.md`,
+      },
+    });
+    expect(defaultEdit.decision).toBe("allow");
+    expect(oldEdit.decision).toBe("ask");
+  }
 });
 
 test("SMALL_PLANS_DIR still overrides the small-plans store", async ($, on) => {
@@ -817,7 +899,7 @@ test("/project-notes edit asks Claude to find the note and change it with Edit",
 
   expect(submittedPrompts[0]).toContain("mark the auth handoff done");
   expect(submittedPrompts[0]).toContain("Edit");
-  expect(submittedPrompts[0]).toContain("/home/tester/.claude/handoffs");
+  expect(submittedPrompts[0]).toContain("/home/tester/.local/share/handoffs");
 });
 
 test("every tool is registered behind ToolSearch", async ($, on) => {

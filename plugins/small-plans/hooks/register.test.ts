@@ -15,7 +15,7 @@ const FINISH_TOOL = "mcp__small-plans__finish_small_plan";
 const UPDATE_TOOL = "mcp__small-plans__update_small_plan";
 const PLANS_FOLDER = "/home/tester/.local/share/small-plans";
 const PROJECT_FOLDER = `${PLANS_FOLDER}/claude-kit`;
-const HANDOFFS_FOLDER = "/home/tester/.claude/handoffs/claude-kit";
+const HANDOFFS_FOLDER = "/home/tester/.local/share/handoffs/claude-kit";
 const OLDER_HANDOFF = `${HANDOFFS_FOLDER}/001-add-the-viewer.md`;
 const NEWER_HANDOFF = `${HANDOFFS_FOLDER}/002-fix-login.md`;
 const HANDOFF_SET = "2026-11-18-0900-handoff-002-fix-login";
@@ -797,6 +797,19 @@ test("/small-plans handoff lists the handoffs newest first and splits the one pi
   expect(submittedPrompts[0]).toContain(WRITE_TOOL);
   expect(submittedPrompts[0]).toMatch(new RegExp(`set "${setPattern}"`));
   expect(submittedPrompts[0]).not.toContain("already has plans");
+});
+
+test("with no HANDOFFS_DIR handoffs are read from the local share folder", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  await runCommand($, on, "handoff", {
+    [OLDER_HANDOFF]: "older",
+    [NEWER_HANDOFF]: "newer",
+  });
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "#2 · Fix Login",
+    "#1 · Add the Viewer",
+  ]);
 });
 
 test("/small-plans handoff splits nothing when the list is dismissed", async ($, on) => {
@@ -1748,6 +1761,36 @@ test("a plan for a folder in another repository's worktree is saved under that r
       path.startsWith(`${PROJECT_FOLDER.replace("claude-kit", "notes-app")}/`)
     )
   ).toBe(true);
+});
+
+test("a plan for a plain topic name is saved under that name with no repository", async ($, on) => {
+  const { files } = mockEngine(on, {}, "");
+
+  await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    order: 1,
+    project: "research",
+  });
+
+  expect(
+    [...files.keys()].some((path) =>
+      path.startsWith(`${PLANS_FOLDER}/research/`)
+    )
+  ).toBe(true);
+});
+
+test("list_small_plans lists a plain topic name", async ($, on) => {
+  mockEngine(
+    on,
+    { [`${PLANS_FOLDER}/research/${HANDOFF_SET}/index.md`]: "topic index" },
+    ""
+  );
+
+  const outcome = await callTool($, LIST_TOOL, { project: "research" });
+
+  expect(outcome.result).toBe(
+    `Set ${HANDOFF_SET} (${PLANS_FOLDER}/research/${HANDOFF_SET})\ntopic index`
+  );
 });
 
 const SET_QUESTION = "🧺 Which plan set shall we build?";

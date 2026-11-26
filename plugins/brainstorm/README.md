@@ -8,9 +8,11 @@ One command, `/brainstorm`, takes a project from ideas to code. Its first word p
 | `/brainstorm plan <picks>` | Turns picked ideas into plans, one folder each, with an index. |
 | `/brainstorm build [runs]` | Has small models build the plans, and a strong model review.   |
 
+Add `--topic <name>` (one word, anywhere in the arguments) to any of them to keep the ideas and plan runs under `~/.local/share/brainstorm/<name>/` for a topic that is not a repository, the way small-plans takes a plain project name.
+
 Only `plan` and `build` as the first word pick a mode. Anything else is the focus of a new brainstorm. To brainstorm on a focus that starts with one of those words, put another word first: `/brainstorm the build pipeline`.
 
-`/brainstorm` brainstorms improvements: security issues, must-have fixes, quick wins, performance, developer experience, and creative or moonshot ideas. The result is a self-contained HTML page, saved under `~/.claude/brainstorm/<project>/` and opened in the browser. `<project>` is the repository the ideas are about: the one `/brainstorm <focus>` names, or else the session's, and Claude asks you when the focus could mean more than one. The folder is named after the repository, shared by its worktrees, the same name the handoff, project-notes and small-plans plugins file under.
+`/brainstorm` brainstorms improvements: security issues, must-have fixes, quick wins, performance, developer experience, and creative or moonshot ideas. The result is a self-contained HTML page, saved under `~/.local/share/brainstorm/<project>/` and opened in the browser. `<project>` is the repository the ideas are about: the one `/brainstorm <focus>` names, or else the session's, and Claude asks you when the focus could mean more than one. The folder is named after the repository, shared by its worktrees, the same name the handoff, project-notes and small-plans plugins file under.
 
 ## Usage
 
@@ -44,7 +46,7 @@ All text from the model is HTML-escaped before it is written to the page.
 
 ### The plan files
 
-Each `/brainstorm plan` writes a run folder, `~/.claude/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/`. `BRAINSTORM_DIR` replaces `~/.claude/brainstorm`. The plugin lets Claude read and write files in that folder without a permission prompt, and nowhere else. `claude-notes`, run in a terminal, shows the plans in the browser, under Brainstorm plans. Every plan gets a folder and a file of its own:
+Each `/brainstorm plan` writes a run folder, `~/.local/share/brainstorm/<project>/plans/plan-YYYY-MM-DD-HHMM/`. `BRAINSTORM_DIR` replaces `~/.local/share/brainstorm`. The plugin lets Claude read and write files in that folder without a permission prompt, and nowhere else. `claude-notes`, run in a terminal, shows the plans in the browser, under Brainstorm plans. Every plan gets a folder and a file of its own:
 
 ```
 plan-2026-11-11-1200/

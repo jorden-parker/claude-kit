@@ -90,7 +90,16 @@ function delegationProblem(event: HookEvent): HookResult {
 }
 
 function orchestrationFolders(): string[] {
-  return [join(homedir(), ".claude"), tmpdir(), "/tmp", "/private/tmp"];
+  const noteStores = ["handoffs", "project-notes", "small-plans", "brainstorm"];
+  return [
+    join(homedir(), ".claude"),
+    ...noteStores.map((storeName) =>
+      join(homedir(), ".local/share", storeName)
+    ),
+    tmpdir(),
+    "/tmp",
+    "/private/tmp",
+  ];
 }
 
 function changedCharacters(edit: any): number {

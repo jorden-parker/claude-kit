@@ -107,3 +107,11 @@ func TestAddingAnInvalidPlanIsRefused(t *testing.T) {
 		t.Fatal("the invalid plan was saved")
 	}
 }
+
+func TestAHandoffWithATopicLineHasNoFormatProblems(t *testing.T) {
+	topicHandoff := "---\ntitle: Compare the vendors\nproject: research\ncreated: 2026-11-18T09:00:00.000Z\ncwd: /Users/me/notes\ntopic: research\n---\n\nThe shortlist is ready.\n"
+
+	if problems := listFormatProblems("handoffs", "research/001-compare-the-vendors.md", topicHandoff); len(problems) != 0 {
+		t.Errorf("problems: %v", problems)
+	}
+}

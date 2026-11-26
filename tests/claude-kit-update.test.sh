@@ -247,4 +247,106 @@ HOME="$home_override" SMALL_PLANS_DIR="$sandbox/work-plans" run_update >/dev/nul
 expect "SMALL_PLANS_DIR set leaves the old small-plans folder where it is" [ "$(cat "$home_override/.claude/small-plans/alpha/set-one/01-step.md")" = kept ]
 expect "SMALL_PLANS_DIR set creates no new small-plans folder" [ ! -e "$home_override/.local/share/small-plans" ]
 
+home_moved="$sandbox/home-moved-handoffs"
+mkdir -p "$home_moved/.claude/handoffs/alpha/set-one"
+echo "kept" > "$home_moved/.claude/handoffs/alpha/set-one/01-step.md"
+output="$(HOME="$home_moved" run_update)"
+expect "an old handoffs folder moves when the new one is absent" [ "$(cat "$home_moved/.local/share/handoffs/alpha/set-one/01-step.md" 2>/dev/null)" = kept ]
+expect "the old handoffs folder is gone after the move" [ ! -e "$home_moved/.claude/handoffs" ]
+expect "the handoffs move is reported" grep -qxF "Moved handoffs to ~/.local/share/handoffs" <<<"$output"
+
+home_merge="$sandbox/home-merge-handoffs"
+mkdir -p "$home_merge/.claude/handoffs/alpha/set-old" "$home_merge/.claude/handoffs/beta/set-two" "$home_merge/.local/share/handoffs/alpha/set-new"
+echo "old alpha" > "$home_merge/.claude/handoffs/alpha/set-old/01-step.md"
+echo "beta" > "$home_merge/.claude/handoffs/beta/set-two/01-step.md"
+echo "new alpha" > "$home_merge/.local/share/handoffs/alpha/set-new/01-step.md"
+output="$(HOME="$home_merge" run_update)"
+expect "a clashing handoffs project folder is left in the old folder" [ "$(cat "$home_merge/.claude/handoffs/alpha/set-old/01-step.md" 2>/dev/null)" = "old alpha" ]
+expect "the clashing handoffs project keeps the new folder's files" [ "$(cat "$home_merge/.local/share/handoffs/alpha/set-new/01-step.md")" = "new alpha" ]
+expect "a handoffs project folder with no clash moves into the new folder" [ "$(cat "$home_merge/.local/share/handoffs/beta/set-two/01-step.md" 2>/dev/null)" = beta ]
+expect "the handoffs clash is reported" grep -qF "Left ~/.claude/handoffs/alpha: already in ~/.local/share/handoffs" <<<"$output"
+expect "the old handoffs folder stays while it holds a clash" [ -d "$home_merge/.claude/handoffs" ]
+
+home_loose="$sandbox/home-loose-handoffs"
+mkdir -p "$home_loose/.claude/handoffs/.hidden" "$home_loose/.local/share/handoffs/alpha"
+echo "note" > "$home_loose/.claude/handoffs/notes.md"
+echo "dot" > "$home_loose/.claude/handoffs/.hidden/x.md"
+echo "old index" > "$home_loose/.claude/handoffs/index.md"
+echo "new index" > "$home_loose/.local/share/handoffs/index.md"
+output="$(HOME="$home_loose" run_update)"
+expect "merge moves loose top-level files" [ "$(cat "$home_loose/.local/share/handoffs/notes.md" 2>/dev/null)" = note ]
+expect "merge moves top-level dot-folders" [ "$(cat "$home_loose/.local/share/handoffs/.hidden/x.md" 2>/dev/null)" = dot ]
+expect "a clashing loose file is left and reported" grep -qF "Left ~/.claude/handoffs/index.md: already in ~/.local/share/handoffs" <<<"$output"
+expect "a clashing loose file keeps the new folder's content" [ "$(cat "$home_loose/.local/share/handoffs/index.md")" = "new index" ]
+
+expect "merge reports how many items were left" grep -qxF "Left 1 items in ~/.claude/handoffs" <<<"$output"
+
+home_link="$sandbox/home-link-handoffs"
+mkdir -p "$home_link/.claude" "$home_link/.local/share/handoffs/alpha"
+ln -s "$home_link/.local/share/handoffs" "$home_link/.claude/handoffs"
+output="$(HOME="$home_link" run_update)"
+expect "a symlinked old folder is left alone" [ -L "$home_link/.claude/handoffs" ] && [ -d "$home_link/.local/share/handoffs/alpha" ]
+expect "a symlinked old folder prints nothing" bash -c '! grep -q handoffs <<<"$1"' _ "$output"
+
+home_override="$sandbox/home-override-handoffs"
+mkdir -p "$home_override/.claude/handoffs/alpha/set-one"
+echo "kept" > "$home_override/.claude/handoffs/alpha/set-one/01-step.md"
+HOME="$home_override" HANDOFFS_DIR="$sandbox/work-handoffs" run_update >/dev/null
+expect "HANDOFFS_DIR set leaves the old handoffs folder where it is" [ "$(cat "$home_override/.claude/handoffs/alpha/set-one/01-step.md")" = kept ]
+expect "HANDOFFS_DIR set creates no new handoffs folder" [ ! -e "$home_override/.local/share/handoffs" ]
+
+home_moved="$sandbox/home-moved-project-notes"
+mkdir -p "$home_moved/.claude/project-notes/alpha/set-one"
+echo "kept" > "$home_moved/.claude/project-notes/alpha/set-one/01-step.md"
+output="$(HOME="$home_moved" run_update)"
+expect "an old project-notes folder moves when the new one is absent" [ "$(cat "$home_moved/.local/share/project-notes/alpha/set-one/01-step.md" 2>/dev/null)" = kept ]
+expect "the old project-notes folder is gone after the move" [ ! -e "$home_moved/.claude/project-notes" ]
+expect "the project-notes move is reported" grep -qxF "Moved project notes to ~/.local/share/project-notes" <<<"$output"
+
+home_merge="$sandbox/home-merge-project-notes"
+mkdir -p "$home_merge/.claude/project-notes/alpha/set-old" "$home_merge/.claude/project-notes/beta/set-two" "$home_merge/.local/share/project-notes/alpha/set-new"
+echo "old alpha" > "$home_merge/.claude/project-notes/alpha/set-old/01-step.md"
+echo "beta" > "$home_merge/.claude/project-notes/beta/set-two/01-step.md"
+echo "new alpha" > "$home_merge/.local/share/project-notes/alpha/set-new/01-step.md"
+output="$(HOME="$home_merge" run_update)"
+expect "a clashing project-notes project folder is left in the old folder" [ "$(cat "$home_merge/.claude/project-notes/alpha/set-old/01-step.md" 2>/dev/null)" = "old alpha" ]
+expect "the clashing project-notes project keeps the new folder's files" [ "$(cat "$home_merge/.local/share/project-notes/alpha/set-new/01-step.md")" = "new alpha" ]
+expect "a project-notes project folder with no clash moves into the new folder" [ "$(cat "$home_merge/.local/share/project-notes/beta/set-two/01-step.md" 2>/dev/null)" = beta ]
+expect "the project-notes clash is reported" grep -qF "Left ~/.claude/project-notes/alpha: already in ~/.local/share/project-notes" <<<"$output"
+expect "the old project-notes folder stays while it holds a clash" [ -d "$home_merge/.claude/project-notes" ]
+
+home_override="$sandbox/home-override-project-notes"
+mkdir -p "$home_override/.claude/project-notes/alpha/set-one"
+echo "kept" > "$home_override/.claude/project-notes/alpha/set-one/01-step.md"
+HOME="$home_override" PROJECT_NOTES_DIR="$sandbox/work-project-notes" run_update >/dev/null
+expect "PROJECT_NOTES_DIR set leaves the old project-notes folder where it is" [ "$(cat "$home_override/.claude/project-notes/alpha/set-one/01-step.md")" = kept ]
+expect "PROJECT_NOTES_DIR set creates no new project-notes folder" [ ! -e "$home_override/.local/share/project-notes" ]
+
+home_moved="$sandbox/home-moved-brainstorm"
+mkdir -p "$home_moved/.claude/brainstorm/alpha/set-one"
+echo "kept" > "$home_moved/.claude/brainstorm/alpha/set-one/01-step.md"
+output="$(HOME="$home_moved" run_update)"
+expect "an old brainstorm folder moves when the new one is absent" [ "$(cat "$home_moved/.local/share/brainstorm/alpha/set-one/01-step.md" 2>/dev/null)" = kept ]
+expect "the old brainstorm folder is gone after the move" [ ! -e "$home_moved/.claude/brainstorm" ]
+expect "the brainstorm move is reported" grep -qxF "Moved brainstorm to ~/.local/share/brainstorm" <<<"$output"
+
+home_merge="$sandbox/home-merge-brainstorm"
+mkdir -p "$home_merge/.claude/brainstorm/alpha/set-old" "$home_merge/.claude/brainstorm/beta/set-two" "$home_merge/.local/share/brainstorm/alpha/set-new"
+echo "old alpha" > "$home_merge/.claude/brainstorm/alpha/set-old/01-step.md"
+echo "beta" > "$home_merge/.claude/brainstorm/beta/set-two/01-step.md"
+echo "new alpha" > "$home_merge/.local/share/brainstorm/alpha/set-new/01-step.md"
+output="$(HOME="$home_merge" run_update)"
+expect "a clashing brainstorm project folder is left in the old folder" [ "$(cat "$home_merge/.claude/brainstorm/alpha/set-old/01-step.md" 2>/dev/null)" = "old alpha" ]
+expect "the clashing brainstorm project keeps the new folder's files" [ "$(cat "$home_merge/.local/share/brainstorm/alpha/set-new/01-step.md")" = "new alpha" ]
+expect "a brainstorm project folder with no clash moves into the new folder" [ "$(cat "$home_merge/.local/share/brainstorm/beta/set-two/01-step.md" 2>/dev/null)" = beta ]
+expect "the brainstorm clash is reported" grep -qF "Left ~/.claude/brainstorm/alpha: already in ~/.local/share/brainstorm" <<<"$output"
+expect "the old brainstorm folder stays while it holds a clash" [ -d "$home_merge/.claude/brainstorm" ]
+
+home_override="$sandbox/home-override-brainstorm"
+mkdir -p "$home_override/.claude/brainstorm/alpha/set-one"
+echo "kept" > "$home_override/.claude/brainstorm/alpha/set-one/01-step.md"
+HOME="$home_override" BRAINSTORM_DIR="$sandbox/work-brainstorm" run_update >/dev/null
+expect "BRAINSTORM_DIR set leaves the old brainstorm folder where it is" [ "$(cat "$home_override/.claude/brainstorm/alpha/set-one/01-step.md")" = kept ]
+expect "BRAINSTORM_DIR set creates no new brainstorm folder" [ ! -e "$home_override/.local/share/brainstorm" ]
+
 [ "$failures" -eq 0 ] || exit 1

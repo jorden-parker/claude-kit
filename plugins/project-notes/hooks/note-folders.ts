@@ -1,6 +1,6 @@
 import type { EngineInterface } from "claude-code";
 
-type NoteStore = { name: string; homeFolder?: string };
+type NoteStore = { name: string; homeFolder: string };
 type FolderVerdict = {
   label: string;
   fileCount: number;
@@ -9,15 +9,17 @@ type FolderVerdict = {
 };
 
 export const NOTE_STORES: NoteStore[] = [
-  { name: "handoffs" },
-  { name: "project-notes" },
+  { name: "handoffs", homeFolder: ".local/share/handoffs" },
+  { name: "project-notes", homeFolder: ".local/share/project-notes" },
   { name: "small-plans", homeFolder: ".local/share/small-plans" },
-  { name: "brainstorm" },
+  { name: "brainstorm", homeFolder: ".local/share/brainstorm" },
 ];
 
 const GIT_FOLDER_SUFFIX = /(\/\.git|\/\.bare|\.git)$/;
 const CLAUDE_WORKTREE_PATH = /^(.+?)\/\.claude\/worktrees\/[^/]+/;
 const CWD_LINE = /^cwd: (.+)$/m;
+const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n/;
+const TOPIC_LINE = /^topic: /m;
 const PROJECT_LINE = /^project: .*$/m;
 const HANDOFF_NUMBER = /^(\d+)-(.*)$/;
 const HANDOFF_NUMBER_WIDTH = 3;
@@ -71,7 +73,7 @@ async function readStoreRootOverrides(engine: EngineInterface) {
 async function resolveStoreRoot(engine: EngineInterface, store: NoteStore) {
   return (
     (await readStoreRootOverrides(engine))[store.name] ??
-    `${(await engine.env.get("HOME")) ?? ""}/${store.homeFolder ?? `.claude/${store.name}`}`
+    `${(await engine.env.get("HOME")) ?? ""}/${store.homeFolder}`
   );
 }
 
@@ -110,7 +112,11 @@ async function readRecordedCwds(engine: EngineInterface, files: string[]) {
   );
   return [
     ...new Set(
-      texts.flatMap((text) => text.match(CWD_LINE)?.[1]?.trim() ?? [])
+      texts.flatMap((text) =>
+        TOPIC_LINE.test(FRONT_MATTER.exec(text)?.[1] ?? "")
+          ? []
+          : (text.match(CWD_LINE)?.[1]?.trim() ?? [])
+      )
     ),
   ];
 }

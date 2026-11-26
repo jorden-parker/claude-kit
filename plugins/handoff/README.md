@@ -4,7 +4,7 @@
 
 ## Usage
 
-The first word picks the action. Anything else is the focus, which centers the recap on one topic. There are no flags.
+The first word picks the action. Anything else is the focus, which centers the recap on one topic. The only flag is `--topic <name>`, described under Topics.
 
 | Command                                | What it does                                                                       |
 | -------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -14,6 +14,14 @@ The first word picks the action. Anything else is the focus, which centers the r
 | `/handoff resume [id] [extra context]` | Put a saved handoff into the composer of a fresh session: the latest, or one by id |
 
 Typing `/handoff ` suggests the actions.
+
+## Topics
+
+A handoff can belong to a named topic instead of a repository. `--topic <name>` (one word, anywhere in the arguments) files it under that name, asks no repository question and adds a `topic: <name>` line after `cwd:` in the saved file.
+
+- `/handoff save --topic <name>`
+- `/handoff list --topic <name>`
+- `/handoff resume --topic <name> [id]`
 
 - `/handoff the failing test` centers the recap on the failing test
 - `/handoff save the auth change` leaves the composer alone and prints the handoff's id and file path
@@ -50,7 +58,7 @@ A handoff can hinge on decisions only you can make. Before the recap is written,
 Each handoff is one file:
 
 ```
-~/.claude/handoffs/<project>/<id>-<title>.md
+~/.local/share/handoffs/<project>/<id>-<title>.md
 ```
 
 - The project is the repository the work is about. The recap writer names it on a `Repository:` line when it differs from the session's; the line is dropped from the saved recap. When the work could belong to several repositories, /handoff asks you which one before saving. With no such line, it is the repository the session is in, not the folder. A linked worktree, or a worktree of a bare repository (`thing.git`, `thing/.bare`), files its handoffs with the repository it belongs to, so every worktree of one repository shares one list. This needs git 2.31 or newer; outside git, or with an older git, the project is the working directory's own name, except inside `<repo>/.claude/worktrees/<name>`, which files under `<repo>`. `/project-notes audit` moves handoffs an older version saved under a worktree's name

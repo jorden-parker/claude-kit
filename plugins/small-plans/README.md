@@ -17,7 +17,7 @@ Typing `/small-plans ` suggests the actions.
 
 Each planning command has Claude list the work that is left, check it against the project as it is now, and save one plan per small change with the `write_small_plan` tool. Work that waits on a decision only you can make is left out and named in the reply.
 
-No handoff is needed. `handoff` is one source of work among three, and it needs the handoff plugin only to have saved a handoff under `~/.claude/handoffs` (`/handoff save`). Run again on a handoff that already has plans, it keeps them and adds plans only for work they do not cover.
+No handoff is needed. `handoff` is one source of work among three, and it needs the handoff plugin only to have saved a handoff under `~/.local/share/handoffs` (`/handoff save`). Run again on a handoff that already has plans, it keeps them and adds plans only for work they do not cover.
 
 While `build` runs, a build board above the prompt shows each plan as a WAIT, RUN, PASS or FAIL pill with its elapsed time, and stays until you press `h` to hide it or the next build starts. `/small-plans board` shows a hidden board again.
 
@@ -69,13 +69,14 @@ The tool refuses a plan, and names every problem at once, when:
 
 Plans used to live in `~/.claude/small-plans`; `claude-kit-update` moves that folder to `~/.local/share/small-plans` after updating plugins, leaving any project folder that already exists at the new path in place.
 
+- A plain `project` name that is not an absolute path is used as given, so a plan can belong to a topic that is not a repository; an absolute path is resolved to its repository.
 - `<project>` is the repository the plan changes. Claude picks it from the work being planned, not from the folder the session started in, and asks you when more than one repository fits. The folder is named after the repository, shared by its worktrees (the name the handoff plugin uses too), also from a deleted `<repo>/.claude/worktrees/<name>` worktree. Build plans saved for another repository from a session in that repository
 - `<set>` groups the plans of one planning run: the date and time (UTC), added by the tool, then the short name Claude gives the work, such as `2026-11-19-1542-dark-mode-toggle`. A later plan saved under the same short name within the hour joins that set; after that the short name starts a new set, and the older one takes plans by its full folder name. A set planned from a handoff ends in `handoff-<handoff file name>`, such as `2026-11-19-1542-handoff-007-fix-login`
 - `<order>` is the plan's place in the build order, two digits; `<slug>` comes from the title
 - Each file starts with front matter: `title`, `project`, `set`, `order`, `kind`, `status`, `depends_on` when it has any, and `created`
 - `status` is `pending`, `in-progress`, `done` or `blocked`. The `set_small_plan_status`, `start_small_plan` and `finish_small_plan` tools change it, and only for files under the plans folder
 - `index.md` lists every plan of the set in build order: order, linked title, kind, status and depends on. The plugin rewrites it each time a plan is saved, changes status, or is changed with Edit or Write. Do not edit it by hand: the next rewrite replaces it
-- Set `SMALL_PLANS_DIR` to keep the plans in another folder. Handoffs are read from `~/.claude/handoffs`, or `HANDOFFS_DIR` when set
+- Set `SMALL_PLANS_DIR` to keep the plans in another folder. Handoffs are read from `~/.local/share/handoffs`, or `HANDOFFS_DIR` when set
 
 The files are plain Markdown: edit, move or delete them with any tool. The claude-notes viewer also rewrites `index.md` when it saves, adds, moves or deletes a plan, and hides it from its list. A change made with any other tool reaches `index.md` at the next save or status change in that set. A set you write by hand builds like any other.
 

@@ -51,7 +51,8 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   `subagent_type`) that names no `model`, since it would run on the session
   model. Plugin agents keep the model their own file pins.
   It also denies Edit, Write, MultiEdit and NotebookEdit of any file outside
-  `~/.claude` and the temp folders, and points Claude at `guards:worker`. The
+  `~/.claude`, the note stores `~/.local/share/{handoffs,project-notes,small-plans,brainstorm}`
+  and the temp folders, and points Claude at `guards:worker`. The
   one exception: an Edit or MultiEdit whose old and new strings total 1,000
   characters or less is allowed, so small edits stay in the main session.
   Subagents are never limited. Claude Code only. Opt out with

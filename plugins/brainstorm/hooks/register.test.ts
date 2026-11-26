@@ -9,7 +9,7 @@ import { expect, mock, test, type Engine } from "claude-code/testing";
 const RENDER_TOOL = "mcp__brainstorm__render_brainstorm";
 const CHECK_TOOL = "mcp__brainstorm__check_brainstorm_plan";
 const STATUS_TOOL = "mcp__brainstorm__set_brainstorm_plan_status";
-const BRAINSTORM_FOLDER = "/home/tester/.claude/brainstorm/repo";
+const BRAINSTORM_FOLDER = "/home/tester/.local/share/brainstorm/repo";
 const PLANS_FOLDER = `${BRAINSTORM_FOLDER}/plans`;
 const NOVEMBER_NINTH_NOON = Date.UTC(2026, 10, 9, 12, 0, 0);
 
@@ -136,7 +136,7 @@ test("the command's argument hint names the focus and the plan and build modes",
   });
 
   expect(argumentHintByCommand["brainstorm"]).toBe(
-    "[focus] | plan <picks> | build [runs]"
+    "[focus] | plan <picks> | build [runs] [--topic <name>]"
   );
 });
 
@@ -244,7 +244,7 @@ test("a worktree saves its brainstorm under the main repository's name", async (
   await renderBrainstorm($, VALID_INPUT);
 
   expect(findPage(writes)?.path).toBe(
-    "/home/tester/.claude/brainstorm/acme/brainstorm-2026-11-09-1200.html"
+    "/home/tester/.local/share/brainstorm/acme/brainstorm-2026-11-09-1200.html"
   );
 });
 
@@ -260,7 +260,7 @@ test("a deleted worktree saves its brainstorm under the main repository's name",
   await renderBrainstorm($, VALID_INPUT);
 
   expect(findPage(writes)?.path).toBe(
-    "/home/tester/.claude/brainstorm/acme/brainstorm-2026-11-09-1200.html"
+    "/home/tester/.local/share/brainstorm/acme/brainstorm-2026-11-09-1200.html"
   );
 });
 
@@ -273,7 +273,39 @@ test("a brainstorm about another repository is saved under that repository's nam
   });
 
   expect(findPage(writes)?.path).toBe(
-    "/home/tester/.claude/brainstorm/notes-app/brainstorm-2026-11-09-1200.html"
+    "/home/tester/.local/share/brainstorm/notes-app/brainstorm-2026-11-09-1200.html"
+  );
+});
+
+const RESEARCH_FOLDER = "/home/tester/.local/share/brainstorm/research";
+
+test("render_brainstorm with a plain topic name saves the page under that name with no repository", async ($, on) => {
+  const { writes } = mockEngine(on, {}, "/work/acme/.git\n");
+
+  await renderBrainstorm($, { ...VALID_INPUT, folder: "research" });
+
+  expect(findPage(writes)?.path).toBe(
+    `${RESEARCH_FOLDER}/brainstorm-2026-11-09-1200.html`
+  );
+});
+
+test("a brainstorm without a topic still saves under the repository name", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  expect(findPage(writes)?.path).toBe(
+    `${BRAINSTORM_FOLDER}/brainstorm-2026-11-09-1200.html`
+  );
+});
+
+test("with no BRAINSTORM_DIR the page is saved under the local share folder", async ($, on) => {
+  const { writes } = mockEngine(on);
+
+  await renderBrainstorm($, VALID_INPUT);
+
+  expect(findPage(writes)?.path).toBe(
+    "/home/tester/.local/share/brainstorm/repo/brainstorm-2026-11-09-1200.html"
   );
 });
 
@@ -299,7 +331,7 @@ test("a brainstorm folder an earlier version left in the project is moved to the
   expect(ranCommands).toContainEqual([
     "mkdir",
     "-p",
-    "/home/tester/.claude/brainstorm",
+    "/home/tester/.local/share/brainstorm",
   ]);
   expect(ranCommands).toContainEqual([
     "mv",
@@ -586,6 +618,22 @@ test("brainstorm plan submits a planning turn for the picked ideas from the newe
   expect(instructions).toContain(`${PLANS_FOLDER}/plan-2026-11-09-1200`);
   expect(instructions).not.toContain("plan-2026-11-09-1200.md");
   expect(instructions).toContain("/brainstorm build");
+});
+
+test("/brainstorm plan --topic research reads ideas from the topic folder", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, {
+    [`${RESEARCH_FOLDER}/brainstorm-2026-11-08-1500.json`]:
+      JSON.stringify(SAVED_BRAINSTORM),
+  });
+
+  const reply = await $.command.run(
+    buildBrainstormCommand("plan --topic research 2")
+  );
+  await clock.settle();
+
+  expect(reply.text).toContain(`${RESEARCH_FOLDER}/plans/plan-2026-11-09-1200`);
+  expect(submittedPrompts[0]).toContain("Replay mode for bug reports");
 });
 
 test("the planning acknowledgement names the run folder it writes", async ($, on) => {
@@ -876,6 +924,23 @@ test("brainstorm build with no run named has the skill list the runs to pick fro
   expect(submittedPrompts[0]).not.toContain("<runs>");
 });
 
+test("/brainstorm build --topic research picks from the topic's runs", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockHome(on);
+  const listedFolders: string[] = [];
+  on("session.cwd", () => ({ value: "/repo" }));
+  on("fs.list", (_, e) => {
+    listedFolders.push(e.path);
+    return { deny: `ENOENT: ${e.path}` };
+  });
+
+  await $.command.run(buildBrainstormCommand("build --topic research all"));
+  await clock.settle();
+
+  expect(listedFolders).toEqual([`${RESEARCH_FOLDER}/plans`]);
+  expect(submittedPrompts[0]).toContain(`${RESEARCH_FOLDER}/plans`);
+});
+
 test("brainstorm build passes the named runs to the skill as the user wrote them", async ($, on) => {
   const { clock, submittedPrompts } = recordSubmittedPrompts(on);
   mockHome(on);
@@ -892,7 +957,7 @@ test("brainstorm build passes the named runs to the skill as the user wrote them
   );
 });
 
-test("brainstorm build leaves finding the runs to the skill and lists no folder", async ($, on) => {
+test("brainstorm build with no readable run lists only the plans folder and leaves the rest to the skill", async ($, on) => {
   const { clock } = recordSubmittedPrompts(on);
   mockHome(on);
   const listedFolders: string[] = [];
@@ -905,7 +970,230 @@ test("brainstorm build leaves finding the runs to the skill and lists no folder"
   await $.command.run(buildBrainstormCommand("build all"));
   await clock.settle();
 
-  expect(listedFolders).toEqual([]);
+  expect(listedFolders).toEqual([PLANS_FOLDER]);
+});
+
+const runFiles = (runName: string, status: string) => ({
+  [`${PLANS_FOLDER}/${runName}/index.md`]: CLEAN_INDEX.replace(
+    "| pending |",
+    `| ${status} |`
+  ),
+  [`${PLANS_FOLDER}/${runName}/01-replay/plan.md`]: CLEAN_PLAN.replace(
+    "- Status: pending",
+    `- Status: ${status}`
+  ),
+});
+
+const sixUnfinishedRuns = () =>
+  Object.assign(
+    {},
+    ...[1, 2, 3, 4, 5, 6].map((day) =>
+      runFiles(`plan-2026-11-0${day}-1200`, "pending")
+    )
+  );
+
+type AskedQuestion = { questions: { options: { label: string }[] }[] };
+type PaneOpening = { focus?: boolean; closeOnEscape?: boolean; title?: string };
+
+const trackPane = (on: On, isPlaced: boolean) => {
+  const openings: PaneOpening[] = [];
+  on("ui.open", (_, e) => {
+    openings.push(e as unknown as PaneOpening);
+    return {
+      value: isPlaced
+        ? { isPlaced: true as const }
+        : { isPlaced: false as const, reason: "no-surface" as const },
+    };
+  });
+  on("ui.close", () => ({ value: undefined }));
+  on("ui.toast", () => ({ value: undefined }));
+  return openings;
+};
+
+const answerAskUserQuestion = (on: On, ...chosenLabels: string[]) => {
+  const askedQuestions: AskedQuestion[] = [];
+  const remainingLabels = [...chosenLabels];
+  trackPane(on, false);
+  on("tool.call", { tool: "AskUserQuestion" }, (_, e) => {
+    const askedQuestion = e as unknown as AskedQuestion & {
+      questions: { question: string }[];
+    };
+    askedQuestions.push(askedQuestion);
+    const chosenLabel = remainingLabels.shift();
+    if (chosenLabel === undefined) return { deny: "dismissed" };
+    const question = askedQuestion.questions[0]?.question ?? "";
+    return {
+      result: { ...askedQuestion, answers: { [question]: chosenLabel } },
+    } as never;
+  });
+  return askedQuestions;
+};
+
+const askedLabels = (askedQuestions: AskedQuestion[]) =>
+  askedQuestions.flatMap(({ questions }) =>
+    questions.flatMap(({ options }) => options.map(({ label }) => label))
+  );
+
+test("/brainstorm build with two unfinished runs asks which run, newest first", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, {
+    ...runFiles("plan-2026-11-07-1200", "pending"),
+    ...runFiles("plan-2026-11-08-1500", "in-progress"),
+    ...runFiles("plan-2026-11-09-1200", "done"),
+  });
+  const askedQuestions = answerAskUserQuestion(on, "plan-2026-11-07-1200");
+
+  await $.command.run(buildBrainstormCommand("build"));
+  await clock.settle();
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "plan-2026-11-08-1500",
+    "plan-2026-11-07-1200",
+  ]);
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain(`${PLANS_FOLDER}/plan-2026-11-07-1200`);
+  expect(submittedPrompts[0]).not.toContain("plan-2026-11-08-1500");
+});
+
+test("/brainstorm build pages the run picker so no run is dropped when no pane opens", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, sixUnfinishedRuns());
+  const askedQuestions = answerAskUserQuestion(
+    on,
+    "3 more…",
+    "plan-2026-11-02-1200"
+  );
+
+  await $.command.run(buildBrainstormCommand("build"));
+  await clock.settle();
+
+  expect(askedLabels([askedQuestions[0] as AskedQuestion])).toEqual([
+    "plan-2026-11-06-1200",
+    "plan-2026-11-05-1200",
+    "plan-2026-11-04-1200",
+    "3 more…",
+  ]);
+  expect(askedLabels([askedQuestions[1] as AskedQuestion])).toEqual([
+    "plan-2026-11-03-1200",
+    "plan-2026-11-02-1200",
+    "plan-2026-11-01-1200",
+  ]);
+  expect(submittedPrompts[0]).toContain(`${PLANS_FOLDER}/plan-2026-11-02-1200`);
+});
+
+test("/brainstorm build lists every run in a picker pane", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, sixUnfinishedRuns());
+  const openings = trackPane(on, true);
+
+  const reply = await $.command.run(buildBrainstormCommand("build"));
+  const drawing = await $.ui.mount({
+    plugin: "brainstorm",
+    component: "Pane",
+    requestId: "brainstorm-picker-pane",
+    surface: "terminal",
+    props: {},
+  } as never);
+
+  expect(openings).toHaveLength(1);
+  expect(openings[0]?.focus).toBe(true);
+  expect(openings[0]?.closeOnEscape).toBe(true);
+  expect(reply.text).toContain("pane");
+  expect(
+    (await drawing.findAll({ type: "Button" })).map((button) => button.key)
+  ).toEqual([6, 5, 4, 3, 2, 1].map((day) => `pick-plan-2026-11-0${day}-1200`));
+  expect(
+    await drawing.find({
+      type: "Text",
+      text: "Tab moves · Enter picks · Esc closes",
+    })
+  ).toBeDefined();
+  await drawing.press({ key: "pick-plan-2026-11-03-1200" });
+  await clock.settle();
+  await drawing.unmount();
+  expect(submittedPrompts[0]).toContain(`${PLANS_FOLDER}/plan-2026-11-03-1200`);
+});
+
+test("/brainstorm build with one unfinished run builds it without asking", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, {
+    ...runFiles("plan-2026-11-08-1500", "pending"),
+    ...runFiles("plan-2026-11-09-1200", "done"),
+  });
+  const openings = trackPane(on, true);
+
+  await $.command.run(buildBrainstormCommand("build"));
+  await clock.settle();
+
+  expect(openings).toHaveLength(0);
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain("The user named no run");
+});
+
+test("/brainstorm build with a text matching one run uses it without asking", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, sixUnfinishedRuns());
+  const openings = trackPane(on, true);
+
+  await $.command.run(buildBrainstormCommand("build 11-04"));
+  await clock.settle();
+
+  expect(openings).toHaveLength(0);
+  expect(submittedPrompts[0]).toContain(`${PLANS_FOLDER}/plan-2026-11-04-1200`);
+});
+
+test("/brainstorm build keeps a run with no readable index in the picker", async ($, on) => {
+  const { clock } = recordSubmittedPrompts(on);
+  mockFileTree(on, {
+    ...runFiles("plan-2026-11-08-1500", "pending"),
+    ...runFiles("plan-2026-11-07-1500", "done"),
+    [`${PLANS_FOLDER}/plan-2026-11-09-1200/draft.md`]: "still writing",
+  });
+  const askedQuestions = answerAskUserQuestion(on);
+
+  await $.command.run(buildBrainstormCommand("build"));
+  await clock.settle();
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "plan-2026-11-09-1200",
+    "plan-2026-11-08-1500",
+  ]);
+});
+
+test("/brainstorm build with a text matching no run says so", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, sixUnfinishedRuns());
+  const openings = trackPane(on, true);
+
+  const reply = await $.command.run(buildBrainstormCommand("build zebra"));
+  await clock.settle();
+
+  expect(reply.text).toContain('No unfinished run is named like "zebra"');
+  expect(reply.text).toContain("plan-2026-11-06-1200");
+  expect(openings).toHaveLength(0);
+  expect(submittedPrompts).toEqual([]);
+});
+
+test("/brainstorm --topic with no name asks for a name and starts nothing", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+
+  const reply = await $.command.run(buildBrainstormCommand("ideas --topic"));
+  await clock.settle();
+
+  expect(reply.text).toBe("--topic needs a name.");
+  expect(submittedPrompts).toEqual([]);
+});
+
+test("/brainstorm build replies Nothing picked and submits nothing when the ask is dismissed", async ($, on) => {
+  const { clock, submittedPrompts } = recordSubmittedPrompts(on);
+  mockFileTree(on, sixUnfinishedRuns());
+  answerAskUserQuestion(on);
+
+  const reply = await $.command.run(buildBrainstormCommand("build"));
+  await clock.settle();
+
+  expect(reply.text).toBe("Nothing picked.");
+  expect(submittedPrompts).toEqual([]);
 });
 
 test("a focus that names plan or build after its first word is still a brainstorm", async ($, on) => {

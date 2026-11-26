@@ -38,10 +38,10 @@ Saving a note places a small NOTE card in the transcript with the title, categor
 ## Storage
 
 ```
-~/.claude/project-notes/<project>/<category>/<date>-<slug>.md
+~/.local/share/project-notes/<project>/<category>/<date>-<slug>.md
 ```
 
-- `<project>` is the repository the note is about. Claude picks it from the note's subject (the files, services and repositories it names), not from the folder the session started in, and passes a folder inside that repository; the plugin files it under the repository's name, shared by its worktrees (also a deleted `<repo>/.claude/worktrees/<name>` one). When more than one repository fits, Claude asks you which one before saving. With no project given, the note goes under the session's repository, or the project root's folder name outside git
+- `<project>` is the repository the note is about, or a plain name used as given for a topic that is not a repository (an absolute path is resolved to its repository). Claude picks it from the note's subject (the files, services and repositories it names), not from the folder the session started in, and passes a folder inside that repository; the plugin files it under the repository's name, shared by its worktrees (also a deleted `<repo>/.claude/worktrees/<name>` one). When more than one repository fits, Claude asks you which one before saving. With no project given, the note goes under the session's repository, or the project root's folder name outside git
 - `<date>` is the day the note was written (UTC), or for a filed session note the day that session started; `<slug>` comes from the title
 - A second note with the same title on the same day gets `-2`, `-3` and so on, so nothing is overwritten
 - Each file starts with front matter: `title`, `category`, `project`, `created`, and `source` for a filed session note
@@ -63,9 +63,9 @@ Run `claude-notes` in a terminal to browse every saved note in the browser. See 
 
 ## Auditing where notes are saved
 
-`/project-notes edit <change>` has Claude change a saved note, handoff, small plan or brainstorm: it finds the file under the store folders, reads it, and changes it with Edit, never a shell command, so the small-plans index is rewritten. Edits and overwrites of existing files in any store under `~/.claude` need no permission (small plans live under `~/.local/share/small-plans`, the others under `~/.claude`); new files, `index.md` files and anything outside the stores still ask.
+`/project-notes edit <change>` has Claude change a saved note, handoff, small plan or brainstorm: it finds the file under the store folders, reads it, and changes it with Edit, never a shell command, so the small-plans index is rewritten. Edits and overwrites of existing files in any store under `~/.local/share` need no permission; new files, `index.md` files and anything outside the stores still ask.
 
-`/project-notes audit` checks the folders of every store (`handoffs`, `project-notes`, `small-plans`, `brainstorm`, under `~/.claude` except small plans, which default to `~/.local/share/small-plans`; each moved by its `*_DIR` variable) for project folders named after a worktree instead of the repository. Claude calls `audit_note_folders`, which changes nothing and reports:
+`/project-notes audit` checks the folders of every store (`handoffs`, `project-notes`, `small-plans`, `brainstorm`, each under `~/.local/share/<store>` by default; each moved by its `*_DIR` variable) for project folders named after a worktree instead of the repository. Claude calls `audit_note_folders`, which changes nothing and reports:
 
 - Misplaced folders, with the repository each belongs to. The evidence is a handoff's `cwd:` line (resolved through git, or the `<repo>/.claude/worktrees/<name>` path when git no longer knows it) or a name in this repository's `git worktree list`. A folder name tied to a repository in one store is mapped the same way in the others
 - Folders it cannot tie to a repository, such as a temporary folder; Claude asks you where each belongs

@@ -19,6 +19,7 @@ install any of them on its own. Sync scripts install the same plugins into
 | [guards](plugins/guards/) | Command guards: caps unbounded git log, diff and find at 150 lines, trims long Bash and MCP output and saves the full text to a file, caps Reads of large files at 300 lines, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and, opted in, asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
 | [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.local/share/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
+| [tidy-notes](plugins/tidy-notes/) | `/tidy-notes` reformats the Markdown notes in the handoffs, project-notes, small-plans and brainstorm stores so they are consistently formatted without changing their content; a dry run lists what would change and what looks wrong, and `/tidy-notes apply` writes the changes |
 | [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.local/share/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement a whole set or one plan while the session reviews and sends back fixes; `rename <set> <new name>` renames a set. |
 | [token-ledger](plugins/token-ledger/) | Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool), shows a one-line summary after each turn, prints a report of recent sessions, and suggests `/handoff` then `/clear` when the context grows large. |
 | [ledger-tune](plugins/ledger-tune/) | Reads the token-ledger data, recommends changes that cut context, tokens and cost, applies the ones you pick and verifies them against later sessions. |
@@ -195,7 +196,7 @@ servers on install.
   installed as they are. Hooks that read Claude Code's transcript format may never
   block in Qwen Code; the script warns for each.
 - **register.ts plugins** (`brainstorm`, `ui-design`, `draft-pr`, `handoff`,
-  `small-plans`, `project-notes`, `prompt-optimizer`) are installed with their MCP server and
+  `small-plans`, `project-notes`, `tidy-notes`, `prompt-optimizer`) are installed with their MCP server and
   commands. Their `hooks/hooks.json` is dropped so Qwen Code does not warn about an
   invalid `modules` hook event.
 - **Output styles** (`adhd-style`) are copied to `~/.qwen/output-styles/`, since Qwen

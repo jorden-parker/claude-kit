@@ -90,8 +90,8 @@ if ! has_claude_kit_marketplace; then
   claude plugin marketplace add "$repository_root"
 fi
 
-echo "Updating every marketplace"
-claude plugin marketplace update
+echo "Updating the claude-kit marketplace"
+claude plugin marketplace update claude-kit
 
 updated_items=()
 update_pattern='updated from ([^[:space:]]+) to ([^[:space:]]+)'

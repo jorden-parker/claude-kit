@@ -79,6 +79,7 @@ expect() {
 }
 called() { grep -qxF -- "$1" "$claude_calls"; }
 not_called() { ! grep -qF -- "$1" "$claude_calls"; }
+not_called_exactly() { ! grep -qxF -- "$1" "$claude_calls"; }
 links_to() { [ "$(readlink "$link_directory/$1")" = "$2" ]; }
 calls_in_order() {
   local first_line second_line
@@ -93,12 +94,13 @@ status=$?
 expect "a fresh machine exits 0" [ "$status" -eq 0 ]
 expect "this checkout is pulled" called "git -C $repository_root pull --ff-only"
 expect "the checkout is pulled before the marketplaces are updated" \
-  calls_in_order "git -C $repository_root pull --ff-only" "plugin marketplace update"
+  calls_in_order "git -C $repository_root pull --ff-only" "plugin marketplace update claude-kit"
 expect "a missing claude-kit marketplace is added from this checkout" called "plugin marketplace add $repository_root"
-expect "every marketplace is updated after the add" \
-  calls_in_order "plugin marketplace add $repository_root" "plugin marketplace update"
+expect "the claude-kit marketplace is updated after the add" \
+  calls_in_order "plugin marketplace add $repository_root" "plugin marketplace update claude-kit"
 expect "plugins are updated after the marketplaces" \
-  calls_in_order "plugin marketplace update" "plugin update handoff@claude-kit --scope user"
+  calls_in_order "plugin marketplace update claude-kit" "plugin update handoff@claude-kit --scope user"
+expect "other marketplaces are not updated" not_called_exactly "plugin marketplace update"
 expect "installed plugins of other marketplaces are not updated" not_called "plugin update ponytail@ponytail"
 expect "an available claude-kit plugin that is not installed is not updated" not_called "plugin update new-plugin@claude-kit"
 expect "an available claude-kit plugin that is not installed is never installed" not_called "plugin install"

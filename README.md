@@ -79,7 +79,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 
 1. Pulls this checkout (`git pull --ff-only`)
 2. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
-3. Updates every marketplace
+3. Updates the claude-kit marketplace
 4. Updates every installed claude-kit plugin in its own scope
 5. Links `claude-notes`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 

@@ -20,7 +20,7 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   at `limit: 150`, keeping the `offset`, and tells Claude the file's length so
   it can read on. Denies a text file over 5 MB unless `limit` is 300 or less.
   Denies a file over 20,000 bytes with very long lines (minified) and points
-  Claude at `cut -c1-400` or `head -c 4000`.
+  Claude at `head -c 3600 FILE | fold -w 200` slices or `grep -o`.
 - **delegation-rules** (SessionStart): makes the main session an orchestrator.
   It plans, talks to the user and judges results, and hands lookups to
   `guards:context-scout` and implementation and verification to `guards:worker`

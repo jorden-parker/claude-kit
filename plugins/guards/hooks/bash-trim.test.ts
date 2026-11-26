@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decide, pruneSavedOutputs } from "./bash-trim.ts";
+import { capCharacters, decide, pruneSavedOutputs } from "./bash-trim.ts";
 
 const EIGHT_DAYS_MILLISECONDS = 8 * 24 * 60 * 60 * 1000;
 
@@ -179,7 +179,7 @@ test("an MCP result of one 50,000-character line is replaced and capped", () => 
   const result = runMcp(fullText);
   const trimmedText: string =
     result.output.hookSpecificOutput.updatedToolOutput;
-  expect(trimmedText.length).toBeLessThanOrEqual(8_500);
+  expect(trimmedText.length).toBeLessThanOrEqual(8_000);
   expect(trimmedText.startsWith("start")).toBe(true);
   expect(trimmedText.endsWith("end")).toBe(true);
   expect(trimmedText).toContain(
@@ -268,9 +268,9 @@ test("Agent and Task use a 4,000-character cap, other tools 8,000", () => {
   const text = "q".repeat(6_000);
   const agent = { ...shapes.Agent, handbackReport: { text } };
   for (const name of ["Agent", "Task"])
-    expect(trimmedBy(name, agent).handbackReport.text.length).toBeLessThan(
-      4_500
-    );
+    expect(
+      trimmedBy(name, agent).handbackReport.text.length
+    ).toBeLessThanOrEqual(4_000);
   expect(trimmedBy("Grep", { ...shapes.Grep, content: text })).toBeUndefined();
 });
 
@@ -322,4 +322,22 @@ test("hooks.json matches the capped tools and never the uncapped ones", () => {
   expect(matcher).toBe(
     "Bash|mcp__.*|Grep|Glob|WebFetch|WebSearch|Agent|Task|BashOutput|TaskOutput|ListMcpResourcesTool|ReadMcpResourceTool"
   );
+});
+
+test("capCharacters returns at most the cap and is idempotent", () => {
+  const text = `start${"x".repeat(9_992)}end`;
+  const once = capCharacters(text, 4_000, "/saved/a.txt");
+  expect(once.length).toBeLessThanOrEqual(4_000);
+  expect(once.startsWith("start")).toBe(true);
+  expect(once.endsWith("end")).toBe(true);
+  expect(capCharacters(once, 4_000, "/saved/a.txt")).toBe(once);
+});
+
+test("a second trim pass over a capped Agent result changes nothing", () => {
+  const text = "q".repeat(6_000);
+  const first = trimmedBy("Agent", {
+    ...shapes.Agent,
+    handbackReport: { text },
+  });
+  expect(trimmedBy("Agent", first)).toBeUndefined();
 });

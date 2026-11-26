@@ -75,7 +75,7 @@ export function decide(event: HookEvent): HookResult {
   );
   if (longLines)
     return deny(
-      `${input.file_path} has very long lines (likely minified). Read it in slices with Bash: head -c 4000 FILE, then tail -c +4001 FILE | head -c 4000, or grep -o for the part you need.`
+      `${input.file_path} has very long lines (likely minified). Read it in slices with Bash: head -c 3600 FILE | fold -w 200, then tail -c +3601 FILE | head -c 3600 | fold -w 200 for the next slice, or grep -o for the part you need.`
     );
   if (!megabytes && !lines) return null;
   if (megabytes || !canRewriteInput(event))

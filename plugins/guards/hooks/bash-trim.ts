@@ -46,10 +46,12 @@ export const capCharacters = (
   savedPath: string
 ): string => {
   if (text.length <= maxCharacters) return text;
-  const headCharacters = Math.floor(maxCharacters / 2);
-  const tailCharacters = maxCharacters - headCharacters;
-  const omitted = text.length - maxCharacters;
-  const marker = `[bash-trim: ${omitted} characters hidden from the middle; full output in ${savedPath}: grep it]`;
+  const markerFor = (omitted: number) =>
+    `[bash-trim: ${omitted} characters hidden from the middle; full output in ${savedPath}: grep it]`;
+  const kept = Math.max(0, maxCharacters - markerFor(text.length).length - 2);
+  const headCharacters = Math.floor(kept / 2);
+  const tailCharacters = kept - headCharacters;
+  const marker = markerFor(text.length - kept);
   return `${text.slice(0, headCharacters)}\n${marker}\n${text.slice(text.length - tailCharacters)}`;
 };
 

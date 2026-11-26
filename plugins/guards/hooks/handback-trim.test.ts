@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { decide as decideBash } from "./bash-trim.ts";
 import { decide } from "./handback-trim.ts";
 
 const captured = JSON.parse(
@@ -47,7 +48,7 @@ test("a long message from a listed agent is cut to head and tail", () => {
     expect(input.message.startsWith("start")).toBe(true);
     expect(input.message.endsWith("end")).toBe(true);
     expect(input.message).toContain("full output in /saved/s1-t1-message.txt");
-    expect(input.message.length).toBeLessThan(4_300);
+    expect(input.message.length).toBeLessThanOrEqual(4_000);
     expect(result.savedOutputs).toEqual([
       { path: "/saved/s1-t1-message.txt", text: long },
     ]);
@@ -59,4 +60,17 @@ test("other agent types, short messages and a bridge pass", () => {
   expect(run(long, undefined)).toBeNull();
   expect(run("m".repeat(4_000), "Explore")).toBeNull();
   expect(run(long, "Explore", "1")).toBeNull();
+});
+
+test("a trimmed 6,000-character message fits and a second trim pass changes nothing", () => {
+  const message = "m".repeat(6_000);
+  const trimmed = run(message, "Explore").output.hookSpecificOutput.updatedInput
+    .message;
+  expect(trimmed.length).toBeLessThanOrEqual(4_000);
+  expect(
+    decideBash({
+      tool_name: "Agent",
+      tool_response: { handbackReport: { text: trimmed } },
+    })
+  ).toBeNull();
 });

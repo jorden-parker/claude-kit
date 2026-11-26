@@ -83,7 +83,9 @@ test("denies a minified one-line file even with a limit", () => {
   const decision = cappedRead({ file_path: minified, limit: 100 });
   expect(decision.permissionDecision).toBe("deny");
   expect(decision.permissionDecisionReason).toContain("very long lines");
-  expect(decision.permissionDecisionReason).toContain("tail -c +4001");
+  expect(decision.permissionDecisionReason).toContain(
+    "head -c 3600 FILE | fold -w 200"
+  );
 });
 test("allows a normal 30,000-byte file with a limit", () =>
   expect(decide({ tool_input: { file_path: normal, limit: 100 } })).toBeNull());

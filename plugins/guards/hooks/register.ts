@@ -1,5 +1,6 @@
 import type { Register } from "claude-code";
 import { mergeGrants } from "./hook-bypass.ts";
+import { parseSavedModels, resolveSpawn } from "./repository-agents.ts";
 
 const TOOL_NAME = "request_hook_bypass";
 const QUALIFIED_TOOL_NAME = `mcp__guards__${TOOL_NAME}`;
@@ -30,7 +31,28 @@ const localClock = (epochSeconds: number) => {
   return `${hours}:${minutes}`;
 };
 
+const SAVED_MODELS_FILE = ".claude/agent-models.json";
+
 export const register: Register = (subscribe) => {
+  subscribe("agent.spawn", async (engine, event, next) => {
+    let savedText = "";
+    try {
+      const home = await engine.env.get("HOME");
+      if (home)
+        savedText = String(
+          await engine.fs.read(`${home}/${SAVED_MODELS_FILE}`)
+        );
+    } catch {
+      savedText = "";
+    }
+    const decision = resolveSpawn(
+      event.subagentType,
+      parseSavedModels(savedText)
+    );
+    if ("deny" in decision) return { deny: decision.deny };
+    return next(decision.model ? { ...event, model: decision.model } : event);
+  });
+
   subscribe("session.start", async (engine, event, next) => {
     await engine.tool.register({
       name: TOOL_NAME,

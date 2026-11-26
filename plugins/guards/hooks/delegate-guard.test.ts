@@ -304,19 +304,20 @@ test("denies an Explore agent even on haiku and names the scout", () => {
 
 test.each([
   { subagent_type: "general-purpose" },
+  { subagent_type: "general-purpose", model: "sonnet" },
   { subagent_type: "claude" },
   { prompt: "no agent type" },
-])("denies a general agent that names no model: %j", (input) => {
+])("denies an agent outside the repository: %j", (input) => {
   const result = decideDelegation(mainEvent("Agent", input), "");
   expect(isDenied(result)).toBe(true);
-  expect(reasonOf(result)).toContain('"haiku"');
+  expect(reasonOf(result)).toContain("guards:generalist");
 });
 
 test.each(["haiku", "sonnet", "opus"])(
-  "allows a general agent that names the model %s",
+  "allows guards:generalist naming the model %s",
   (model) => {
     const event = mainEvent("Agent", {
-      subagent_type: "general-purpose",
+      subagent_type: "guards:generalist",
       model,
     });
     expect(decideDelegation(event, "")).toBeNull();
@@ -488,17 +489,6 @@ const withDelegationModel = (value: string | undefined, run: () => void) => {
     else process.env.GUARDS_DELEGATE_MODEL = previous;
   }
 };
-
-test("denies a general agent with no model and names the GUARDS_DELEGATE_MODEL model", () => {
-  withDelegationModel("sonnet", () => {
-    const result = decideDelegation(
-      mainEvent("Agent", { subagent_type: "general-purpose", prompt: "x" }),
-      ""
-    );
-    expect(isDenied(result)).toBe(true);
-    expect(reasonOf(result)).toContain('name model: "sonnet"');
-  });
-});
 
 test.each([
   { subagent_type: "guards:worker" },

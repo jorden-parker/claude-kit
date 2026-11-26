@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { transcriptTail } from "./browser-check.ts";
 import { GIT_OPTIONS, withoutQuotedText } from "./bash-guard.ts";
 import { isClaudeLiteSession } from "./claude-lite.ts";
+import {
+  isRepositoryAgent,
+  describeBlockedAgent,
+} from "./repository-agents.ts";
 import { deny, type HookEvent, type HookResult } from "./types.ts";
 
 export const DEFAULT_DELEGATION_MODEL = "haiku";
@@ -13,8 +17,6 @@ const SCOUT_PROMPT_LIMIT = 1_500;
 const SCOUT_AGENT = "guards:context-scout";
 const WORKER_AGENT = "guards:worker";
 const EDIT_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
-const DEFAULT_AGENT = "general-purpose";
-const SESSION_MODEL_AGENTS = [DEFAULT_AGENT, "claude"];
 const LOOKUP_TOOLS = ["Read", "Grep", "Glob"];
 const DELEGATION_TOOLS = ["Agent", "Task"];
 const TOOL_BLOCK_MARK = '"tool_';
@@ -64,11 +66,11 @@ function isExempt(event: HookEvent): boolean {
 
 function delegationProblem(event: HookEvent): HookResult {
   const input = event.tool_input ?? {};
-  const agentType = input.subagent_type ?? DEFAULT_AGENT;
-  const promptLength = String(input.prompt ?? "").length;
-  if (agentType === "Explore") {
-    return deny(`Explore is denied. Use subagent_type: "${SCOUT_AGENT}".`);
+  const agentType = input.subagent_type;
+  if (!isRepositoryAgent(agentType)) {
+    return deny(describeBlockedAgent(agentType));
   }
+  const promptLength = String(input.prompt ?? "").length;
   if (agentType === SCOUT_AGENT && promptLength > SCOUT_PROMPT_LIMIT) {
     return deny(
       `The scout prompt is ${promptLength} characters; the limit is ${SCOUT_PROMPT_LIMIT}. Send only the question and the paths to start from.`
@@ -82,11 +84,6 @@ function delegationProblem(event: HookEvent): HookResult {
   ) {
     return deny(
       `GUARDS_DELEGATE_MODEL is "${delegationModel}". Name model: "${delegationModel}" on this ${agentType} call.`
-    );
-  }
-  if (SESSION_MODEL_AGENTS.includes(agentType) && input.model === undefined) {
-    return deny(
-      `Use subagent_type: "${WORKER_AGENT}" to write code or run checks, "${SCOUT_AGENT}" to read or search, or name model: "${delegationModel}". With no model, this agent runs on the session model, the costliest choice.`
     );
   }
   return null;

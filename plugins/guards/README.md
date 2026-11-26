@@ -93,6 +93,29 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   searches the codebase and replies in 25 lines and 3,000 characters at most with the conclusion and
   `path:line` references. delegate-guard sends Claude here.
 
+## Only this repository's subagents run
+
+Claude Code may spawn only subagent types defined in this repository
+(`plugins/*/agents/*.md`); `fork`, `general-purpose`, `Explore`, `claude`,
+other plugins' agents and a call with no `subagent_type` are refused. Two
+points enforce it:
+
+- delegate-guard (PreToolUse on Agent and Task) denies the call with the
+  allowed types and a hint. It is off with `GUARDS_DELEGATE_GUARD=0`, in a
+  subagent, and under claude-lite.
+- The `agent.spawn` hook refuses the spawn itself, so it also catches spawns
+  that bypass the tool call. `GUARDS_DELEGATE_GUARD=0` does not switch it off.
+
+Four agents replace the built-in ones: `guards:web-researcher` (Haiku; web
+fetch and search, replaces web-fetch and claude-code-guide), `guards:planner`
+(Sonnet, read-only; replaces Plan), `guards:reviewer` (Sonnet, read-only
+review for bugs) and `guards:generalist` (Sonnet, every tool; replaces
+general-purpose, claude and statusline-setup).
+
+The `agent.spawn` hook reads `~/.claude/agent-models.json` on every spawn and
+applies the saved model of that agent type. A missing or unreadable file
+means no saved models. Run `cd agent-models && go run .` to pick each agent's model; it saves them to that file.
+
 bash-guard and read-guard rewrite the call only in Claude Code. Qwen Code, pi,
 OpenCode and Crush cannot take a rewritten call, so there both guards deny
 with the reason, as they did before.

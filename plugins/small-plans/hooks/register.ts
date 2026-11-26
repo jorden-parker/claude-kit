@@ -1277,7 +1277,7 @@ const checkSmallPlan = async (
   );
   if (check.isRefused)
     return {
-      deny: `Claude Code refused the check command \`${checkCommand}\` because the same Bash command was denied earlier in this session: ${check.output}. Retrying is refused the same way, and so is running it with Bash. Stop and tell the user: they can allow it (approve it when asked, or add Bash(${checkCommand}) to permissions.allow), then call ${CHECK_TOOL_NAME} again.`,
+      deny: `Claude Code refused the check command \`${checkCommand}\` ${check.output}. Retrying is refused the same way, and so is running it with Bash. Stop and tell the user what it says.`,
     };
   const changedFiles = await listChangedFiles(engine, worktree);
   const fileLines = changedFiles.map((changedFile) =>
@@ -2249,24 +2249,40 @@ export const register: Register = (on) => {
       : splitHandoff($, "", laterWords.join(" "));
   });
 
+  on("tool.run", { tool: QUALIFIED_WRITE_TOOL_NAME as never }, ($, e) =>
+    writeSmallPlan($, e as unknown as Record<string, unknown>)
+  );
+
+  on("tool.run", { tool: QUALIFIED_STATUS_TOOL_NAME as never }, ($, e) =>
+    setPlanStatus($, e as unknown as Record<string, unknown>)
+  );
+
+  on("tool.run", { tool: QUALIFIED_START_TOOL_NAME as never }, ($, e) =>
+    startSmallPlan($, e as unknown as Record<string, unknown>)
+  );
+
+  on("tool.run", { tool: QUALIFIED_FINISH_TOOL_NAME as never }, ($, e) =>
+    finishSmallPlan($, e as unknown as Record<string, unknown>)
+  );
+
+  on("tool.run", { tool: QUALIFIED_CHECK_TOOL_NAME as never }, ($, e) =>
+    checkSmallPlan($, e as unknown as Record<string, unknown>)
+  );
+
+  on("tool.run", { tool: QUALIFIED_LIST_TOOL_NAME as never }, ($, e) =>
+    listSmallPlans($, e as unknown as Record<string, unknown>)
+  );
+
+  on("tool.run", { tool: QUALIFIED_RENAME_TOOL_NAME as never }, ($, e) =>
+    renameSmallPlanSet($, e as unknown as Record<string, unknown>)
+  );
+
+  on("tool.run", { tool: QUALIFIED_UPDATE_TOOL_NAME as never }, ($, e) =>
+    updateSmallPlan($, e as unknown as Record<string, unknown>)
+  );
+
   on("tool.call", async ($, e, next) => {
     const toolInput = e as unknown as Record<string, unknown>;
-    if (e.tool === (QUALIFIED_WRITE_TOOL_NAME as string))
-      return writeSmallPlan($, toolInput);
-    if (e.tool === (QUALIFIED_STATUS_TOOL_NAME as string))
-      return setPlanStatus($, toolInput);
-    if (e.tool === (QUALIFIED_START_TOOL_NAME as string))
-      return startSmallPlan($, toolInput);
-    if (e.tool === (QUALIFIED_FINISH_TOOL_NAME as string))
-      return finishSmallPlan($, toolInput);
-    if (e.tool === (QUALIFIED_CHECK_TOOL_NAME as string))
-      return checkSmallPlan($, toolInput);
-    if (e.tool === (QUALIFIED_LIST_TOOL_NAME as string))
-      return listSmallPlans($, toolInput);
-    if (e.tool === (QUALIFIED_RENAME_TOOL_NAME as string))
-      return renameSmallPlanSet($, toolInput);
-    if (e.tool === (QUALIFIED_UPDATE_TOOL_NAME as string))
-      return updateSmallPlan($, toolInput);
     if (!FILE_EDITING_TOOLS.includes(e.tool)) return next(e);
     const toolResult = await next(e);
     const setFolder = findPlanSetFolder(

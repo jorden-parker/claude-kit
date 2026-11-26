@@ -141,7 +141,7 @@ const mockEngine = (
 };
 
 const callTool = ($: Engine, tool: string, toolInput: object = {}) =>
-  $.tool.call({ tool, ...toolInput } as never) as Promise<{
+  $.tool.run({ tool, ...toolInput } as never) as Promise<{
     result?: string;
     deny?: string;
   }>;
@@ -2008,7 +2008,17 @@ test("check_small_plan denies without a report when Claude Code refuses the chec
 
   expect(reply.deny).toContain("refused");
   expect(reply.deny).toContain("Retrying is refused");
+  expect(reply.deny).not.toContain("earlier in this session");
   expect(files.has(CHECK_REPORT)).toBe(false);
+});
+
+test("check_small_plan is answered at tool.run with the check report", async ($, on) => {
+  const { runs } = mockGit(on, checkGit("src/auth.ts"), CHECK_SEED);
+
+  const reply = await runCheck($);
+
+  expect(reply.result).toContain("Check: exit 0");
+  expect(runs.filter((run) => run.argv[0] === "sh")).toHaveLength(1);
 });
 
 test("check_small_plan refuses a call with no command and runs nothing", async ($, on) => {

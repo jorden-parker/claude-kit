@@ -64,8 +64,12 @@ const WRITE_TOOL_NAME = "write_small_plan";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
 const STATUS_TOOL_NAME = "set_small_plan_status";
 const QUALIFIED_STATUS_TOOL_NAME = `mcp__small-plans__${STATUS_TOOL_NAME}`;
+const WORKTREE_TOOL_NAME = "small_plan_worktree";
+const QUALIFIED_WORKTREE_TOOL_NAME = `mcp__small-plans__${WORKTREE_TOOL_NAME}`;
 const IMPLEMENTER_AGENT = "small-plans:small-plan-implementer";
 const CHECKER_AGENT = "small-plans:small-plan-checker";
+const REVIEWER_AGENT = "small-plans:small-plan-reviewer";
+const BRANCH_CONVENTION_FILE_NAME = "branch-convention.md";
 const PLAN_SHAPE = `The body holds these "## " headings, in this order: ${PLAN_SECTIONS.join(", ")}.
 - Goal: one sentence on what is true when the plan is done.
 - Context: all that the implementer must know and cannot guess: each file by its path, the exact names of the functions, types and commands involved, and the decisions already made. The implementer sees this plan only, never this conversation or another plan.
@@ -102,7 +106,7 @@ const WRITE_TOOL_SCHEMA = {
     project: {
       type: "string",
       description:
-        "The repository the plan changes, as an absolute folder path inside it. Choose it from the work being planned (the files, services and repositories it names), not from the working directory. Leave it out only when the work is in the working directory's repository. When the work could belong to more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before calling.",
+        "The repository the plan changes, as an absolute folder path inside it. Leave it out when that is the working directory's repository.",
     },
   },
   required: ["set", "order", "title", "kind", "body", "depends_on"],
@@ -114,6 +118,22 @@ const STATUS_TOOL_SCHEMA = {
     status: { type: "string", enum: STATUSES },
   },
   required: ["path", "status"],
+};
+
+const WORKTREE_TOOL_SCHEMA = {
+  type: "object",
+  properties: {
+    repository: {
+      type: "string",
+      description:
+        "An absolute folder path inside the repository the plan changes.",
+    },
+    slug: {
+      type: "string",
+      description: "The plan slug, such as add-login.",
+    },
+  },
+  required: ["repository", "slug"],
 };
 
 const trimText = (requestedText: unknown) =>
@@ -410,6 +430,41 @@ const setPlanStatus = async (
   };
 };
 
+const gitOutput = (
+  engine: EngineInterface,
+  folder: string,
+  ...args: string[]
+) =>
+  engine.process
+    .run(["git", "-C", folder, ...args])
+    .then((outcome) => (outcome.exitCode === 0 ? outcome.stdout.trim() : ""))
+    .catch(() => "");
+
+const worktreeFolder = async (
+  engine: EngineInterface,
+  toolInput: Record<string, unknown>
+) => {
+  const repository = trimText(toolInput.repository);
+  const slug = trimText(toolInput.slug);
+  if (!slug || slug.includes("/") || slug === "." || slug === "..")
+    return { deny: `The slug must be one folder name, such as add-login.` };
+  const top =
+    (await gitOutput(engine, repository, "rev-parse", "--show-toplevel")) ||
+    (await gitOutput(
+      engine,
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir"
+    ));
+  if (!top) return { deny: `${repository} is not inside a git repository.` };
+  const parent = top.slice(0, top.lastIndexOf("/"));
+  let candidate = `${parent}/${slug}`;
+  for (let copy = 2; await engine.fs.exists(candidate); copy++)
+    candidate = `${parent}/${slug}-${copy}`;
+  return { result: `Worktree folder: ${candidate}` };
+};
+
 const askClaude = (engine: EngineInterface, instruction: string) => {
   engine.clock.after(0, () => void engine.prompt.submit({ text: instruction }));
 };
@@ -424,46 +479,43 @@ const composePlanInstruction = (
     `1. List the work that is still left. Check each item against the project as it is now (the files it names, the recent commits) and drop what is already done. If nothing is left, say so and stop.
 2. Split that work into plans. A plan is one change that a small model can implement in one sitting and a second small model can review in one read: one goal, at most ${MAX_STEPS} steps, few files. Work that needs more becomes two plans. Leave out work that waits on a decision only the user can make.
 3. Declare the dependency order: number the plans from 1 so that each one needs earlier plans only, and its number is its place in the build order.
-4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set "${setName}", its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs ([] when it needs none), and its body.`,
+4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set "${setName}", its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs ([] when it needs none), and its body. Set "project" from the work being planned (the files, services and repositories it names), not from the working directory; when it could be more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before saving.`,
     PLAN_SHAPE,
     `The plugin writes ${INDEX_FILE_NAME} in the set folder, listing every plan with its order, kind, status and dependencies, and rewrites it each time a plan is saved, edited with Edit or Write, or changes status. Never write or edit ${INDEX_FILE_NAME} yourself, and change a plan file only with Edit or Write, never with a shell command, so the index stays true.`,
     ...laterNotes,
     `When every plan is saved, reply with one line per plan (order, kind, title, the orders it depends on), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them.`,
   ].join("\n\n");
 
-const composeBuildInstruction = (setFolder: string, planName: string) => `${
+const composeBuildInstruction = (
+  setFolder: string,
+  planName: string,
+  projectFolder: string
+) => `${
   planName
     ? `Build only the plan at ${setFolder}/${planName}.md. If its depends_on names a plan in ${setFolder} that is not done, stop and say which.`
     : `Build the plans in ${setFolder}.`
-} You coordinate and review: never edit project files yourself. Change a plan's status only with ${QUALIFIED_STATUS_TOOL_NAME}, which also rewrites the set's ${INDEX_FILE_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand.
+} You coordinate: never edit project files or read diffs yourself. Change a plan's status only with ${QUALIFIED_STATUS_TOOL_NAME}, which also rewrites the set's ${INDEX_FILE_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand.
 
 ${
   planName
     ? ""
     : "Read each plan file's front matter and take the plans in file-name order. Skip a plan whose status is done. A plan whose depends_on names a plan that is not done waits until that plan is done.\n\n"
 }Each plan is built in its own git worktree, on its own branch:
-- Branch name: read the repository's own rules first: CONTRIBUTING.md, CLAUDE.md, AGENTS.md, and the guides under .github/ and docs/, then the names \`git branch -a --sort=-committerdate | head -n 20\` shows. Where the repository states a convention, as a work repository does, follow it exactly, ticket number and all. Only when it states none, name the branch \`<type>/<plan slug>\`, the type from the plan's kind: feat for a feature, bug for a fix, refactor, test, docs or chore.
+- Branch name: when ${projectFolder}/${BRANCH_CONVENTION_FILE_NAME} exists, follow the convention it states. Otherwise start an Explore agent with model "haiku" to read the repository's CONTRIBUTING.md, CLAUDE.md, AGENTS.md, the guides under .github/ and docs/, and \`git branch -a --sort=-committerdate | head -n 20\`, and reply with the branch naming convention in one line, or "none"; write that line to the file with Write. When the convention is none, name the branch \`<type>/<plan slug>\`, the type from the plan's kind: feat for a feature, bug for a fix, refactor, test, docs or chore.
 - Base: the branch of the plan it depends on, when it depends on one; otherwise the branch checked out where the build started.
-- Place: run \`git rev-parse --git-common-dir\`. When \`git -C <that folder> rev-parse --is-bare-repository\` prints true, the repository is bare: put the worktree beside the main worktree, as a sibling folder. In any other repository, put it beside the repository's top folder. Either way the folder is named after the plan slug alone, such as \`add-login\` for the branch \`feat/add-login\`: no type, no repository name and no ticket prefix. When a folder of that name already exists and is not this plan's worktree, add \`-2\`. Never put it inside the repository.
-- Create it with \`git worktree add -b <branch> <path> <base>\`. When \`git worktree list\` already shows a worktree on that branch, left by an earlier build, reuse it.
-- Run every git command, check, lint, fallow and test of the plan in its worktree, as \`cd <path> && ...\` or \`git -C <path> ...\`.
-
-Before you start a plan, and again whenever a step or a failure shows it, look for a missing step: anything the plan needs that none of its steps provides, such as a dependency that is not installed, a migration, generated code, a config value, or a file or function that another plan creates. Do not build on and wait for it to fail. Take the missing step first: write it into the plan file ahead of the step that needs it and have the implementer do it, or, when another plan provides it, build that plan first and base this plan's branch on it. Ask the user only when the missing step needs something only the user can give.
+- Place: when \`git worktree list\` shows a worktree on that branch, left by an earlier build, reuse it. Otherwise call ${QUALIFIED_WORKTREE_TOOL_NAME} with the repository and the plan slug, and run \`git worktree add -b <branch> <path> <base>\` with the folder it returns.
+- Run every git command of the plan in its worktree, as \`cd <path> && ...\` or \`git -C <path> ...\`.
 
 For each plan:
-1. Set its status to in-progress with ${QUALIFIED_STATUS_TOOL_NAME}. Create or reuse the plan's worktree and note its path and branch.
+1. Set its status to in-progress with ${QUALIFIED_STATUS_TOOL_NAME}. Create or reuse the plan's worktree.
 2. Start the ${IMPLEMENTER_AGENT} agent. Its prompt is the plan file's absolute path, then a line \`Worktree: <path>\`. It answers DONE or BLOCKED.
-3. On DONE, start the ${CHECKER_AGENT} agent with the plan file's absolute path, then the \`Worktree: <path>\` line. In the worktree it runs the command under "## Check", \`git status --short\` and \`git diff --stat\`, the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json), \`fallow audit\` in a JavaScript or TypeScript project, and the project's tests, and answers PASS or FAIL for each with the output lines that show it. Then review the work yourself, like a tech lead reviewing a pull request against the plan. Trust nothing in the implementer's report. The checker's quoted output is the evidence for a to c; when a quote is missing or does not settle the point, run that command yourself:
-   a. The check's output matches "- Expect:".
-   b. Every file this plan changed is named in the plan; a change to any other file fails the review, unless it fixes a lint, fallow, code style or test failure a check or hook reported.
-   c. When lint, fallow or the tests fail, even with the plan's check passing, start a general-purpose agent with model "haiku" in the worktree to fix every reported failure, including pre-existing ones and ones in files the plan does not name, then start the checker again. Repeat until they pass; a failing guard never sets a plan to blocked or counts as a fix round.
-   d. Read the full \`git diff\` of the changed files. Every hunk traces to a step, the code the plan quotes is there as quoted, and each "## Review" line holds.
-   e. Read what each new or changed test asserts. A test that would pass without the change fails the review.
-4. When the review passes, commit and push that work in the plan's worktree: stage everything changed there, the plan's edits and its guard fixes; match the style of \`git log --oneline -n 10\`; commit with one short conventional subject line, such as \`git commit -m "feat(scope): add the toggle"\`, with no body and no Co-Authored-By or other attribution line; then run \`git push -u origin <branch>\` and \`git worktree remove <path>\`, which keeps the branch. Never commit or push work the review has not approved. If the commit or push fails, keep the worktree and say so in the plan's report line. Then set the status to done.
-5. When it fails, write numbered findings, each naming the step or "## Review" line, the file and line, and what the plan asks for that the work does not do. Start a new ${IMPLEMENTER_AGENT} agent with the plan file's absolute path, the \`Worktree: <path>\` line, a blank line, then the findings. Review its work again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
-6. When the implementer answers BLOCKED, or the work still fails review after ${MAX_FIX_ROUNDS} fix rounds, do not stop there. Read the failing output, the plan and the code it touches, work out the root cause, and fix it: start a new ${IMPLEMENTER_AGENT} agent with the failure output and the cause you found, or correct the plan file when the plan itself is wrong, then run the checks and the review again. Keep going while each attempt changes the failure. Set the status to blocked only when the fix needs something only the user can give (a decision, a credential, access), or when two attempts in a row leave the failure unchanged; the reason then says what you tried and what is still needed. Keep its worktree so the next build carries on there, and go on with the next plan that does not depend on it.
+3. On DONE, start the ${CHECKER_AGENT} agent with the same two lines. When its Lint, Fallow or Tests result is FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, a blank line, then the failing lines, to fix every reported failure, then start the checker again. Repeat until they pass; a failing guard never sets a plan to blocked or counts as a fix round.
+4. Start the ${REVIEWER_AGENT} agent with the two lines, a blank line, then the checker's reply. It answers PASS or FAIL with numbered findings.
+5. On PASS, commit and push in the plan's worktree: stage everything changed there; commit with one short conventional subject line in the style of \`git log --oneline -n 10\`, with no body and no Co-Authored-By or other attribution line; run \`git push -u origin <branch>\` and \`git worktree remove <path>\`, which keeps the branch. Never commit work the review has not passed. If the commit or push fails, keep the worktree and say so in the plan's report line. Then set the status to done.
+6. On FAIL, start a new ${IMPLEMENTER_AGENT} agent with the two lines, a blank line, then the findings, and go again from step 3. Allow at most ${MAX_FIX_ROUNDS} fix rounds.
+7. When the implementer answers BLOCKED, or the work still fails after ${MAX_FIX_ROUNDS} fix rounds, find the root cause from the reported output and the plan: when another plan provides the missing piece, build that plan first and base this branch on it; when the plan is wrong, correct the plan file; otherwise start a new ${IMPLEMENTER_AGENT} agent with the failure and the cause. Keep going while each attempt changes the failure. Set the status to blocked only when the fix needs something only the user can give, or two attempts in a row leave the failure unchanged; the reason says what you tried and what is still needed. Keep its worktree and go on with the next plan that does not depend on it.
 
-When every plan is handled, commit and push the leftover work too, in the checkout where the build started: run \`git status --short\` and \`git log --oneline -n 50 @{u}..\`. Group the uncommitted changes that are left, including ones from before this build, into logical commits, one per concern, each with one short conventional subject line in the style of \`git log --oneline -n 10\`, with no body and no Co-Authored-By or other attribution line. Never commit a file that holds a secret, such as \`.env\`. Then run \`git push\` so no commit is left unpushed. If a commit or push fails, say so in the report.
+When every plan is handled, run \`git status --short\` in the checkout where the build started. When it shows changes, ask the user with AskUserQuestion whether to commit and push them as logical conventional commits, never a file that holds a secret such as \`.env\`.
 
 Finish with one line per plan: order, title, status, branch and the fix rounds it took, with the reason for each plan that is blocked or still waiting.`;
 
@@ -783,7 +835,10 @@ const buildPlans = async (
       text: `No plan was picked. Run /${COMMAND_NAME} build ${setName} <order> with one of the plans not done: ${planNames.join(", ")}.`,
     };
   await startBoard(engine, setFolder, setName);
-  askClaude(engine, composeBuildInstruction(setFolder, planName));
+  askClaude(
+    engine,
+    composeBuildInstruction(setFolder, planName, projectFolder)
+  );
   return {
     text: planName
       ? `Building plan ${planName} of set ${setName}…`
@@ -1074,7 +1129,7 @@ export const register: Register = (on) => {
     await $.command.register({
       name: COMMAND_NAME,
       description:
-        "Plan work as small plans a weaker model can implement and review: name the work, or leave it out to plan what this conversation leaves; handoff [id] plans what a saved handoff leaves; build [set] [plan order] has small-model agents implement a whole set or one plan of it while this session reviews and sends back fixes; rename <set> <new name> gives a saved set a new name",
+        "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename.",
       argumentHint:
         "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename <set> <new name>",
     });
@@ -1088,6 +1143,13 @@ export const register: Register = (on) => {
       name: STATUS_TOOL_NAME,
       description: `Sets the status of one saved small plan (${STATUSES.join(", ")}) in its front matter. Call it each time a plan's status changes.`,
       inputSchema: STATUS_TOOL_SCHEMA,
+      isDeferred: true,
+    });
+    await $.tool.register({
+      name: WORKTREE_TOOL_NAME,
+      description:
+        "Returns the folder to create a small plan's git worktree in: beside the repository's top folder, or beside the bare repository, named after the slug, with -2, -3 added when that folder already exists.",
+      inputSchema: WORKTREE_TOOL_SCHEMA,
       isDeferred: true,
     });
     return next(e);
@@ -1118,6 +1180,8 @@ export const register: Register = (on) => {
       return writeSmallPlan($, toolInput);
     if (e.tool === (QUALIFIED_STATUS_TOOL_NAME as string))
       return setPlanStatus($, toolInput);
+    if (e.tool === (QUALIFIED_WORKTREE_TOOL_NAME as string))
+      return worktreeFolder($, toolInput);
     if (!FILE_EDITING_TOOLS.includes(e.tool)) return next(e);
     const toolResult = await next(e);
     const setFolder = findPlanSetFolder(

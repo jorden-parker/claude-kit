@@ -409,6 +409,9 @@ test("/small-plans <work> plans that work with no handoff", async ($, on) => {
   expect(submittedPrompts[0]).toContain("Add a dark mode toggle!");
   expect(submittedPrompts[0]).toContain(WRITE_TOOL);
   expect(submittedPrompts[0]).toMatch(new RegExp(`set "${setPattern}"`));
+  expect(submittedPrompts[0]).toContain(
+    'Set "project" from the work being planned (the files, services and repositories it names), not from the working directory'
+  );
   expect(submittedPrompts[0]).not.toContain("handoff");
 });
 
@@ -577,22 +580,43 @@ test("/small-plans build runs the only set without asking", async ($, on) => {
   expect(submittedPrompts[0]).toContain(STATUS_TOOL);
 });
 
-test("/small-plans build has the session review each plan and send fixes to a new implementer", async ($, on) => {
+test("/small-plans build has a reviewer agent review each plan and send fixes to a new implementer", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "build", {
     [STANDALONE_SET_PLAN]: "status: pending",
   });
 
-  expect(submittedPrompts[0]).toContain("review the work yourself");
-  expect(submittedPrompts[0]).toContain("git diff");
   expect(submittedPrompts[0]).toContain(
-    "new small-plans:small-plan-implementer"
+    "Start the small-plans:small-plan-reviewer agent with the two lines"
   );
-  expect(submittedPrompts[0]).toContain("3 fix rounds");
-  expect(submittedPrompts[0]).toContain("work out the root cause");
-  expect(submittedPrompts[0]).toContain("only the user can give");
-  expect(submittedPrompts[0]).toContain("look for a missing step");
-  expect(submittedPrompts[0]).toContain("Take the missing step first");
-  expect(submittedPrompts[0]).not.toContain("small-plan-reviewer");
+  expect(submittedPrompts[0]).toContain(
+    "start a new small-plans:small-plan-implementer agent with the two lines, a blank line, then the findings"
+  );
+  expect(submittedPrompts[0]).toContain("at most 3 fix rounds");
+  expect(submittedPrompts[0]).toContain(
+    "find the root cause from the reported output and the plan"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "only when the fix needs something only the user can give"
+  );
+  expect(submittedPrompts[0]).toContain(
+    "Keep going while each attempt changes the failure"
+  );
+  expect(submittedPrompts[0]).not.toContain("general-purpose");
+});
+
+test("/small-plans build names the reviewer, the branch convention file and the worktree tool", async ($, on) => {
+  const { submittedPrompts } = await runCommand($, on, "build", {
+    [STANDALONE_SET_PLAN]: "status: pending",
+  });
+
+  expect(submittedPrompts[0]).toContain("small-plans:small-plan-reviewer");
+  expect(submittedPrompts[0]).toContain(
+    `${PROJECT_FOLDER}/branch-convention.md`
+  );
+  expect(submittedPrompts[0]).toContain(
+    "mcp__small-plans__small_plan_worktree"
+  );
+  expect(submittedPrompts[0]).not.toContain("general-purpose");
 });
 
 test("/small-plans build has a Haiku checker run the check, lint, fallow and tests", async ($, on) => {
@@ -603,7 +627,9 @@ test("/small-plans build has a Haiku checker run the check, lint, fallow and tes
   expect(submittedPrompts[0]).toContain(
     "start the small-plans:small-plan-checker agent"
   );
-  expect(submittedPrompts[0]).toContain("answers PASS or FAIL for each");
+  expect(submittedPrompts[0]).toContain(
+    "When its Lint, Fallow or Tests result is FAIL, start a new small-plans:small-plan-implementer agent"
+  );
   expect(submittedPrompts[0]).toContain("then start the checker again");
 });
 
@@ -612,17 +638,13 @@ test("/small-plans build has a failing guard fixed by a subagent instead of bloc
     [STANDALONE_SET_PLAN]: "status: pending",
   });
 
-  expect(submittedPrompts[0]).toContain("project's lint command");
-  expect(submittedPrompts[0]).toContain("fallow audit");
   expect(submittedPrompts[0]).toContain(
-    'start a general-purpose agent with model "haiku" in the worktree to fix every reported failure, including pre-existing ones and ones in files the plan does not name'
+    "start a new small-plans:small-plan-implementer agent with the two lines, a blank line, then the failing lines, to fix every reported failure"
   );
   expect(submittedPrompts[0]).toContain(
-    "a failing guard never sets a plan to blocked"
+    "a failing guard never sets a plan to blocked or counts as a fix round"
   );
-  expect(submittedPrompts[0]).toContain(
-    "unless it fixes a lint, fallow, code style or test failure a check or hook reported"
-  );
+  expect(submittedPrompts[0]).not.toContain("general-purpose");
 });
 
 test("/small-plans build commits and pushes each approved plan with a one-line subject", async ($, on) => {
@@ -631,30 +653,31 @@ test("/small-plans build commits and pushes each approved plan with a one-line s
   });
 
   expect(submittedPrompts[0]).toContain(
-    "When the review passes, commit and push that work"
+    "On PASS, commit and push in the plan's worktree"
   );
   expect(submittedPrompts[0]).toContain("one short conventional subject line");
   expect(submittedPrompts[0]).toContain(
     "no body and no Co-Authored-By or other attribution line"
   );
   expect(submittedPrompts[0]).toContain(
-    "Never commit or push work the review has not approved"
+    "Never commit work the review has not passed."
   );
 });
 
-test("/small-plans build commits and pushes leftover uncommitted and unpushed work at the end", async ($, on) => {
+test("/small-plans build asks before committing leftover work in the checkout where it started", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "build", {
     [STANDALONE_SET_PLAN]: "status: pending",
   });
 
   expect(submittedPrompts[0]).toContain(
-    "commit and push the leftover work too"
+    "run `git status --short` in the checkout where the build started"
   );
-  expect(submittedPrompts[0]).toContain("@{u}..");
   expect(submittedPrompts[0]).toContain(
-    "including ones from before this build, into logical commits, one per concern"
+    "ask the user with AskUserQuestion whether to commit and push them"
   );
-  expect(submittedPrompts[0]).toContain("so no commit is left unpushed");
+  expect(submittedPrompts[0]).toContain(
+    "never a file that holds a secret such as `.env`"
+  );
 });
 
 test("/small-plans build builds each plan in its own worktree on a branch named by the repository's rules", async ($, on) => {
@@ -663,21 +686,98 @@ test("/small-plans build builds each plan in its own worktree on a branch named 
   });
 
   expect(submittedPrompts[0]).toContain(
-    "Each plan is built in its own git worktree, on its own branch"
+    "Each plan is built in its own git worktree, on its own branch:"
   );
   expect(submittedPrompts[0]).toContain(
-    "as a work repository does, follow it exactly"
+    'follow the convention it states. Otherwise start an Explore agent with model "haiku"'
   );
   expect(submittedPrompts[0]).toContain("name the branch `<type>/<plan slug>`");
   expect(submittedPrompts[0]).toContain(
-    "put the worktree beside the main worktree, as a sibling folder"
+    "call mcp__small-plans__small_plan_worktree with the repository and the plan slug"
   );
-  expect(submittedPrompts[0]).toContain("Never put it inside the repository");
+  expect(submittedPrompts[0]).toContain("git worktree list");
   expect(submittedPrompts[0]).toContain("then a line `Worktree: <path>`");
   expect(submittedPrompts[0]).toContain("git push -u origin <branch>");
-  expect(submittedPrompts[0]).toContain("named after the plan slug alone");
+  expect(submittedPrompts[0]).toContain("git worktree remove <path>");
   expect(submittedPrompts[0]).toContain("bug for a fix");
-  expect(submittedPrompts[0]).not.toContain("<repository folder>-");
+});
+
+const WORKTREE_TOOL = "mcp__small-plans__small_plan_worktree";
+
+const mockWorktreeGit = (
+  on: On,
+  topLevel: string,
+  commonGitFolder: string,
+  existingFolders: string[] = []
+) => {
+  on("process.run", (_, e) => {
+    const stdout = e.argv.includes("--show-toplevel")
+      ? topLevel
+      : commonGitFolder;
+    return {
+      value: {
+        exitCode: stdout ? 0 : 128,
+        stdout: stdout ? `${stdout}\n` : "",
+        stderr: "",
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    };
+  });
+  on("fs.exists", (_, e) => ({ value: existingFolders.includes(e.path) }));
+  on("tool.call", () => ({ result: {} }));
+};
+
+test("a worktree folder for a plan sits beside the repository's top folder", async ($, on) => {
+  mockWorktreeGit(on, "/work/claude-kit", "/work/claude-kit/.git");
+
+  const reply = await callTool($, WORKTREE_TOOL, {
+    repository: "/work/claude-kit",
+    slug: "add-login",
+  });
+
+  expect(reply.result).toBe("Worktree folder: /work/add-login");
+});
+
+test("a worktree folder for a bare repository sits beside the bare repository", async ($, on) => {
+  mockWorktreeGit(on, "", "/work/claude-kit.git");
+
+  const reply = await callTool($, WORKTREE_TOOL, {
+    repository: "/work/claude-kit.git",
+    slug: "add-login",
+  });
+
+  expect(reply.result).toBe("Worktree folder: /work/add-login");
+});
+
+test("a worktree folder that already exists gets -2, then -3", async ($, on) => {
+  mockWorktreeGit(on, "/work/claude-kit", "/work/claude-kit/.git", [
+    "/work/add-login",
+    "/work/add-login-2",
+  ]);
+
+  const reply = await callTool($, WORKTREE_TOOL, {
+    repository: "/work/claude-kit",
+    slug: "add-login",
+  });
+
+  expect(reply.result).toBe("Worktree folder: /work/add-login-3");
+});
+
+test("a worktree folder is refused outside a git repository and for a slug that is not one folder name", async ($, on) => {
+  mockWorktreeGit(on, "", "");
+
+  const outside = await callTool($, WORKTREE_TOOL, {
+    repository: "/work/notes",
+    slug: "add-login",
+  });
+  const nested = await callTool($, WORKTREE_TOOL, {
+    repository: "/work/notes",
+    slug: "../add-login",
+  });
+
+  expect(outside.deny).toBe("/work/notes is not inside a git repository.");
+  expect(nested.deny).toContain("one folder name");
 });
 
 const SET_FOLDER = `${PROJECT_FOLDER}/${STANDALONE_SET}`;

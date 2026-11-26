@@ -4,14 +4,14 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 
 ## Usage
 
-| Command                                     | What it does                                                                                 |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `/small-plans <work to plan>`               | Plans the work you name                                                                      |
-| `/small-plans`                              | Plans the work this conversation still leaves to do                                          |
-| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`    |
-| `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, the session reviews and sends back fixes   |
-| `/small-plans rename <set> <new name>`      | Gives a saved set a new name; its date or handoff prefix stays, and the rest is the new name |
-| `/small-plans board`                        | Shows the build board again after you hide it                                                |
+| Command                                     | What it does                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `/small-plans <work to plan>`               | Plans the work you name                                                                          |
+| `/small-plans`                              | Plans the work this conversation still leaves to do                                              |
+| `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the four newest, or handoff `<id>`        |
+| `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, a Sonnet reviewer reviews and sends back fixes |
+| `/small-plans rename <set> <new name>`      | Gives a saved set a new name; its date or handoff prefix stays, and the rest is the new name     |
+| `/small-plans board`                        | Shows the build board again after you hide it                                                    |
 
 Typing `/small-plans ` suggests the actions.
 
@@ -72,15 +72,15 @@ The files are plain Markdown: edit, move or delete them with any tool. The claud
 
 Before a plan starts, and again when a step or a failure shows one, the build looks for a missing step: something the plan needs that no step provides, such as an uninstalled dependency or a file another plan creates. It adds that step ahead of the one that needs it, or builds the plan that provides it first, and asks you only when only you can supply it.
 
-The session coordinates and reviews; it edits no project file itself. For each plan, in order, the way shadcn's [improve](https://github.com/shadcn/improve) `execute` works:
+The session coordinates; it edits no project file and reads no diff itself. For each plan, in order, the way shadcn's [improve](https://github.com/shadcn/improve) `execute` works:
 
-1. The `small-plan-implementer` agent (Haiku) gets the plan's path, makes the edits and runs the check. It answers `DONE` or `BLOCKED`
-2. The `small-plan-checker` agent (Haiku, read-only) runs the check, `git diff --stat`, lint, fallow and the tests, and answers PASS or FAIL for each with the output lines that show it, so that output stays out of the session's context
-3. The session reviews the work like a pull request: from the checker's output it confirms the check passed and only files the plan names changed, then reads the diff against each step and `## Review` line, and reads what new tests assert. A failing lint, fallow or test run goes to a Haiku agent to fix
-4. On a failed review it writes numbered findings and starts a new implementer with them, then reviews again, up to 3 fix rounds
-5. When the implementer stays blocked or the fix rounds run out, the session works out the root cause and keeps fixing, and the plan ends `done`, or `blocked` only when the fix needs the user or two attempts in a row leave the failure unchanged. A plan that depends on one that is not done waits
+1. The `small-plan-implementer` agent (Haiku) gets the plan's path and its worktree, makes the edits and runs the check. It answers `DONE` or `BLOCKED`
+2. The `small-plan-checker` agent (Haiku, read-only) runs the check, `git diff --stat`, lint, fallow and the tests, and answers PASS or FAIL for each with the output lines that show it, so that output stays out of the session's context. A failing lint, fallow or test run goes to a new implementer agent to fix
+3. The `small-plan-reviewer` agent (Sonnet, read-only) reviews the work like a pull request: it confirms the check passed and only files the plan names changed, reads the diff against each step and `## Review` line, and reads what new tests assert. It answers PASS or FAIL with numbered findings
+4. On a FAIL the findings go to a new implementer, then the work is checked and reviewed again, up to 3 fix rounds
+5. On a PASS the plan's work is committed and pushed from its own worktree on its own branch, which is then removed; the branch stays. When the implementer stays blocked or the fix rounds run out, the session works out the root cause and keeps fixing, and the plan ends `done`, or `blocked` only when the fix needs the user or two attempts in a row leave the failure unchanged. A plan that depends on one that is not done waits
 
-Nothing is committed: the changes stay in your working tree.
+Work left uncommitted in the checkout where the build started is offered to you, with a question, to commit and push as conventional commits.
 
 ## Viewer
 

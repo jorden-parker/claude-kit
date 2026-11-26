@@ -30,6 +30,9 @@ const MAX_FIX_ROUNDS = 3;
 const SET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SET_PREFIX = /^(\d{4}-\d{2}-\d{2}-\d{4}(?:-handoff-\d+)?)-/;
 const STAMP_PREFIX = /^\d{4}-\d{2}-\d{2}-\d{4}-/;
+const HANDOFF_SET_PREFIX = /^\d{4}-\d{2}-\d{2}-\d{4}-handoff-\d+-/;
+const JOIN_WINDOW_MINUTES = 60;
+const JOIN_FUTURE_SLACK_MINUTES = 1;
 const REQUEST_WORDS = new Set([
   "plan",
   "plans",
@@ -412,17 +415,39 @@ const composeNewSetName = (slug: string) => {
   return `${stamp}-${slug}`;
 };
 
+const isRecentSet = (setName: string) => {
+  const stamp = setName.slice(0, 15);
+  const stampedTime = Date.parse(
+    `${stamp.slice(0, 10)}T${stamp.slice(11, 13)}:${stamp.slice(13, 15)}:00Z`
+  );
+  const minutesAgo = (Date.now() - stampedTime) / 60_000;
+  return (
+    minutesAgo <= JOIN_WINDOW_MINUTES &&
+    minutesAgo >= -JOIN_FUTURE_SLACK_MINUTES
+  );
+};
+
 const resolveSetName = async (
   engine: EngineInterface,
   projectFolder: string,
   requestedSet: string
 ) => {
   const savedSetNames = await listSavedSetNames(engine, projectFolder);
-  if (savedSetNames.includes(requestedSet) || SET_PREFIX.test(requestedSet))
+  if (
+    savedSetNames.includes(requestedSet) ||
+    HANDOFF_SET_PREFIX.test(requestedSet)
+  )
     return requestedSet;
+  if (STAMP_PREFIX.test(requestedSet))
+    return isRequestName(requestedSet.replace(STAMP_PREFIX, ""))
+      ? ""
+      : requestedSet;
   const slug = toSlug(requestedSet);
   const joinedSetName = savedSetNames.find(
-    (name) => STAMP_PREFIX.test(name) && name.replace(STAMP_PREFIX, "") === slug
+    (name) =>
+      STAMP_PREFIX.test(name) &&
+      name.replace(STAMP_PREFIX, "") === slug &&
+      isRecentSet(name)
   );
   if (joinedSetName) return joinedSetName;
   if (isRequestName(slug)) return "";
@@ -578,7 +603,7 @@ const writeSmallPlan = async (
   );
   if (savedName)
     return {
-      deny: `Plan ${order} is already saved at ${setFolder}/${savedName}, and a saved plan is never replaced. To change that plan call ${UPDATE_TOOL_NAME}; for a new plan use the next free order.`,
+      deny: `Plan ${order} is already saved at ${setFolder}/${savedName}, and a saved plan is never replaced. To change that plan call ${UPDATE_TOOL_NAME}; for a new plan use the next free order. For separate work pass a different set name.`,
     };
 
   const planPath = `${setFolder}/${orderPrefix}${toSlug(title)}.md`;
@@ -1433,7 +1458,7 @@ const renameSet = async (
 const askClaudeToRename = (engine: EngineInterface, requestedSet: string) => {
   askClaude(
     engine,
-    `Rename a saved set of small plans${requestedSet ? ` whose name holds "${requestedSet}"` : ""}. Call ${QUALIFIED_LIST_TOOL_NAME} to find it: the set this conversation made or talks about, else ask the user with AskUserQuestion which of the newest sets they mean. Then call ${QUALIFIED_RENAME_TOOL_NAME} with a name of 2 to 5 words taken from what the set's plans deliver, and reply with the old and new names.`
+    `Rename a saved set of small plans${requestedSet ? `. The user typed "${requestedSet}": if a saved set's name holds it, that is the set to rename; if none does, it is the new name for the set this conversation made or talks about.` : "."} Call ${QUALIFIED_LIST_TOOL_NAME} to find it: the set this conversation made or talks about, else ask the user with AskUserQuestion which of the newest sets they mean. Then call ${QUALIFIED_RENAME_TOOL_NAME} with a name of 2 to 5 words taken from what the set's plans deliver, and reply with the old and new names.`
   );
   return { text: "Renaming a set of small plans…" };
 };

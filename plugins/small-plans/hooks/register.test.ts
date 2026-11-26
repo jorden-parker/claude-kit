@@ -197,8 +197,11 @@ test("a new set gets its date and time from the tool", async ($, on) => {
   );
 });
 
+const currentStamp = () =>
+  new Date().toISOString().slice(0, 16).replace("T", "-").replace(":", "");
+
 test("a later plan with the same short name joins the set already saved", async ($, on) => {
-  const savedSetFolder = `${PROJECT_FOLDER}/2026-11-19-1542-dark-mode-toggle`;
+  const savedSetFolder = `${PROJECT_FOLDER}/${currentStamp()}-dark-mode-toggle`;
   const { files } = mockEngine(on, {
     [`${savedSetFolder}/01-first.md`]: "saved",
   });
@@ -218,7 +221,70 @@ test("a later plan with the same short name joins the set already saved", async 
       .filter((path) => path.startsWith(`${PROJECT_FOLDER}/`))
       .map((path) => path.slice(PROJECT_FOLDER.length + 1).split("/")[0])
   );
-  expect([...setFolders]).toEqual(["2026-11-19-1542-dark-mode-toggle"]);
+  expect([...setFolders]).toEqual([`${currentStamp()}-dark-mode-toggle`]);
+});
+
+test("a short name starts a new set when the saved set of that name is old", async ($, on) => {
+  const oldSetFolder = `${PROJECT_FOLDER}/2026-11-19-1542-fix-login`;
+  const { files } = mockEngine(on, {
+    [`${oldSetFolder}/01-first.md`]: "first",
+    [`${oldSetFolder}/02-second.md`]: "second",
+  });
+
+  const firstReply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    set: "fix-login",
+    order: 1,
+    depends_on: [],
+  });
+  const secondReply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    set: "fix-login",
+    order: 2,
+    depends_on: [1],
+  });
+
+  const newSetFolder = `${PROJECT_FOLDER}/${currentStamp()}-fix-login`;
+  expect(firstReply.result).toContain(
+    `${newSetFolder}/01-clear-the-cached-token.md`
+  );
+  expect(secondReply.result).toContain(
+    `${newSetFolder}/02-clear-the-cached-token.md`
+  );
+  expect(files.get(`${oldSetFolder}/01-first.md`)).toBe("first");
+  expect(files.get(`${oldSetFolder}/02-second.md`)).toBe("second");
+});
+
+test("a new stamped set name that names the request is refused", async ($, on) => {
+  const { files } = mockEngine(on);
+
+  const reply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    set: "2026-11-26-1105-plan-this",
+    order: 1,
+    depends_on: [],
+  });
+
+  expect(reply.deny).toContain("names the request");
+  expect(
+    [...files.keys()].filter((path) => path.startsWith(PROJECT_FOLDER))
+  ).toEqual([]);
+});
+
+test("a new handoff set name keeps its stamp and is saved", async ($, on) => {
+  const handoffSetName = "2026-11-19-1542-handoff-007-fix-login";
+  mockEngine(on);
+
+  const reply = await callTool($, WRITE_TOOL, {
+    ...VALID_PLAN,
+    set: handoffSetName,
+    order: 1,
+    depends_on: [],
+  });
+
+  expect(reply.result).toContain(
+    `${PROJECT_FOLDER}/${handoffSetName}/01-clear-the-cached-token.md`
+  );
 });
 
 test("a set named after the request is refused", async ($, on) => {
@@ -244,7 +310,7 @@ test("a saved set with a refused name still takes plans", async ($, on) => {
 
   const reply = await callTool($, WRITE_TOOL, {
     ...VALID_PLAN,
-    set: "plan-this",
+    set: "2026-11-19-1542-plan-this",
     order: 2,
     depends_on: [1],
   });
@@ -357,6 +423,7 @@ test("a plan never replaces a saved plan of the same order", async ($, on) => {
   });
 
   expect(reply.deny).toContain(HANDOFF_SET_PLAN);
+  expect(reply.deny).toContain("For separate work pass a different set name.");
   expect(files.get(HANDOFF_SET_PLAN)).toBe("saved earlier");
   expect(files.size).toBe(1);
 });
@@ -1424,7 +1491,9 @@ test("/small-plans rename with only a set submits one prompt naming that set and
   expect(reply.text).toBe("Renaming a set of small plans…");
   expect(submittedPrompts).toHaveLength(1);
   expect(submittedPrompts[0]).toContain("rename_small_plan_set");
-  expect(submittedPrompts[0]).toContain(`whose name holds "fix-login"`);
+  expect(submittedPrompts[0]).toContain(
+    `The user typed "fix-login": if a saved set's name holds it, that is the set to rename; if none does, it is the new name for the set this conversation made or talks about.`
+  );
   expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
 });
 

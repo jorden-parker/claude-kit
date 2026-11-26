@@ -1439,7 +1439,7 @@
           const isCollapsed = collapsedKeys.has(link.dataset.project) || collapsedKeys.has(link.dataset.group);
           link.hidden = isFiltering
             ? !link.textContent.toLowerCase().includes(query)
-            : isCollapsed && !link.hasAttribute("aria-current");
+            : isCollapsed;
         });
         sidebar.querySelectorAll(".collapse-toggle").forEach((toggle) => {
           const key = toggle.dataset.key;
@@ -1453,7 +1453,7 @@
           toggle.setAttribute("aria-expanded", String(!isCollapsed || isFiltering));
           countBadge.textContent = String(hiddenCount);
           countBadge.hidden = isFiltering || !isCollapsed;
-          heading.hidden = (isFiltering || isProjectCollapsed) && !hasVisibleMember;
+          heading.hidden = isFiltering ? !hasVisibleMember : isProjectCollapsed;
         });
         sidebar.querySelector(".no-matches").hidden = !isFiltering || links.some((link) => !link.hidden);
       };

@@ -1,7 +1,8 @@
 ---
 name: small-plan-reviewer
-description: Reviews one small plan's finished work against the plan and replies PASS or FAIL with numbered findings. Used by /small-plans build. Read-only.
+description: Reviews one small plan's work. Used only by /small-plans build.
 model: sonnet
+omitClaudeMd: true
 tools: Read, Bash, Grep, Glob
 ---
 

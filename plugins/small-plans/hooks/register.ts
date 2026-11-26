@@ -480,10 +480,10 @@ const composePlanInstruction = (
 2. Split that work into plans. A plan is one change that a small model can implement in one sitting and a second small model can review in one read: one goal, at most ${MAX_STEPS} steps, few files. Work that needs more becomes two plans. Leave out work that waits on a decision only the user can make.
 3. Declare the dependency order: number the plans from 1 so that each one needs earlier plans only, and its number is its place in the build order.
 4. Save each plan with one ${QUALIFIED_WRITE_TOOL_NAME} call: set "${setName}", its order from 1, a title under 10 words, its kind, depends_on with the orders of the plans it needs ([] when it needs none), and its body. Set "project" from the work being planned (the files, services and repositories it names), not from the working directory; when it could be more than one repository, ask the user with AskUserQuestion, listing the candidate folders, before saving.`,
-    PLAN_SHAPE,
+    `Load ${QUALIFIED_WRITE_TOOL_NAME} before you draft the first plan: its description states the shape every plan body must have, and the tool refuses a body that breaks it.`,
     `The plugin writes ${INDEX_FILE_NAME} in the set folder, listing every plan with its order, kind, status and dependencies, and rewrites it each time a plan is saved, edited with Edit or Write, or changes status. Never write or edit ${INDEX_FILE_NAME} yourself, and change a plan file only with Edit or Write, never with a shell command, so the index stays true.`,
     ...laterNotes,
-    `When every plan is saved, reply with one line per plan (order, kind, title, the orders it depends on), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them.`,
+    `When every plan is saved, reply with one line per plan (order, kind, title, the orders it depends on), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them, and say to run /clear first: the build reads the saved plans and needs nothing from this conversation.`,
   ].join("\n\n");
 
 const composeBuildInstruction = (

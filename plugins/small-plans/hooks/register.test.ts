@@ -216,20 +216,28 @@ test("a check without an Expect line is refused", async ($, on) => {
   expect(files.size).toBe(0);
 });
 
-test("/small-plans <work> asks for a check that proves the plan's behaviour works", async ($, on) => {
-  const { submittedPrompts } = await runCommand(
-    $,
-    on,
-    "Add a dark mode toggle!"
-  );
+test("the write tool's description asks for a check that proves the plan's behaviour works", async ($, on) => {
+  let writeToolDescription = "";
+  on("command.register", (_, e) => ({ value: { command: e.name } }));
+  on("tool.register", (_, e) => {
+    if (e.name === "write_small_plan") writeToolDescription = e.description;
+    return { value: { tool: e.name } };
+  });
+  on("session.start", (_, e) => ({ cwd: e.cwd }));
 
-  expect(submittedPrompts[0]).toContain(
+  await $.session.start({
+    cwd: "/repo",
+    surface: "terminal",
+    isInteractive: true,
+  });
+
+  expect(writeToolDescription).toContain(
     "proves the behaviour the plan delivers works"
   );
-  expect(submittedPrompts[0]).toContain(
+  expect(writeToolDescription).toContain(
     "A build, type-check, lint or format command alone is refused"
   );
-  expect(submittedPrompts[0]).toContain(
+  expect(writeToolDescription).toContain(
     "the exact output that counts as passing"
   );
 });
@@ -413,6 +421,9 @@ test("/small-plans <work> plans that work with no handoff", async ($, on) => {
     'Set "project" from the work being planned (the files, services and repositories it names), not from the working directory'
   );
   expect(submittedPrompts[0]).not.toContain("handoff");
+  expect(submittedPrompts[0]).toContain(`Load ${WRITE_TOOL} before`);
+  expect(submittedPrompts[0]).not.toContain("- Goal: one sentence");
+  expect(submittedPrompts[0]).toContain("run /clear first");
 });
 
 test("/small-plans alone plans the work this conversation leaves", async ($, on) => {

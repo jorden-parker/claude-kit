@@ -1,6 +1,6 @@
 ---
 name: small-plan-implementer
-description: Implements one small plan exactly as written, step by step, and runs its check. Used by /small-plans build. Not for open-ended work.
+description: Implements one small plan. Used only by /small-plans build.
 model: haiku
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---

@@ -206,6 +206,17 @@ func TestServerListsSectionsAsJsonAndServesThePage(t *testing.T) {
 	}
 }
 
+func TestPageHasCollapsibleGroupsFilterAndSections(t *testing.T) {
+	seedNotes(t)
+
+	page := requestPage("localhost:4000", "/").Body.String()
+	for _, expected := range []string{"claude-notes:collapsed", "entry-section", "entry-title-toggle", `"note-filter"`} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("page is missing %q", expected)
+		}
+	}
+}
+
 func TestServerRefusesOtherHosts(t *testing.T) {
 	seedNotes(t)
 

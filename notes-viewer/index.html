@@ -204,6 +204,46 @@
         min-width: 0;
         margin: 0;
       }
+      nav [hidden],
+      article [hidden] {
+        display: none;
+      }
+      .collapse-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        letter-spacing: inherit;
+        text-align: left;
+        text-transform: inherit;
+        cursor: pointer;
+        overflow-wrap: anywhere;
+      }
+      .collapse-toggle svg {
+        flex: none;
+        width: 12px;
+        height: 12px;
+        transition: transform 150ms ease;
+      }
+      .collapse-toggle[aria-expanded="false"] svg {
+        transform: rotate(-90deg);
+      }
+      .collapse-toggle .count {
+        margin-left: auto;
+      }
+      .entry-title-toggle {
+        align-items: flex-start;
+      }
+      .entry-title-toggle svg {
+        width: 0.6em;
+        height: 0.6em;
+        margin-top: 0.3em;
+      }
       nav h3 {
         min-width: 0;
         margin: 0;
@@ -413,7 +453,7 @@
         gap: 16px;
       }
       article h1 {
-        flex: 1 1 320px;
+        flex: 1 1 420px;
         min-width: 0;
         margin: 0;
         font-size: clamp(24px, 4vw, 36px);
@@ -594,6 +634,33 @@
       .entry-body h2 {
         font-size: 20px;
       }
+      .entry-section > summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        list-style: none;
+        cursor: pointer;
+      }
+      .entry-section > summary::-webkit-details-marker {
+        display: none;
+      }
+      .entry-section > summary::before {
+        content: "";
+        flex: none;
+        width: 7px;
+        height: 7px;
+        border-right: 2px solid var(--muted);
+        border-bottom: 2px solid var(--muted);
+        transform: rotate(-45deg);
+        transition: transform 150ms ease;
+      }
+      .entry-section[open] > summary::before {
+        transform: rotate(45deg);
+      }
+      .entry-section > summary :is(h2, h3, h4, h5, h6) {
+        flex: 1;
+        min-width: 0;
+      }
       .entry-body h3 {
         font-size: 17px;
       }
@@ -714,6 +781,7 @@
       }
       textarea,
       dialog input,
+      .note-filter,
       .editor input {
         width: 100%;
         border: 1px solid var(--border-strong);
@@ -722,6 +790,17 @@
         transition:
           border-color 150ms ease,
           box-shadow 150ms ease;
+      }
+      .note-filter {
+        min-height: 36px;
+        margin-bottom: 4px;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+      .no-matches {
+        margin: 12px 10px;
+        font-size: 13px;
+        color: var(--muted);
       }
       .editor input {
         min-height: 40px;
@@ -740,6 +819,7 @@
       }
       textarea:focus-visible,
       dialog input:focus-visible,
+      .note-filter:focus-visible,
       .editor input:focus-visible {
         outline: none;
         border-color: var(--focus);
@@ -1079,6 +1159,27 @@
         trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',
         plus: '<path d="M12 5v14M5 12h14"/>',
         check: '<path d="M20 6 9 17l-5-5"/>',
+        chevron: '<path d="m6 9 6 6 6-6"/>',
+      };
+
+      const COLLAPSED_STORAGE_KEY = "claude-notes:collapsed";
+
+      const readCollapsedKeys = () => {
+        try {
+          return new Set(JSON.parse(localStorage.getItem(COLLAPSED_STORAGE_KEY)) ?? []);
+        } catch (error) {
+          return new Set();
+        }
+      };
+
+      const collapsedKeys = readCollapsedKeys();
+
+      const saveCollapsedKeys = () => {
+        try {
+          localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...collapsedKeys]));
+        } catch (error) {
+          return;
+        }
       };
 
       const EMPTY_HINTS = {
@@ -1303,10 +1404,65 @@
         return progress;
       };
 
+      const buildProjectKey = (section, entry) => `${section.id}/${entry.project}`;
+
+      const buildGroupKey = (section, entry) => `${buildProjectKey(section, entry)}/${entry.group}`;
+
+      const createCollapseHeading = (tagName, text, key) => {
+        const heading = createElement(tagName);
+        const toggle = createElement("button", "", "collapse-toggle");
+        toggle.type = "button";
+        toggle.dataset.key = key;
+        toggle.append(createIcon("chevron"), createElement("span", text), createElement("span", "", "count"));
+        toggle.addEventListener("click", () => {
+          if (!collapsedKeys.delete(key)) collapsedKeys.add(key);
+          saveCollapsedKeys();
+          applySidebarVisibility();
+        });
+        heading.append(toggle);
+        return heading;
+      };
+
+      const filterInput = createElement("input", "", "note-filter");
+      filterInput.type = "search";
+      filterInput.id = "note-filter";
+      filterInput.placeholder = "Filter…";
+      filterInput.autocomplete = "off";
+      filterInput.spellcheck = false;
+      filterInput.setAttribute("aria-label", "Filter notes");
+
+      const applySidebarVisibility = () => {
+        const query = filterInput.value.trim().toLowerCase();
+        const isFiltering = query !== "";
+        const links = [...sidebar.querySelectorAll("a[data-project]")];
+        links.forEach((link) => {
+          const isCollapsed = collapsedKeys.has(link.dataset.project) || collapsedKeys.has(link.dataset.group);
+          link.hidden = isFiltering
+            ? !link.textContent.toLowerCase().includes(query)
+            : isCollapsed && !link.hasAttribute("aria-current");
+        });
+        sidebar.querySelectorAll(".collapse-toggle").forEach((toggle) => {
+          const key = toggle.dataset.key;
+          const heading = toggle.closest(".group-heading");
+          const members = links.filter((link) => link.dataset.project === key || link.dataset.group === key);
+          const hasVisibleMember = members.some((link) => !link.hidden);
+          const hiddenCount = members.filter((link) => link.hidden).length;
+          const isCollapsed = collapsedKeys.has(key);
+          const isProjectCollapsed = collapsedKeys.has(heading.dataset.project);
+          const countBadge = toggle.querySelector(".count");
+          toggle.setAttribute("aria-expanded", String(!isCollapsed || isFiltering));
+          countBadge.textContent = String(hiddenCount);
+          countBadge.hidden = isFiltering || !isCollapsed;
+          heading.hidden = (isFiltering || isProjectCollapsed) && !hasVisibleMember;
+        });
+        sidebar.querySelector(".no-matches").hidden = !isFiltering || links.some((link) => !link.hidden);
+      };
+
       const createGroupHeading = (section, entry) => {
         const view = SECTION_VIEWS[section.id];
         const groupHeading = createElement("div", "", "group-heading");
-        groupHeading.append(createElement("h3", entry.group));
+        groupHeading.dataset.project = buildProjectKey(section, entry);
+        groupHeading.append(createCollapseHeading("h3", entry.group, buildGroupKey(section, entry)));
         if (view.hasEditableSets) {
           const actions = createElement("div", "", "group-actions");
           actions.append(
@@ -1319,11 +1475,11 @@
         return groupHeading;
       };
 
-      const createProjectHeading = (project) => {
+      const createProjectHeading = (section, project) => {
         const projectHeading = createElement("div", "", "group-heading project-heading");
         const actions = createElement("div", "", "group-actions");
         actions.append(createIconButton(`Rename project ${project}`, "pencil", "rename", () => openRenameProject(project)));
-        projectHeading.append(createElement("h2", project), actions);
+        projectHeading.append(createCollapseHeading("h2", project, buildProjectKey(section, { project })), actions);
         return projectHeading;
       };
 
@@ -1340,15 +1496,26 @@
 
       const renderSidebar = (selectedSection, selectedEntry) => {
         const scrollPosition = sidebar.scrollTop;
-        sidebar.replaceChildren(createSidebarHeader(), createSectionLinks(selectedSection));
+        const hadFocus = document.activeElement === filterInput;
+        const { selectionStart, selectionEnd } = filterInput;
+        sidebar.replaceChildren(createSidebarHeader(), createSectionLinks(selectedSection), filterInput);
         const entries = selectedSection?.entries ?? [];
         entries.forEach((entry, entryIndex) => {
           const previousEntry = entries[entryIndex - 1] ?? {};
           const isNewProject = entry.project !== previousEntry.project;
-          if (isNewProject && !SECTION_VIEWS[selectedSection.id].isReadOnly) sidebar.append(createProjectHeading(entry.project));
+          if (isNewProject && !SECTION_VIEWS[selectedSection.id].isReadOnly) sidebar.append(createProjectHeading(selectedSection, entry.project));
           if (entry.group && (isNewProject || entry.group !== previousEntry.group)) sidebar.append(createGroupHeading(selectedSection, entry));
-          sidebar.append(createEntryLink(selectedSection, entry, selectedEntry));
+          const link = createEntryLink(selectedSection, entry, selectedEntry);
+          link.dataset.project = buildProjectKey(selectedSection, entry);
+          if (entry.group) link.dataset.group = buildGroupKey(selectedSection, entry);
+          sidebar.append(link);
         });
+        sidebar.append(createElement("p", "No matching notes", "no-matches"));
+        applySidebarVisibility();
+        if (hadFocus) {
+          filterInput.focus();
+          filterInput.setSelectionRange(selectionStart, selectionEnd);
+        }
         sidebar.scrollTop = scrollPosition;
       };
 
@@ -1380,13 +1547,37 @@
         const capitalNoun = noun[0].toUpperCase() + noun.slice(1);
         const header = createElement("div", "", "entry-header");
         const actions = createElement("div", "", "entry-actions");
-        actions.append(
-          createButton(`Edit ${capitalNoun}`, "pencil", "button", () => startEditing(selectedSection, selectedEntry)),
-          createButton(`Delete ${capitalNoun}`, "trash", "button quiet-danger", () => deleteEntry(selectedSection, selectedEntry))
-        );
-        header.append(createElement("h1", selectedEntry.title));
-        if (!SECTION_VIEWS[selectedSection.id].isReadOnly) header.append(actions);
+        if (!SECTION_VIEWS[selectedSection.id].isReadOnly) {
+          actions.append(
+            createButton(`Edit ${capitalNoun}`, "pencil", "button", () => startEditing(selectedSection, selectedEntry)),
+            createButton(`Delete ${capitalNoun}`, "trash", "button quiet-danger", () => deleteEntry(selectedSection, selectedEntry))
+          );
+        }
+        const titleToggle = createElement("button", "", "collapse-toggle entry-title-toggle");
+        titleToggle.type = "button";
+        titleToggle.setAttribute("aria-expanded", "true");
+        titleToggle.append(createIcon("chevron"), createElement("span", selectedEntry.title));
+        const title = createElement("h1");
+        title.append(titleToggle);
+        header.append(title, actions);
         return header;
+      };
+
+      const wrapEntrySections = (body) => {
+        for (let level = 6; level >= 2; level--) {
+          const stopsSection = new RegExp(`^H[1-${level}]$`);
+          body.querySelectorAll(`:scope > h${level}`).forEach((heading) => {
+            const entrySection = createElement("details", "", "entry-section");
+            entrySection.open = true;
+            const summary = createElement("summary");
+            heading.before(entrySection);
+            summary.append(heading);
+            entrySection.append(summary);
+            while (entrySection.nextElementSibling && !stopsSection.test(entrySection.nextElementSibling.tagName)) {
+              entrySection.append(entrySection.nextElementSibling);
+            }
+          });
+        }
       };
 
       const renderEntry = (selectedSection, selectedEntry) => {
@@ -1398,7 +1589,29 @@
         const body = createElement("div", "", "entry-body");
         body.innerHTML = selectedEntry.html;
         body.querySelectorAll("input[type=checkbox]").forEach((checkbox) => (checkbox.disabled = true));
-        article.append(createEntryHeader(selectedSection, selectedEntry), createDetailList(selectedSection, selectedEntry), body);
+        const header = createEntryHeader(selectedSection, selectedEntry);
+        const detailList = createDetailList(selectedSection, selectedEntry);
+        const titleToggle = header.querySelector(".entry-title-toggle");
+        titleToggle.addEventListener("click", () => {
+          const isExpanded = titleToggle.getAttribute("aria-expanded") === "true";
+          titleToggle.setAttribute("aria-expanded", String(!isExpanded));
+          detailList.hidden = isExpanded;
+          body.hidden = isExpanded;
+        });
+        wrapEntrySections(body);
+        const entrySections = [...body.querySelectorAll(".entry-section")];
+        if (entrySections.length >= 2) {
+          const describeToggle = () => (entrySections.some((entrySection) => entrySection.open) ? "Collapse All" : "Expand All");
+          const toggleAll = createButton(describeToggle(), "", "button", () => {
+            const shouldOpen = !entrySections.some((entrySection) => entrySection.open);
+            entrySections.forEach((entrySection) => (entrySection.open = shouldOpen));
+          });
+          entrySections.forEach((entrySection) =>
+            entrySection.addEventListener("toggle", () => (toggleAll.textContent = describeToggle()))
+          );
+          header.querySelector(".entry-actions").prepend(toggleAll);
+        }
+        article.append(header, detailList, body);
         entryArea.replaceChildren(article);
       };
 
@@ -1752,7 +1965,20 @@
       menuButton.addEventListener("click", () => setMenuOpen(document.body.dataset.menu !== "open"));
       backdrop.addEventListener("click", () => setMenuOpen(false));
       narrowScreen.addEventListener("change", () => setMenuOpen(false));
+      filterInput.addEventListener("input", applySidebarVisibility);
+      filterInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || !filterInput.value) return;
+        event.stopPropagation();
+        filterInput.value = "";
+        applySidebarVisibility();
+      });
       document.addEventListener("keydown", (event) => {
+        const isTyping = event.target.closest("input, textarea, select, [contenteditable]");
+        if (event.key === "/" && !isTyping && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault();
+          if (narrowScreen.matches) setMenuOpen(true);
+          filterInput.focus();
+        }
         if (event.key === "Escape" && document.body.dataset.menu === "open") {
           setMenuOpen(false);
           menuButton.focus();

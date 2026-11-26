@@ -994,6 +994,39 @@ testWithSession(
   }
 );
 
+testWithSession(
+  "a leading classifier-unavailable notice is stripped, also inside a code fence, and other Note lines stay",
+  CONVERSATION,
+  async ($, on) => {
+    mock.clock(on);
+    const fills: string[] = [];
+    const modelReplies = [
+      "Note: The server-side auto mode classifier (the safety classifer) was unavailable and the action was allowed.\nIt may be retried.\n\nNote: The server-side auto mode classifier (the safety classifer) was unavailable and the action was allowed.\nIt may be retried.\n\nResume prompt\nmore",
+      "```text\nNote: The server-side auto mode classifier (the safety classifer) was unavailable and the action was allowed.\nIt may be retried.\n\nResume prompt\n```",
+      "Note: remember the migration\n\nResume prompt",
+    ];
+    on("model.complete", () => ({
+      value: {
+        isAnswered: true,
+        text: modelReplies.shift()!,
+        usage: MODEL_USAGE,
+      },
+    }));
+    on("prompt.fill", (_, e) => {
+      fills.push(e.text);
+      return { isFilled: true };
+    });
+
+    for (let i = 0; i < 3; i++) await $.command.run(handoff(""));
+
+    expect(fills).toEqual([
+      "Resume prompt\nmore",
+      "Resume prompt",
+      "Note: remember the migration\n\nResume prompt",
+    ]);
+  }
+);
+
 const HANDING_OFF_MESSAGE = "Handing off to a new session…";
 const PENDING_HANDOFF_KEY = "pendingHandoff";
 

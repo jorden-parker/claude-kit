@@ -145,8 +145,19 @@ type LegacyHandoff = {
 
 const WRAPPING_CODE_FENCE = /^```[^\n]*\n([\s\S]*?)\n?```$/;
 
+const PARAGRAPH = String.raw`(?:(?!\n\s*\n)[\s\S])*`;
+const CLASSIFIER_NOTICES = new RegExp(
+  `^(?:Note:(?=${PARAGRAPH}classifier)(?=${PARAGRAPH}unavailable)${PARAGRAPH}(?:\\n\\s*\\n|$))+`,
+  "i"
+);
+
+const stripClassifierNotices = (text: string) =>
+  text.replace(CLASSIFIER_NOTICES, "").trim();
+
 const stripWrappingCodeFence = (text: string) =>
-  text.trim().replace(WRAPPING_CODE_FENCE, "$1").trim();
+  stripClassifierNotices(
+    stripClassifierNotices(text.trim()).replace(WRAPPING_CODE_FENCE, "$1")
+  );
 
 const truncateMessageText = (text: string) =>
   text.length > RECENT_MESSAGE_MAX_LENGTH

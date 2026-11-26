@@ -195,10 +195,13 @@
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         gap: 4px 8px;
-        margin: 14px 4px 4px 10px;
+        margin: 10px 4px 0 calc(10px + var(--chevron-size) + var(--chevron-gap));
       }
       .project-heading {
-        margin: 22px 4px 6px 10px;
+        margin: 10px 4px 0 10px;
+      }
+      .group-heading + a {
+        margin-top: 2px;
       }
       .project-heading h2 {
         min-width: 0;
@@ -249,7 +252,6 @@
         font-size: 11px;
         font-weight: 500;
         letter-spacing: 0.02em;
-        text-transform: uppercase;
         color: var(--muted);
         overflow-wrap: anywhere;
       }
@@ -305,7 +307,7 @@
       nav a {
         display: block;
         min-width: 0;
-        padding: 7px 10px;
+        padding: 5px 10px;
         border-radius: 6px;
         color: var(--text-soft);
         text-decoration: none;
@@ -319,7 +321,14 @@
           transform 200ms var(--spring);
       }
       nav a + a {
-        margin-top: 1px;
+        margin-top: 2px;
+      }
+      /* link text lines up with the heading text after its chevron */
+      .project-heading ~ a {
+        padding-left: calc(10px + var(--chevron-size) + var(--chevron-gap));
+      }
+      .project-heading ~ a[data-group] {
+        padding-left: calc(10px + 2 * (var(--chevron-size) + var(--chevron-gap)));
       }
       nav a small {
         display: flex;
@@ -860,8 +869,9 @@
           box-shadow 150ms ease;
       }
       .note-filter {
+        display: block;
         min-height: 36px;
-        margin-bottom: 4px;
+        margin-bottom: 0;
         padding: 0 12px;
         font-size: 13px;
       }
@@ -1373,6 +1383,22 @@
 
       const readStatus = (entry) => entry.fields.status ?? "pending";
 
+      const kebabWordPattern = /(?<![\w/.\\-])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?![\w/.\\-])/g;
+
+      const formatDisplayName = (text) =>
+        String(text)
+          .split(/(`[^`]*`)/)
+          .map((part, index) =>
+            index % 2 === 1
+              ? part
+              : part.replace(kebabWordPattern, (word) => {
+                  const pieces = word.split("-");
+                  if (pieces.some((piece) => /^\d+$/.test(piece))) return word;
+                  return pieces.map((piece) => piece.charAt(0).toUpperCase() + piece.slice(1)).join(" ");
+                })
+          )
+          .join("");
+
       const formatStatusLabel = (status) =>
         status
           .split("-")
@@ -1450,11 +1476,11 @@
 
       const createEntryLink = (section, entry, selectedEntry) => {
         const { label, caption, status } = SECTION_VIEWS[section.id].describeLink(entry);
-        const link = createElement("a", label);
+        const link = createElement("a", formatDisplayName(label));
         link.href = `#${section.id}/${encodeURIComponent(entry.path)}`;
-        link.title = entry.title;
+        link.title = formatDisplayName(entry.title);
         if (status) link.dataset.status = status;
-        if (caption) link.append(createElement("small", caption));
+        if (caption) link.append(createElement("small", formatDisplayName(caption)));
         if (entry.fields.share) {
           const shareBar = createElement("span", "", "progress-bar");
           shareBar.setAttribute("aria-hidden", "true");
@@ -1630,7 +1656,7 @@
         const titleToggle = createElement("button", "", "collapse-toggle entry-title-toggle");
         titleToggle.type = "button";
         titleToggle.setAttribute("aria-expanded", "true");
-        titleToggle.append(createIcon("chevron"), createElement("span", selectedEntry.title));
+        titleToggle.append(createIcon("chevron"), createElement("span", formatDisplayName(selectedEntry.title)));
         const title = createElement("h1");
         title.append(titleToggle);
         header.append(title, actions);
@@ -1656,6 +1682,8 @@
 
       const wideScreen = matchMedia("(min-width: 1420px)");
       let tocObserver = null;
+      let isTocScrolling = false;
+      let tocScrollTimer = 0;
 
       wideScreen.addEventListener("change", () => {
         const disclosure = document.querySelector(".toc details");
@@ -1678,6 +1706,10 @@
         for (let section = heading.closest("details"); section; section = section.parentElement.closest("details")) {
           section.open = true;
         }
+        isTocScrolling = true;
+        clearTimeout(tocScrollTimer);
+        tocScrollTimer = setTimeout(() => (isTocScrolling = false), 1200);
+        entryArea.addEventListener("scrollend", () => (isTocScrolling = false), { once: true });
         heading.scrollIntoView({ behavior: "smooth", block: "start" });
       };
 
@@ -1693,12 +1725,17 @@
         disclosure.append(createElement("summary", "Contents"));
         const list = createElement("ul");
         const linksById = new Map();
+        const markCurrent = (headingId) => {
+          linksById.forEach((link) => link.removeAttribute("aria-current"));
+          linksById.get(headingId).setAttribute("aria-current", "true");
+        };
         headings.forEach((heading) => {
           const item = createElement("li", "", heading.tagName === "H3" ? "toc-nested" : "");
-          const link = createElement("a", heading.textContent);
+          const link = createElement("a", formatDisplayName(heading.textContent));
           link.href = `#${heading.id}`;
           link.addEventListener("click", (event) => {
             event.preventDefault();
+            markCurrent(heading.id);
             revealHeading(heading, titleToggle);
           });
           linksById.set(heading.id, link);
@@ -1710,9 +1747,8 @@
         tocObserver = new IntersectionObserver(
           (observed) => {
             const visible = observed.filter((observation) => observation.isIntersecting);
-            if (visible.length === 0) return;
-            linksById.forEach((link) => link.removeAttribute("aria-current"));
-            linksById.get(visible[0].target.id).setAttribute("aria-current", "true");
+            if (visible.length === 0 || isTocScrolling) return;
+            markCurrent(visible[0].target.id);
           },
           { root: entryArea, rootMargin: "0px 0px -75% 0px" }
         );
@@ -1759,7 +1795,7 @@
 
       const render = () => {
         const { section, entry } = readSelection();
-        document.title = entry ? `${entry.title} · ${section.title}` : "Claude notes";
+        document.title = entry ? `${formatDisplayName(entry.title)} · ${section.title}` : "Claude notes";
         renderSidebar(section, entry);
         if (!openEditor) renderEntry(section, entry);
       };
@@ -1833,7 +1869,7 @@
       const startEditing = (selectedSection, selectedEntry) => {
         const article = createElement("article");
         const header = createElement("div", "", "entry-header");
-        header.append(createElement("h1", selectedEntry.title));
+        header.append(createElement("h1", formatDisplayName(selectedEntry.title)));
         const form = createElement("form", "", "editor");
         form.setAttribute("aria-label", `Edit ${selectedEntry.title}`);
         const label = createElement("label", "Markdown ");

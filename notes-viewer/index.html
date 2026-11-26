@@ -485,24 +485,6 @@
         text-wrap: balance;
         overflow-wrap: anywhere;
       }
-      .entry-title-toggle {
-        --chevron: 0.55em;
-        --gap: 0.3em;
-        --indent: 0px;
-        --row: 0px;
-        align-items: flex-start;
-        margin-left: -6px;
-        padding: 2px 8px 2px 4px;
-      }
-      .entry-title-toggle > span:not(.count) {
-        overflow: visible;
-        white-space: normal;
-        text-overflow: clip;
-        overflow-wrap: anywhere;
-      }
-      .entry-title-toggle svg {
-        margin-top: calc((1lh - var(--chevron)) / 2);
-      }
       .entry-actions {
         display: flex;
         gap: 8px;
@@ -625,9 +607,8 @@
         font-weight: 500;
         overflow-wrap: anywhere;
       }
-      .entry-details li:last-child {
+      .entry-details .literal {
         font-family: var(--mono);
-        font-size: 12px;
       }
       .empty {
         max-width: 440px;
@@ -1768,6 +1749,10 @@
           )
           .join(" ");
 
+      const formatGroupName = (group) => (/\d/.test(group) ? group : formatProjectName(group));
+
+      const createLiteral = (text) => createElement("span", text, "literal");
+
       const formatEntryTitle = (section, entry) =>
         section.id === "tokens" ? formatProjectName(entry.title) : formatDisplayName(entry.title);
 
@@ -1797,7 +1782,7 @@
           status: readStatus(entry),
         }),
         hasProgress: true,
-        listDetails: (entry) => [entry.group, `Plan ${readOrder(entry)}`, formatFixedLabel(readKind(entry)), formatFixedLabel(readStatus(entry)), readDependency(entry)],
+        listDetails: (entry) => [formatGroupName(entry.group), `Plan ${readOrder(entry)}`, formatFixedLabel(readKind(entry)), formatFixedLabel(readStatus(entry)), readDependency(entry)],
       };
 
       const SECTION_VIEWS = {
@@ -1806,13 +1791,13 @@
           describeLink: (entry) => ({ label: entry.title }),
           listDetails: (entry) => [
             entry.fields.focus && `Focus: ${entry.fields.focus}`,
-            /^\d/.test(entry.name) && `/handoff resume ${parseInt(entry.name, 10)}`,
+            /^\d/.test(entry.name) && createLiteral(`/handoff resume ${parseInt(entry.name, 10)}`),
           ],
         },
         "project-notes": {
           noun: "note",
           describeLink: (entry) => ({ label: entry.title }),
-          listDetails: (entry) => [entry.group],
+          listDetails: (entry) => [formatGroupName(entry.group)],
         },
         "small-plans": { ...PLAN_VIEW, hasEditableSets: true },
         brainstorm: { ...PLAN_VIEW, deleteWarning: "Its step files go with it." },
@@ -2068,10 +2053,10 @@
           formatProjectName(selectedEntry.project),
           ...SECTION_VIEWS[selectedSection.id].listDetails(selectedEntry),
           formatCreated(selectedEntry.created),
-          selectedSection.id === "tokens" ? formatProjectName(selectedEntry.path) : selectedEntry.path,
+          selectedSection.id === "tokens" ? formatProjectName(selectedEntry.path) : createLiteral(selectedEntry.path),
         ]
           .filter(Boolean)
-          .forEach((detail) => detailList.append(createElement("li", detail)));
+          .forEach((detail) => detailList.appendChild(createElement("li", "")).append(detail));
         return detailList;
       };
 
@@ -2095,12 +2080,7 @@
             createButton(`Delete ${capitalNoun}`, "trash", "button quiet-danger", () => deleteEntry(selectedSection, selectedEntry))
           );
         }
-        const titleToggle = createElement("button", "", "collapse-toggle entry-title-toggle");
-        titleToggle.type = "button";
-        titleToggle.setAttribute("aria-expanded", "true");
-        titleToggle.append(createIcon("chevron"), createElement("span", formatEntryTitle(selectedSection, selectedEntry)));
-        const title = createElement("h1");
-        title.append(titleToggle);
+        const title = createElement("h1", formatEntryTitle(selectedSection, selectedEntry));
         header.append(title, actions);
         return header;
       };
@@ -2137,8 +2117,7 @@
         });
       };
 
-      const revealHeading = (heading, titleToggle) => {
-        if (titleToggle.getAttribute("aria-expanded") === "false") titleToggle.click();
+      const revealHeading = (heading) => {
         for (let section = heading.closest("details"); section; section = section.parentElement.closest("details")) {
           section.open = true;
         }
@@ -2149,7 +2128,7 @@
         heading.scrollIntoView({ behavior: "smooth", block: "start" });
       };
 
-      const createContents = (body, titleToggle) => {
+      const createContents = (body) => {
         const headings = [...body.querySelectorAll("h2, h3")];
         tocObserver?.disconnect();
         if (headings.length < 2) return null;
@@ -2172,7 +2151,7 @@
           link.addEventListener("click", (event) => {
             event.preventDefault();
             markCurrent(heading.id);
-            revealHeading(heading, titleToggle);
+            revealHeading(heading);
           });
           linksById.set(heading.id, link);
           item.append(link);
@@ -2203,16 +2182,9 @@
         body.querySelectorAll("input[type=checkbox]").forEach((checkbox) => (checkbox.disabled = true));
         const header = createEntryHeader(selectedSection, selectedEntry);
         const detailList = createDetailList(selectedSection, selectedEntry);
-        const titleToggle = header.querySelector(".entry-title-toggle");
-        titleToggle.addEventListener("click", () => {
-          const isExpanded = titleToggle.getAttribute("aria-expanded") === "true";
-          titleToggle.setAttribute("aria-expanded", String(!isExpanded));
-          detailList.hidden = isExpanded;
-          body.hidden = isExpanded;
-        });
         assignHeadingIds(body);
         wrapEntrySections(body);
-        const contents = createContents(body, titleToggle);
+        const contents = createContents(body);
         const entrySections = [...body.querySelectorAll(".entry-section")];
         if (entrySections.length >= 2) {
           const describeToggle = () => (entrySections.some((entrySection) => entrySection.open) ? "Collapse All" : "Expand All");

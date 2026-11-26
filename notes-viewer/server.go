@@ -545,24 +545,44 @@ var titleSmallWords = map[string]bool{
 	"via": true, "vs": true,
 }
 
+var slashCompoundPattern = regexp.MustCompile(`^\pL+(/\pL+)+$`)
+
+func splitSlashCompound(word string) []string {
+	if slashCompoundPattern.MatchString(word) {
+		return strings.Split(word, "/")
+	}
+	return []string{word}
+}
+
+func capitalizeTitleWord(word string, canLowerSmallWord bool) string {
+	lower := strings.ToLower(word)
+	runes := []rune(word)
+	switch {
+	case titleAcronyms[lower]:
+		return strings.ToUpper(word)
+	case lower == "ios":
+		return "iOS"
+	case strings.IndexFunc(string(runes[1:]), unicode.IsUpper) >= 0:
+		return word
+	case strings.Contains(word, "-") && word == lower:
+		return word
+	case titleSmallWords[lower] && canLowerSmallWord:
+		return lower
+	}
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
+
 func toTitleCase(title string) string {
 	words := strings.Fields(title)
-	for i, word := range words {
-		lower := strings.ToLower(word)
-		runes := []rune(word)
-		switch {
-		case titleAcronyms[lower]:
-			words[i] = strings.ToUpper(word)
-		case lower == "ios":
-			words[i] = "iOS"
-		case strings.IndexFunc(string(runes[1:]), unicode.IsUpper) >= 0:
-		case strings.Contains(word, "-") && word == lower:
-		case titleSmallWords[lower] && i != 0 && i != len(words)-1:
-			words[i] = lower
-		default:
-			runes[0] = unicode.ToUpper(runes[0])
-			words[i] = string(runes)
+	for wordIndex, word := range words {
+		isEdgeWord := wordIndex == 0 || wordIndex == len(words)-1
+		parts := splitSlashCompound(word)
+		canLowerSmallWord := !isEdgeWord && len(parts) == 1
+		for partIndex, part := range parts {
+			parts[partIndex] = capitalizeTitleWord(part, canLowerSmallWord)
 		}
+		words[wordIndex] = strings.Join(parts, "/")
 	}
 	return strings.Join(words, " ")
 }

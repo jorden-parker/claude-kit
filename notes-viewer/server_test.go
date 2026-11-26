@@ -208,10 +208,13 @@ func TestPageHasCollapsibleGroupsFilterAndSections(t *testing.T) {
 	seedNotes(t)
 
 	page := requestPage("localhost:4000", "/").Body.String()
-	for _, expected := range []string{"claude-notes:collapsed", "entry-section", "entry-title-toggle", `"note-filter"`} {
+	for _, expected := range []string{"claude-notes:collapsed", "entry-section", `"note-filter"`} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("page is missing %q", expected)
 		}
+	}
+	if strings.Contains(page, "entry-title-toggle") {
+		t.Error("the page still has a collapse toggle on the note title")
 	}
 }
 
@@ -524,6 +527,11 @@ func TestToTitleCase(t *testing.T) {
 		{"ios  app", "iOS App"},
 		{"claude-kit notes viewer", "claude-kit Notes Viewer"},
 		{"move notes into claude-kit-private", "Move Notes Into claude-kit-private"},
+		{"thumbs up/down", "Thumbs Up/Down"},
+		{"Thumbs up/down buttons", "Thumbs Up/Down Buttons"},
+		{"api/cli parity", "API/CLI Parity"},
+		{"the /handoff command", "The /handoff Command"},
+		{"sign-in/sign-up flow", "sign-in/sign-up Flow"},
 	}
 	for _, testCase := range cases {
 		if got := toTitleCase(testCase.title); got != testCase.want {

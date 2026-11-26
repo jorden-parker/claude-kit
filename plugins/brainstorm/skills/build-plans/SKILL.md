@@ -58,7 +58,7 @@ If there is no run folder, say so and suggest `/brainstorm plan`. If the request
 
 A `pending` plan starts at its first step. An `in-progress` or `blocked` plan was started by an earlier build: it carries on at its first unticked line.
 
-Before you start a plan, and again whenever a step or a failure shows it, look for a missing step: anything the plan needs that none of its steps provides, such as a dependency that is not installed, a migration, generated code, a config value, or a file or function that another plan creates. Do not build on and wait for it to fail. Take the missing step first: write its step file into the plan folder and add an unticked line for it in plan.md ahead of the step that needs it, so `brainstorm:step-implementer` does it, or, when another plan in the index provides it, build that plan first and base this plan's branch on it. Ask the user only when the missing step needs something only the user can give.
+Before you start a plan, and again whenever a step or a failure shows it, check for a missing step. If one is missing, read `rare-cases.md` in this skill folder.
 
 1. Create or reuse the plan's worktree, as "Worktrees" says, and note its path and branch.
 2. Base: run `git -C <worktree> rev-parse HEAD` and keep that commit as this plan's base.
@@ -74,7 +74,7 @@ Each plan is built in its own git worktree, on its own branch:
 
 - Branch name: read the repository's own rules first: CONTRIBUTING.md, AGENTS.md, CLAUDE.md when it is not already in your context, and the guides under .github/ and docs/, then the names `git branch -a --sort=-committerdate | head -n 20` shows. Where the repository states a convention, as a work repository does, follow it exactly, ticket number and all. Only when it states none, name the branch `<type>/<plan slug>`, the type from the plan's Kind in the index: feat for code, test, docs, or spike for a spike plan.
 - Base: the branch of the plan it depends on, when it depends on one; otherwise the branch checked out where the build started.
-- Place: run `git rev-parse --git-common-dir`. When `git -C <that folder> rev-parse --is-bare-repository` prints true, the repository is bare: put the worktree beside the main worktree, as a sibling folder. In any other repository, put it beside the repository's top folder. Either way the folder is named after the plan slug alone, such as `add-login` for the branch `feat/add-login`: no type, no repository name and no ticket prefix. When a folder of that name already exists and is not this plan's worktree, add `-2`. Never put it inside the repository.
+- Place: put it beside the repository's top folder, named after the plan slug alone, such as `add-login` for the branch `feat/add-login`: no type, no repository name and no ticket prefix. Never put it inside the repository. If the repo is bare or the worktree name collides, read `rare-cases.md` in this skill folder.
 - Create it with `git worktree add -b <branch> <path> <base>`. When `git worktree list` already shows a worktree on that branch, left by an earlier build, reuse it.
 - Run every git command, check, lint, fallow and test of the plan in its worktree, as `cd <path> && ...` or `git -C <path> ...`.
 
@@ -88,23 +88,23 @@ One implementer builds the whole plan. It takes every unticked line of plan.md i
 4. If the retry is BLOCKED on the same step, call the Agent tool with subagent_type `brainstorm:plan-reviewer`. Its prompt is the word "unblock", the absolute step path, and both replies verbatim.
    - If it replies PLAN WRONG, the plan stops. Report its explanation.
    - Otherwise it returns replacement step files: `step-NNa.md`, `step-NNb.md`, and so on. Write them into the plan folder. Delete the blocked `step-NN.md`, because the checker reports a step file that plan.md does not list. In plan.md, replace the blocked step's line with one unticked line for each replacement, in order. Then start again at 1.
-5. Treat every later reply the same way. A step's first BLOCKED gets the retry, and its second gets the unblock. A replacement step written in this build gets neither: if a reply is BLOCKED on one, the plan stops.
+5. Later replies follow steps 3 and 4, except that a replacement step written in this build gets neither retry nor unblock, so a BLOCKED reply on one stops the plan.
 
 ### Final review
 
 1. Call the Agent tool with subagent_type `brainstorm:plan-reviewer`. Its prompt is the word "final review", the absolute plan folder path, the base commit, and the line `Worktree: <path>`.
-2. If it replies APPROVED, commit and push that work in the plan's worktree: stage everything changed there, the plan's edits and its guard fixes; match the style of `git log --oneline -n 10`; commit with one short conventional subject line, such as `git commit -m "feat(scope): add the toggle"`, with no body and no Co-Authored-By or other attribution line; then run `git push -u origin <branch>` and `git worktree remove <path>`, which keeps the branch. Never commit or push work the review has not approved. If the commit or push fails, keep the worktree and say so in the plan's report line. Then set the plan's status to `done`.
+2. If it replies APPROVED, commit and push that work in the plan's worktree: stage everything changed there, the plan's edits and its guard fixes; commit it with the message rule under "Leftover work"; then run `git push -u origin <branch>` and `git worktree remove <path>`, which keeps the branch. Never commit or push work the review has not approved. If the commit or push fails, keep the worktree and say so in the plan's report line. Then set the plan's status to `done`.
 3. If it replies FIXES NEEDED, it returns fix steps as more step files. Write them into the plan folder, and add one unticked line for each at the end of `## Steps` in plan.md: `- [ ] [step-NN](step-NN.md): <title>`.
    - If this build has already done two fix rounds for this plan, the plan stops. Its unticked lines are the open fixes, and the next build picks them up.
    - Otherwise build those lines as "Build the steps" says, with one implementer call for all of them, then do the final review again.
 
 ### Spike plans
 
-A spike plan (Kind `spike` in the index) uses the same flow. Its steps write findings.md in the plan folder, and the final review checks that findings.md answers every question. When a spike plan is `done`, report the findings path and say that the idea needs a new `/brainstorm plan` run before anything is changed.
+A spike plan (Kind `spike`) uses the same flow with different outputs. Read `rare-cases.md` in this skill folder before you build one.
 
 ### Leftover work
 
-When every plan is handled, commit and push the leftover work too, in the checkout where the build started: run `git status --short` and `git log --oneline -n 50 @{u}..`. Group the uncommitted changes that are left, including ones from before this build, into logical commits, one per concern, each with one short conventional subject line in the style of `git log --oneline -n 10`, with no body and no Co-Authored-By or other attribution line. Never commit a file that holds a secret, such as `.env`. Then run `git push` so no commit is left unpushed. If a commit or push fails, say so in the report.
+When every plan is handled, commit and push the leftover work too, in the checkout where the build started: run `git status --short` and `git log --oneline -n 50 @{u}..`. Group the uncommitted changes that are left, including ones from before this build, into logical commits, one per concern. Every commit in this build, the plan commits included, gets one short conventional subject line in the style of `git log --oneline -n 10`, such as `git commit -m "feat(scope): add the toggle"`, with no body and no Co-Authored-By or other attribution line. Never commit a file that holds a secret, such as `.env`. Then run `git push` so no commit is left unpushed. If a commit or push fails, say so in the report.
 
 ## Report
 

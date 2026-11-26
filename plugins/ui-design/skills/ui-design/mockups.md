@@ -1,6 +1,6 @@
 # ui-design: mockups
 
-Sections 2 to 5 of the ui-design skill, for the `new` and `redesign` modes. Section 1 is in `theme.md` and section 7 in `SKILL.md`, both beside this file.
+Sections 2 to 5 of the ui-design skill, for the `new` and `redesign` modes. Section 1 is in `theme.md` and section 7 in `apply-fix.md`, both beside this file.
 
 ## 2. Redesign
 

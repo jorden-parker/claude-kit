@@ -29,7 +29,9 @@ Recommend only what the data shows. Say what the data could not tell you.
 
 ## Verify
 
+To verify, read `verify.md` in this skill folder.
+
 1. Installed copies: for each changed plugin, the version in `claude plugin list` matches the version in the clone's `plugin.json`. If it does not, run `claude-kit-update` and say that a new session is needed.
-2. Live check, where a fix can be triggered directly in this session. Hooks load when a session starts, so a fix installed during this session shows only in a new one; say that instead of calling the fix failed. For the output caps, run `for i in $(seq 30); do printf '%0300d\n' $i; done` and expect a line saying `characters hidden from the middle`.
-3. Ledger check: `claude-ledger --verify` compares the sessions before and after each recorded fix. `claude-kit-update` records one each time it updates plugins, so a fix made on another machine is compared from the time it reached this one. When the arguments include `since <date>`, run `claude-ledger --verify <date>` instead. A date alone means midnight, so add the time (for example `2026-11-25T14:30`) when the fix landed during that day.
-4. Report each fix as one of three results. Working: the number moved as expected; give it before and after. Not working: give the numbers. Too early: fewer than 5 sessions since the fix; say when to run `/ledger-tune verify` again. Never call a fix working from its tests alone. The before and after groups are different sessions doing different work, so a number that moved the wrong way is not proof on its own: say that, and check the tool the fix targets in `claude-ledger --text`.
+2. Live check, where a fix can be triggered directly in this session. Hooks load when a session starts, so a fix installed during this session shows only in a new one; say that instead of calling the fix failed.
+3. Ledger check: `claude-ledger --verify` compares the sessions before and after each recorded fix. `claude-kit-update` records one each time it updates plugins, so a fix made on another machine is compared from the time it reached this one.
+4. Report each fix as Working (the number moved as expected; give it before and after), Not working (give the numbers) or Too early (fewer than 5 sessions since the fix; say when to run `/ledger-tune verify` again), and never call a fix working from its tests alone; the before and after groups are different sessions doing different work, so a number that moved the wrong way is not proof on its own: say that, and check the tool the fix targets in `claude-ledger --text`.

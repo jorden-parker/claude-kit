@@ -1,6 +1,6 @@
 {
   "name": "ledger-tune",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Reads the token-ledger data, recommends changes that cut context, tokens and cost, applies the ones you pick and verifies them against later sessions.",
   "scripts": {
     "test": "claude plugin test .",

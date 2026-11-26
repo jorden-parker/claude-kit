@@ -26,7 +26,7 @@ Take the unticked lines in file order. For each one:
 
 ## Rules
 
-- Change only the files the step names, and that step's checkbox in plan.md, except to fix a lint, fallow, code style or test failure a check or hook reports: fix every such failure, including pre-existing ones and ones in files the step does not name.
+- Change only the files the step names, and that step's checkbox in plan.md, except for the fixes in the next rule.
 - Apply the edits in order, one at a time:
   - `replace`: read the file first. Then use the Edit tool with old_string set to the Find text and new_string set to the Replace text, copied exactly. An empty Replace block deletes the Find text. Find and Replace are the text between their fences, without the single newline before the closing fence.
   - `create`: write the Contents block exactly, as the whole file. If the file already exists, reply BLOCKED, unless an earlier edit in this step created it.
@@ -36,7 +36,7 @@ Take the unticked lines in file order. For each one:
 - Do not refactor, rename, reformat or improve anything the step does not mention.
 - Follow every rule in the step's Context section.
 - Run the step's Check command. If it fails because of your change, fix your own change at most twice. If it still fails, reply BLOCKED with the output.
-- If a lint, fallow, code style or TDD hook fails, fix what it reports and carry on; it is never a reason to reply BLOCKED. If any other hook blocks an edit or a command, do not work around it. Reply BLOCKED and quote the hook's message.
+- If a lint, fallow, code style or TDD hook fails, or a check or hook reports a test failure, fix every such failure, including pre-existing ones and ones in files the step does not name, and carry on; it is never a reason to reply BLOCKED. If any other hook blocks an edit or a command, do not work around it. Reply BLOCKED and quote the hook's message.
 - Do not commit, push, or install packages unless the step says to.
 
 ## Kinds

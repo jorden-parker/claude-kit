@@ -17,7 +17,7 @@ The page is the only output.
 - Do not check out the PR or change the working tree.
 - Your last message is the tool's one-line result, and nothing else. The one exception: a UX/UI finding went without a screenshot. Then add one line that says why.
 
-The notes are the words after the command, or the request that led here. They can name the PR and say what to focus on. Evidence needs no asking: every finding carries its own, as steps 3 and 4 say.
+The notes are the words after the command, or the request that led here. They can name the PR and say what to focus on.
 
 ## 1. Find the PR
 
@@ -93,26 +93,11 @@ Rules for every comment:
 - For a concrete replacement of the commented lines, put a GitHub suggestion block in the discussion: a code fence whose language is `suggestion`.
 - Write to the author as a colleague: say "we" and "this", not "you".
 
-How every comment reads. The format above does not change: the label, the decorations, the subject and the discussion stay as they are. These rules are for the words in the subject, the discussion and the summary. The author must understand each comment fully on the first read, with no other file open.
-
-- Write it the way you would say it to a colleague across the desk: everyday words and whole sentences.
-- Keep sentences short, with one idea in each. Use the active voice and name who or what acts: "`parseToken` throws", not "an exception may be thrown".
-- Say the concrete thing: what happens, on which input, and what the user or the caller then sees. Never "this may cause issues".
-- Pick the simplest word that is right: "use", not "utilize"; "so", not "consequently"; "about", not "with regard to".
-- Use a technical term only when the author needs it. When it is not a name from the code or the project's docs, say what it means in a few words.
-- Leave nothing to decode: no arrows, no "w/", no dropped words, and no abbreviation the code does not use.
-- Give the reason in plain words, so the author sees why it matters and not only what to change.
-- Cut filler and stiff phrases: "it should be noted that", "consider leveraging", "in order to". Say how sure you are once, not in every sentence.
-- Be kind and direct. No sarcasm, and no "just", "simply" or "obviously": they make a hard thing sound easy.
-- Before the page opens, read each comment once as the author would, knowing nothing of your review. Rewrite any sentence that needs a second read.
-
-Not this:
+How every comment reads. The format above does not change: the label, the decorations, the subject and the discussion stay as they are. These rules are for the words in the subject, the discussion and the summary. The author must understand each comment fully on the first read, with no other file open. Write it the way you would say it to a colleague across the desk: everyday words and whole sentences. Keep sentences short, with one idea in each. Use the active voice and name who or what acts: "`parseToken` throws", not "an exception may be thrown". Say the concrete thing: what happens, on which input, and what the user or the caller then sees. Never "this may cause issues". Pick the simplest word that is right: "use", not "utilize"; "so", not "consequently"; "about", not "with regard to". Use a technical term only when the author needs it; when it is not a name from the code or the project's docs, say what it means in a few words. Leave nothing to decode: no arrows, no "w/", no dropped words, and no abbreviation the code does not use. Give the reason in plain words, so the author sees why it matters and not only what to change. Cut filler and stiff phrases: "it should be noted that", "consider leveraging", "in order to". Say how sure you are once, not in every sentence. Be kind and direct: no sarcasm, and no "just", "simply" or "obviously", which make a hard thing sound easy. Before the page opens, read each comment once as the author would, knowing nothing of your review, and rewrite any sentence that needs a second read.
 
 ```text
 issue (blocking): Insufficient null handling in the token parsing logic may lead to runtime exceptions.
 ```
-
-This:
 
 ```text
 issue (blocking): `parseToken` crashes when the `Authorization` header is missing.
@@ -120,20 +105,7 @@ issue (blocking): `parseToken` crashes when the `Authorization` header is missin
 A request with no header reaches `header.split(" ")`, which throws, so the user gets a 500 instead of a 401. Can we return `undefined` first when `header` is empty?
 ```
 
-Evidence for a UX/UI finding. The `discussion` of every UX/UI comment holds these three, in this order. This is not optional and does not depend on the notes:
-
-1. The screenshot: a Markdown image on its own line, `![<what it shows>](<absolute path of the file>)`. That line is the whole embed. The tool takes no file and nothing is uploaded: the page reads the file from that path and shows it in the comment.
-2. The code that produced the screenshot, in a fenced code block that names its language: the script, the browser tool calls or the commands, in the order you ran them. Make it complete enough that the author runs it and gets the same picture: the command that started the app, the URL, the viewport size, and any change you made to the page.
-3. The steps you took to test the finding and to take the screenshot, as a numbered list a person can follow by hand: where you started, what you clicked or typed, what you saw, and what you expected instead.
-
-When the work is tracked in Shortcut, all three still go in the comment. That is the case when the branch name holds `sc-<number>`, the PR's body links an `app.shortcut.com` story, or the session has Shortcut tools. Never leave the steps out because the story describes the feature: the story says what was asked for, and the steps say what you did. Name the story in the first step.
-
-- Never leave a screenshot out because the tool cannot upload files, or because GitHub cannot read a local path. The user attaches the file on GitHub after posting.
-- Take the screenshot yourself, with the session's browser or screenshot tools, from the PR's code: the working tree when it is at the PR's head, or a preview deployment the PR links. To show a fix, change the page in the browser, not the files, and put that change in the code block. A suggested fix gets two screenshots: before and after.
-- When you cannot take a screenshot, because the session has no browser tool, the app does not start, or the PR's code is neither in the working tree nor on a preview: keep the finding only when the code shows it by itself. Say in its discussion that it has no screenshot and why, and give the code and the steps you did run.
-- Never embed a screenshot you did not take, and never write code or steps you did not run.
-- One screenshot shows one point. Frame it so the problem is the first thing seen, and say what it shows in the alt text.
-- Save every screenshot as a PNG, with no space in its path, in a folder outside the repository, such as `$TMPDIR/draft-pr-review-<number>/`. Never write one into the working tree, never `git add`, commit or push one, and never send one to an image host or any other service.
+When a finding is about UX or UI, read `screenshots.md` in this skill folder and follow it.
 
 Where a comment goes:
 

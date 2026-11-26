@@ -212,25 +212,26 @@ If no browser opens, the tool reports the page's path instead.
 
 ## Where things live
 
-| File                                | Holds                                                             |
-| ----------------------------------- | ----------------------------------------------------------------- |
-| `hooks/register.ts`                 | The four tools, the wiring of their checks and the autocomplete.  |
-| `hooks/mockup-checks.ts`            | The checks on a variant's CSS, markup and proposed tokens.        |
-| `hooks/theme.ts`                    | The theme's shape, and its tokens as CSS variables.               |
-| `hooks/design-page.ts`              | The HTML of the mockup page.                                      |
-| `hooks/hardcoded-values.ts`         | The finder of hardcoded colors, fonts, sizes and spacing.         |
-| `hooks/audit.ts`                    | The findings, the theme's self-checks, numbering and counts.      |
-| `hooks/audit-page.ts`               | The HTML of the audit page.                                       |
-| `hooks/gallery-page.ts`             | The gallery page's HTML and the reader of the saved files.        |
-| `hooks/component-groups.ts`         | The same-purpose groups and their shape checks.                   |
-| `hooks/input.ts`                    | The shared readers and small checks of tool input.                |
-| `hooks/page-style.ts`               | The CSS of both pages.                                            |
-| `hooks/page-script.ts`              | The behavior of both pages: tabs, width, dark and copy.           |
-| `skills/ui-design/SKILL.md`         | Picks the mode and names the tools; holds apply, fix and gallery. |
-| `skills/ui-design/theme.md`         | How Claude loads or extracts the theme.                           |
-| `skills/ui-design/mockups.md`       | The `new` and `redesign` steps and the mockup rules.              |
-| `skills/ui-design/audit.md`         | The `audit` steps and findings.                                   |
-| `skills/ui-design/theme-sources.md` | Where each stack keeps its theme.                                 |
+| File                                | Holds                                                            |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `hooks/register.ts`                 | The four tools, the wiring of their checks and the autocomplete. |
+| `hooks/mockup-checks.ts`            | The checks on a variant's CSS, markup and proposed tokens.       |
+| `hooks/theme.ts`                    | The theme's shape, and its tokens as CSS variables.              |
+| `hooks/design-page.ts`              | The HTML of the mockup page.                                     |
+| `hooks/hardcoded-values.ts`         | The finder of hardcoded colors, fonts, sizes and spacing.        |
+| `hooks/audit.ts`                    | The findings, the theme's self-checks, numbering and counts.     |
+| `hooks/audit-page.ts`               | The HTML of the audit page.                                      |
+| `hooks/gallery-page.ts`             | The gallery page's HTML and the reader of the saved files.       |
+| `hooks/component-groups.ts`         | The same-purpose groups and their shape checks.                  |
+| `hooks/input.ts`                    | The shared readers and small checks of tool input.               |
+| `hooks/page-style.ts`               | The CSS of both pages.                                           |
+| `hooks/page-script.ts`              | The behavior of both pages: tabs, width, dark and copy.          |
+| `skills/ui-design/SKILL.md`         | Picks the mode and names the tools.                              |
+| `skills/ui-design/apply-fix.md`     | The `apply`, `fix` and `gallery` steps.                          |
+| `skills/ui-design/theme.md`         | How Claude loads or extracts the theme.                          |
+| `skills/ui-design/mockups.md`       | The `new` and `redesign` steps and the mockup rules.             |
+| `skills/ui-design/audit.md`         | The `audit` steps and findings.                                  |
+| `skills/ui-design/theme-sources.md` | Where each stack keeps its theme.                                |
 
 ## Install
 

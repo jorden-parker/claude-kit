@@ -228,15 +228,15 @@
       nav a,
       .collapse-toggle {
         border: 2px solid transparent;
-        border-radius: 8px;
+        border-radius: var(--radius);
         background-color: transparent;
         background-clip: padding-box;
         color: var(--text-soft);
         text-decoration: none;
         touch-action: manipulation;
         transition:
-          background-color 120ms ease,
-          color 120ms ease;
+          background-color 150ms ease,
+          color 150ms ease;
       }
       nav a:hover,
       .collapse-toggle:hover {
@@ -246,7 +246,7 @@
       nav a[aria-current] {
         background-color: var(--selected);
         color: var(--text);
-        box-shadow: inset 2px 0 0 var(--accent);
+        font-weight: 500;
       }
       nav a:focus-visible,
       .collapse-toggle:focus-visible {
@@ -258,7 +258,8 @@
         flex: none;
         min-width: 3ch;
         font-family: var(--mono);
-        font-size: 11px;
+        font-size: 12px;
+        font-weight: 400;
         line-height: 16px;
         text-align: right;
         color: var(--muted);
@@ -319,7 +320,7 @@
       nav h2 {
         font-size: 13px;
         line-height: 20px;
-        font-weight: 600;
+        font-weight: 500;
         color: var(--text);
       }
       nav h3 {
@@ -370,7 +371,7 @@
       @media (hover: hover) and (pointer: fine) {
         .group-actions {
           opacity: 0;
-          transition: opacity 120ms ease;
+          transition: opacity 150ms ease;
         }
         .group-heading:hover .group-actions,
         .group-heading:focus-within .group-actions {
@@ -399,7 +400,7 @@
         gap: 8px;
         flex: 1 0 100%;
         padding: 0 8px 4px calc(var(--text-x) + var(--indent) - 2px);
-        font-size: 11px;
+        font-size: 12px;
         line-height: 16px;
         color: var(--muted);
         font-variant-numeric: tabular-nums;
@@ -554,6 +555,24 @@
         color: var(--text);
         text-wrap: balance;
         overflow-wrap: anywhere;
+      }
+      .entry-title-toggle {
+        --chevron: 0.55em;
+        --gap: 0.3em;
+        --indent: 0px;
+        --row: 0px;
+        align-items: flex-start;
+        margin-left: -6px;
+        padding: 2px 8px 2px 4px;
+      }
+      .entry-title-toggle > span:not(.count) {
+        overflow: visible;
+        white-space: normal;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+      }
+      .entry-title-toggle svg {
+        margin-top: calc((1lh - var(--chevron)) / 2);
       }
       .entry-actions {
         display: flex;
@@ -957,7 +976,8 @@
         min-height: var(--row, 36px);
         margin-bottom: 0;
         padding: 0 12px 0 36px;
-        font-size: 13px;
+        border-radius: var(--radius);
+        font-size: 14px;
       }
       .no-matches {
         margin: 12px var(--inset, 10px);
@@ -983,9 +1003,10 @@
       dialog input:focus-visible,
       .note-filter:focus-visible,
       .editor input:focus-visible {
-        outline: none;
+        outline: 2px solid var(--focus);
+        outline-offset: -1px;
+        box-shadow: none;
         border-color: var(--focus);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
       }
       .editor-footer {
         display: flex;
@@ -1129,6 +1150,10 @@
         }
       }
       @media (max-width: 720px) {
+        input,
+        textarea {
+          font-size: 16px;
+        }
         body {
           grid-template-columns: minmax(0, 1fr);
           grid-template-rows: auto minmax(0, 1fr);
@@ -1243,6 +1268,59 @@
       .mark:empty::after{content:none}
       :hover>.mark:empty,.brand:hover .mark:empty{transform:rotate(-16deg) scale(1.12);border-radius:56% 44% 40% 60%/44% 56% 50% 50%}
       @media (prefers-reduced-motion:reduce){*,::before,::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+      /* Geist pass: page-local overrides. Keep below the kit theme lines so they win the cascade. */
+      :root {
+        --radius: 6px;
+        --spring: ease;
+        --selected: color-mix(in srgb, var(--kit-hover) 60%, var(--kit-line-strong));
+      }
+      html::before {
+        height: 2px;
+      }
+      body {
+        background-image: none;
+      }
+      .topbar,
+      body > header {
+        border-image: none;
+        border-bottom-color: var(--border);
+      }
+      h1,
+      h2,
+      .brand {
+        font-family: var(--sans);
+      }
+      .button,
+      .icon-button {
+        transition:
+          background-color 150ms ease,
+          border-color 150ms ease,
+          color 150ms ease;
+      }
+      .button {
+        border-radius: var(--radius);
+      }
+      .button:not(:disabled):hover {
+        transform: none;
+      }
+      .button:not(:disabled):active {
+        transform: none;
+      }
+      .button.primary {
+        background: var(--text);
+        border-color: var(--text);
+        color: var(--background);
+        box-shadow: none;
+      }
+      .button.primary:not(:disabled):hover {
+        background: color-mix(in srgb, var(--text) 85%, var(--background));
+        box-shadow: none;
+      }
+      #toast,
+      .toast {
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
     </style>
   </head>
   <body data-menu="closed">

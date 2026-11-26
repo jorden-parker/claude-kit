@@ -42,6 +42,20 @@ Four plugins save Markdown, and they follow one layout:
 - Brainstorm plans keep their own format, a `# Plan:` heading with `- Status:` lines, an `index.md` per run and step files, because `check_brainstorm_plan` checks it
 - One local web page shows all four, picked from its sidebar: run `claude-notes` in a terminal (see [Notes viewer](#notes-viewer))
 
+## Agent models
+
+`claude-agent-models` is a terminal UI for choosing which model each of this repo's subagents runs on. It runs from a terminal, from any folder, and saves the choices to `~/.claude/agent-models.json`.
+
+```
+ln -s ~/src/claude-kit/agent-models/claude-agent-models ~/.local/bin/claude-agent-models
+claude-agent-models           # pick a model per agent
+claude-agent-models -list     # print agents and models, then exit
+```
+
+- It is a Go program, built on first run and again after it changes, so it needs Go: `brew install go`
+- On a machine with only the marketplace, link `~/.claude/plugins/marketplaces/claude-kit/agent-models/claude-agent-models` instead
+- It reads the agents of the checkout it is linked from; `-repo <path>` picks another
+
 ## Notes viewer
 
 `claude-notes` serves one local web page with every handoff, project note, small plan and brainstorm plan, picked from its sidebar. It runs from a terminal, not inside a session.
@@ -81,7 +95,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 2. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
 3. Updates the claude-kit marketplace
 4. Updates every installed claude-kit plugin in its own scope
-5. Links `claude-notes`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
+5. Links `claude-notes`, `claude-agent-models`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 
 It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not stop the others; the run ends by naming each failure and exits 1. Start a new Claude Code session afterwards to load the updated plugins.
 
@@ -342,6 +356,7 @@ design-studio/cli.ts "Onboarding screen for a recipe app" --variants 2 --size 9b
 plugins/<name>/                   one plugin: its own plugin.json, README, package.json and tests
 plugin-host/                      runs register.ts plugins and command hooks outside Claude Code (engine, MCP server, hook bridges, build)
 notes-viewer/                     claude-notes: the local web page for saved notes (Go)
+agent-models/                     claude-agent-models: the terminal UI that picks each subagent's model (Go)
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
 claude-kit-update                 sets up the marketplace, updates every installed claude-kit plugin

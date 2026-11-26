@@ -106,6 +106,7 @@ expect "an available claude-kit plugin that is not installed is not updated" not
 expect "an available claude-kit plugin that is not installed is never installed" not_called "plugin install"
 expect "an available plugin of another marketplace is not installed" not_called "plugin install other@claude-plugins-official"
 expect "claude-notes is linked onto the PATH folder" links_to claude-notes "$repository_root/notes-viewer/claude-notes"
+expect "claude-agent-models is linked onto the PATH folder" links_to claude-agent-models "$repository_root/agent-models/claude-agent-models"
 expect "claude-ledger is linked onto the PATH folder" links_to claude-ledger "$repository_root/plugins/token-ledger/bin/claude-ledger"
 expect "claude-kit-update is linked onto the PATH folder" links_to claude-kit-update "$repository_root/claude-kit-update"
 expect "claude-kit-doctor is linked onto the PATH folder" links_to claude-kit-doctor "$repository_root/claude-kit-doctor"

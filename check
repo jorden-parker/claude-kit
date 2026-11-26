@@ -73,6 +73,11 @@ for manifest in plugins/*/package.json; do
   (cd "$plugin_folder" && run_outside_the_commit_hook pnpm run test)
 done
 
+if should_check agent-models; then
+  echo "check: agent-models"
+  (cd agent-models && run_outside_the_commit_hook go test ./...)
+fi
+
 if should_check notes-viewer; then
   echo "check: notes-viewer"
   (cd notes-viewer && run_outside_the_commit_hook go test ./...)
@@ -91,7 +96,7 @@ for sync_test in tests/sync-*.test.sh; do
   run_outside_the_commit_hook bash "$sync_test"
 done
 
-if should_check claude-kit-update tests/claude-kit-update.test.sh notes-viewer/claude-notes; then
+if should_check claude-kit-update tests/claude-kit-update.test.sh notes-viewer/claude-notes agent-models/claude-agent-models; then
   echo "check: tests/claude-kit-update.test.sh"
   run_outside_the_commit_hook bash tests/claude-kit-update.test.sh
 fi

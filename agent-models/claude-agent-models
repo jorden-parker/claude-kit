@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+tool_directory="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+repository_root="$(dirname "$tool_directory")"
+
+source_checksum="$(cat "$tool_directory"/*.go "$tool_directory"/go.* | cksum | cut -d ' ' -f 1)"
+tool_path="${XDG_CACHE_HOME:-$HOME/.cache}/claude-agent-models/agent-models-$source_checksum"
+
+if [ ! -x "$tool_path" ]; then
+  command -v go >/dev/null || fail "claude-agent-models is built with Go on first run: brew install go"
+  mkdir -p "$(dirname "$tool_path")"
+  (cd "$tool_directory" && go build -o "$tool_path" .) || fail "Could not build claude-agent-models."
+fi
+
+exec "$tool_path" -repo "$repository_root" "$@"

@@ -114,7 +114,7 @@ general-purpose, claude and statusline-setup).
 
 The `agent.spawn` hook reads `~/.claude/agent-models.json` on every spawn and
 applies the saved model of that agent type. A missing or unreadable file
-means no saved models. Run `cd agent-models && go run .` to pick each agent's model; it saves them to that file.
+means no saved models. Run `claude-agent-models` to pick each agent's model; it saves them to that file.
 
 bash-guard and read-guard rewrite the call only in Claude Code. Qwen Code, pi,
 OpenCode and Crush cannot take a rewritten call, so there both guards deny

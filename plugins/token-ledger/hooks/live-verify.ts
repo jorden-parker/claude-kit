@@ -1,6 +1,11 @@
-import { loadDay } from "./codeburn-usage.ts";
+import {
+  createTranscriptIndex,
+  recentTranscripts,
+  transcriptDay,
+} from "./transcript-usage.ts";
+import { reportPricing } from "./usage-pricing.ts";
 import { dailyPage, dayTotal } from "./daily-page.ts";
-import { liveCodeburn, type loadCodeburnUsage } from "./codeburn-usage.ts";
+import { liveCodeburn, type ExternalUsage } from "./codeburn-usage.ts";
 import { shareUsagePage } from "./share-usage.ts";
 import { parseRates } from "./usage-metrics.ts";
 import { compareModelCohorts } from "./model-comparison.ts";
@@ -16,8 +21,16 @@ import { verifyPage } from "./verify-page.ts";
 export function startVerifyServer(
   userHome: string,
   options: {
-    loadDaily?: typeof loadDay;
-    loadUsage?: typeof loadCodeburnUsage;
+    loadDaily?: (
+      home: string,
+      day: string,
+      zone: string
+    ) => Promise<import("./daily-page.ts").DayUsage>;
+    loadUsage?: (
+      home: string,
+      entries: ReturnType<typeof readNewestEntries>,
+      calls?: import("./transcript-usage.ts").TranscriptCall[]
+    ) => Promise<ExternalUsage>;
     discover?: (home: string) => Promise<CodeburnStatus>;
   } = {}
 ) {
@@ -28,7 +41,15 @@ export function startVerifyServer(
     for (const listener of listeners) listener.enqueue(event);
   });
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  type DailyData = Awaited<ReturnType<typeof loadDay>>;
+  const index = createTranscriptIndex(userHome);
+  const pricing = reportPricing(parseRates(process.env.TOKEN_LEDGER_PRICING));
+  const loadDaily =
+    options.loadDaily ??
+    (async (_home: string, day: string, zone: string) => {
+      const { calls, errors } = await index();
+      return transcriptDay(calls, day, zone, pricing, errors);
+    });
+  type DailyData = import("./daily-page.ts").DayUsage;
   type DailyReading = { at: number; data?: DailyData; pending?: Promise<void> };
   const days = new Map<string, DailyReading>();
   function dailyReading(day: string) {
@@ -40,7 +61,7 @@ export function startVerifyServer(
     }
     const reading = cached;
     if (!reading.pending && Date.now() - reading.at >= 60000) {
-      reading.pending = (options.loadDaily ?? loadDay)(userHome, day, zone)
+      reading.pending = loadDaily(userHome, day, zone)
         .then(
           (data) => {
             reading.data = data;
@@ -111,6 +132,8 @@ export function startVerifyServer(
       if (pathname !== path) return new Response("Not found", { status: 404 });
       if (request.method !== "GET")
         return new Response("Method not allowed", { status: 405 });
+      // Cold scans of a large transcript archive can exceed the default HTTP idle timeout.
+      connection.timeout(request, 0);
       const day = new URL(request.url).searchParams.get("day");
       if (day !== null) {
         if (
@@ -154,22 +177,36 @@ export function startVerifyServer(
         query.get("view") !== "comparison"
       ) {
         void collect(fix?.appliedAt).catch(() => {});
-        const sample = readNewestEntries(userHome, 20);
+        const snapshot = await index();
+        const sample = recentTranscripts(
+          snapshot.calls,
+          readNewestEntries(userHome, 20)
+        );
+        const ids = new Set(sample.map((e) => e.session));
+        const recent = snapshot.calls.filter((c) => ids.has(c.session));
         const today = new Date().toLocaleDateString("sv-SE", {
           timeZone: zone,
         });
         const reading = dailyReading(today);
+        if (!reading.data) await reading.pending;
         return new Response(
           shareUsagePage(
             sample,
-            parseRates(process.env.TOKEN_LEDGER_PRICING),
-            external(sample),
+            pricing.rates,
+            external(sample, recent),
             dayTotal(
               today,
               zone,
               reading.data,
               !!reading.pending && !reading.at
-            )
+            ),
+            pricing,
+            new Set(recent.map((c) => c.session)).size +
+              " of " +
+              sample.length +
+              " sessions have local transcript evidence. Other sessions use saved ledger summaries. " +
+              snapshot.errors +
+              " missing source roots, read errors or skipped records across the index."
           ),
           {
             headers: {

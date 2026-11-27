@@ -69,7 +69,7 @@ export function verifyPage(
       .map((name) => '<span class="model-name">' + html(name) + "</span>")
       .join("") || fallback;
   const modelTable = models
-    ? '<section class="panel"><div class="panel-heading"><div><h2>Models by deployment period</h2><p>Session counts for each main and worker model combination.</p></div></div><div class="table-scroll"><table class="model-table"><thead><tr><th>Main models</th><th>Worker models</th><th class="number">Before</th><th class="number">After</th></tr></thead><tbody>' +
+    ? '<section class="panel"><div class="panel-heading"><div><h2>Models by deployment period</h2><p>Session counts for each main and worker model combination.</p></div></div><div class="table-scroll" role="region" aria-label="Models by deployment period" tabindex="0"><table class="model-table"><thead><tr><th>Main models</th><th>Worker models</th><th class="number">Before</th><th class="number">After</th></tr></thead><tbody>' +
       [...models.distribution]
         .sort(
           (a, b) =>
@@ -107,8 +107,8 @@ export function verifyPage(
       " Before, " +
       models.after.sessions +
       " After.</p></div></section>" +
-      modelTable +
       content +
+      modelTable +
       '<section class="panel"><div class="panel-heading"><div><h2>Session length and measurement coverage</h2><p>Reasoning effort, workload and billing route can differ within a model mix. Per-call readings alone do not establish savings.</p></div></div><div class="table-scroll"><table><thead><tr><th>Measurement</th><th>Before</th><th>After</th></tr></thead><tbody>' +
       [
         [
@@ -203,7 +203,7 @@ export function verifyPage(
       '<button class="primary" type="submit">Use comparison</button><p class="filter-note">Keep the original cost-change deployment selected when installing report updates.</p></form>'
     : "";
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Token Ledger · Deployment check-in</title><style>${geistStyle}
-.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.transfer-code{margin:0 12px 0 0;color:var(--ds-gray-1000);font-weight:600}.model-table th:first-child{width:34%}.reading{display:inline-block}.note{margin:-12px 0 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere}.panel-heading code{white-space:nowrap}</style>${productHeader("Verification", live)}<main><a class="button" href="?view=usage">Session usage</a><div class="page-heading"><div><h1>Deployment check-in</h1>${check ? "<p>" + html(check.title) + " · " + html(check.since.slice(0, 10)) + "</p>" : ""}</div></div>${picker}${fairness}${diagnostics ? '<details class="details" id="recording"><summary>Recording status</summary><div class="details-body"><pre>' + html(formatRecordingStatus(diagnostics)) + "</pre></div></details>" : ""}</main>${live ? "<script>" + liveVerifyScript + "</script>" : ""}</html>`;
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.transfer-code{margin:0 12px 0 0;color:var(--ds-gray-1000);font-weight:600}.model-table th:first-child{width:34%}.reading{display:inline-block}.note{margin:-12px 0 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere}.panel-heading code{white-space:nowrap}</style>${productHeader("Verification", live)}<main id="report"><div class="page-heading"><div><h1>Deployment check-in</h1>${check ? "<p>" + html(check.title) + " · " + html(check.since.slice(0, 10)) + "</p>" : ""}</div><a class="button" href="?view=usage">Session usage</a></div>${picker}${fairness}${diagnostics ? '<details class="details" id="recording"><summary>Recording status</summary><div class="details-body"><pre>' + html(formatRecordingStatus(diagnostics)) + "</pre></div></details>" : ""}</main>${live ? "<script>" + liveVerifyScript + "</script>" : ""}</html>`;
 }
 
 export const liveVerifyScript = `
@@ -222,7 +222,7 @@ async function refreshReadings() {
     const next = new DOMParser().parseFromString(await response.text(), "text/html").querySelector("main");
     const current = document.querySelector("main");
     if (!next || !current) throw new Error("Invalid report");
-    if (next.innerHTML !== lastReadings && !getSelection()?.toString() && !document.activeElement?.matches("select,input")) {
+    if (next.innerHTML !== lastReadings && !getSelection()?.toString() && !document.activeElement?.closest("main")) {
       const expanded = [...current.querySelectorAll("details[open][id]")].map(el => el.id);
       const oldPicker = current.querySelector("#day");
       const editedDay = oldPicker?.value !== oldPicker?.defaultValue ? oldPicker?.value : undefined;
@@ -235,7 +235,7 @@ async function refreshReadings() {
       const picker = current.querySelector("#day");
       if (picker && editedDay !== undefined) picker.value = editedDay;
     }
-    status.textContent = "Live · checks for new recorded results every 2 seconds";
+    if (status.textContent !== "Live · updates every 2s") status.textContent = "Live · updates every 2s";
   } catch {
     status.textContent = "Disconnected · showing last results; retrying automatically. Keep claude-ledger verify browser running.";
   } finally { refreshing=false; scheduled=setTimeout(refreshReadings, 2000); }

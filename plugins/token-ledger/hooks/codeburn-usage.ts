@@ -1,3 +1,5 @@
+import type { TranscriptCall } from "./transcript-usage.ts";
+import { verifyTranscripts } from "./verify-transcripts.ts";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +27,7 @@ type Row = {
   partial: boolean;
 };
 export type ExternalUsage = {
+  verification?: ReturnType<typeof verifyTranscripts>;
   currency: string;
   rows: Row[];
   matched: Set<string>;
@@ -32,7 +35,11 @@ export type ExternalUsage = {
   costs: Map<string, Metric>;
 };
 const identity = (model: string, role: string) => JSON.stringify([model, role]);
-export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
+export function parseExport(
+  data: any,
+  entries: LedgerEntry[],
+  calls?: TranscriptCall[]
+): ExternalUsage {
   const currentSchema = data?.schema === "codeburn.export.v3";
   if (
     (!currentSchema && data?.schema !== "codeburn.export.v2") ||
@@ -42,6 +49,21 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
   )
     throw Error("Unsupported Codeburn export");
   const byId = new Map(entries.map((entry) => [entry.session, entry]));
+  const workerSources = new Map<string, LedgerEntry | undefined>();
+  for (const call of calls ?? []) {
+    const parent = byId.get(call.session);
+    if (!call.worker || !parent) continue;
+    if (!workerSources.has(call.source)) workerSources.set(call.source, parent);
+    else if (workerSources.get(call.source) !== parent)
+      workerSources.set(call.source, undefined);
+  }
+  const evidence = {
+    roles: new Map<object, string>(),
+    ambiguous: new Set<object>(),
+  };
+  const verification = calls
+    ? verifyTranscripts(data.records, calls, new Set(byId.keys()), evidence)
+    : undefined;
   const rows = new Map<string, Row>(),
     matched = new Set<string>(),
     covered = new Map<string, Set<string>>(),
@@ -69,7 +91,9 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
       basis: new Set(),
       partial: false,
     };
-    const value = numeric(record.cost);
+    const value = evidence.ambiguous.has(record)
+      ? undefined
+      : numeric(record.cost);
     const basis =
       record.unpriced || record.costBasis === "unpriced"
         ? "Unpriced"
@@ -85,6 +109,7 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
       row[field] = plus(row[field], numeric(record[field + "Tokens"]));
     row.cost = plus(row.cost, cost);
     row.basis.add(String(basis));
+    if (evidence.ambiguous.has(record)) row.basis.add("ambiguous records");
     row.sessions.add(id);
     rows.set(key, row);
     const sessionVolumes = volumes.get(id) ?? new Map<string, number>();
@@ -104,22 +129,18 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
     covered.set(id, keys);
   }
   for (const r of data.records) {
-    const entry = byId.get(r?.sessionId);
+    const entry = byId.get(r?.sessionId) ?? workerSources.get(r?.sessionId);
     if (
       !entry ||
       (r.provider && r.provider !== "claude") ||
       typeof r.model !== "string"
     )
       continue;
-    const main = Object.hasOwn(entry.main, r.model),
-      worker = Object.hasOwn(entry.subagents, r.model);
-    const role = r.subagentType
-      ? "Worker"
-      : main !== worker
-        ? main
-          ? "Main"
-          : "Worker"
-        : "Role unavailable";
+    const role =
+      evidence.roles.get(r) ??
+      (r.subagentType || workerSources.has(r.sessionId)
+        ? "Worker"
+        : "Role unavailable");
     include(entry, r.model, role, r, r.supplementary ? 0 : 1);
   }
   for (const r of data.sessions) {
@@ -171,6 +192,7 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
           costs.set(entry.session, undefined);
   }
   return {
+    verification,
     currency: data.currency.code,
     rows: [...rows.values()],
     matched,
@@ -223,20 +245,22 @@ async function exportUsage(
     await rm(dir, { recursive: true, force: true });
   }
 }
-export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
+export async function loadCodeburnUsage(
+  home: string,
+  entries: LedgerEntry[],
+  calls: TranscriptCall[] = []
+) {
   const dates = entries
     .flatMap((e) => [e.startedAt, e.updatedAt])
     .filter((s): s is string => !!s)
     .sort();
-  return parseExport(
-    await exportUsage(
-      home,
-      dates[0].slice(0, 10),
-      dates.at(-1)!.slice(0, 10),
-      "UTC"
-    ),
-    entries
+  const raw = await exportUsage(
+    home,
+    dates[0].slice(0, 10),
+    dates.at(-1)!.slice(0, 10),
+    "UTC"
   );
+  return parseExport(raw, entries, calls);
 }
 export async function loadDay(home: string, day: string, zone: string) {
   return parseDay(await exportUsage(home, day, day, zone), day);
@@ -278,7 +302,11 @@ export function parseDay(data: any, day: string) {
 }
 export function liveCodeburn(
   home: string,
-  load = loadCodeburnUsage,
+  load: (
+    home: string,
+    entries: LedgerEntry[],
+    calls?: TranscriptCall[]
+  ) => Promise<ExternalUsage> = loadCodeburnUsage,
   notify = () => {}
 ) {
   let snapshot: ExternalUsage | undefined,
@@ -287,8 +315,8 @@ export function liveCodeburn(
     pending = false,
     next = 0,
     message = "";
-  return (entries: LedgerEntry[]) => {
-    const key = JSON.stringify(entries.map((e) => e.session));
+  return (entries: LedgerEntry[], calls: TranscriptCall[] = []) => {
+    const key = JSON.stringify(entries.map((e) => [e.session, e.updatedAt]));
     if (
       entries.length &&
       !pending &&
@@ -297,7 +325,7 @@ export function liveCodeburn(
       pending = true;
       attempted = key;
       message = "Refreshing Codeburn";
-      void load(home, entries)
+      void load(home, entries, calls)
         .then(
           (result) => {
             snapshot = result;

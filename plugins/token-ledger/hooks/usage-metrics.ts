@@ -5,6 +5,7 @@ export type Rates = {
   cacheWrite: number;
 };
 export type RequestUsage = {
+  agentType?: string;
   requestedModel?: string;
   resolvedModel: string;
   input?: number;

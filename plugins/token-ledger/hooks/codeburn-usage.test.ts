@@ -84,7 +84,7 @@ test("v3 uses raw records first and camelCase session totals when no record matc
     shareUsagePage([entry], {}, { data: detailed, message: "" }).split(
       "</table>"
     )[0]
-  ).not.toContain("Missing per-call records");
+  ).toContain("Missing per-call records");
   expect(
     parseExport({ ...snapshot, records: [] }, [entry]).rows[0]
   ).toMatchObject({ model: "Session total", cost: 3, calls: 4 });

@@ -90,3 +90,19 @@ test("legacy Opus readings get a labeled reference estimate independent of call 
   expect(shareUsagePage([partial], {})).toContain("known categories only");
   expect(usageSample([source], {}).priced).toBe(0);
 });
+
+test("individual session costs keep incomplete pricing distinct from zero and omit identifying fields", () => {
+  const page = shareUsagePage(
+    [
+      { ...entry, session: "sensitive-session", project: "/sensitive/project" },
+      { ...entry, session: "legacy-entry", workerTasks: undefined },
+    ],
+    { model: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }
+  );
+  const table = page
+    .split('<table class="session-costs">')[1]
+    .split("</table>")[0];
+  expect(table).toContain("<td>0</td><td>Configured rates</td>");
+  expect(table).toContain("<td>Unknown</td><td>Incomplete pricing</td>");
+  expect(table).not.toContain("sensitive");
+});

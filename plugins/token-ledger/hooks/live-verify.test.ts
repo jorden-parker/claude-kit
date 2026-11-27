@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startVerifyServer } from "./live-verify.ts";
 
-test("the overview automatically shows today's Codeburn total and reuses the daily export", async () => {
+test("the overview and date picker share the cached day reading", async () => {
   const home = mkdtempSync(join(tmpdir(), "daily-overview-"));
   const dates: string[] = [];
   const { server, url } = startVerifyServer(home, {

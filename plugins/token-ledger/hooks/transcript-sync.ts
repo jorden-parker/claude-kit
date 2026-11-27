@@ -12,13 +12,22 @@ export type SyncStatus = {
   errors: number;
   pending: number;
 };
-function listTranscripts(root: string, depth = 0): string[] {
+export function listTranscripts(
+  root: string,
+  includeWorkers = false,
+  depth = 0
+): string[] {
   if (depth > 12 || !existsSync(root)) return [];
   const result: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (entry.isSymbolicLink() || entry.name === "subagents") continue;
+    if (
+      entry.isSymbolicLink() ||
+      (!includeWorkers && entry.name === "subagents")
+    )
+      continue;
     const path = join(root, entry.name);
-    if (entry.isDirectory()) result.push(...listTranscripts(path, depth + 1));
+    if (entry.isDirectory())
+      result.push(...listTranscripts(path, includeWorkers, depth + 1));
     else if (entry.isFile() && entry.name.endsWith(".jsonl")) result.push(path);
   }
   return result;

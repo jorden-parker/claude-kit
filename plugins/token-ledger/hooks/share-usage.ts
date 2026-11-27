@@ -184,7 +184,8 @@ function aggregateEstimate(row: UsageRow, configured?: Rates) {
 export function shareUsagePage(
   entries: LedgerEntry[],
   rates: Record<string, Rates>,
-  external?: { data?: ExternalUsage; message: string }
+  external?: { data?: ExternalUsage; message: string },
+  dailyTotal = ""
 ) {
   const sample = usageSample(entries, rates);
   const number = (v: Metric) =>
@@ -303,7 +304,7 @@ export function shareUsagePage(
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Session usage · Token Ledger</title><style>${geistStyle}
   main{max-width:1440px}.usage{min-width:850px}.usage th,.usage td{padding:13px 14px}.usage th,.usage td{text-align:right}.usage th:first-child,.usage :nth-child(3){text-align:left}.usage tbody th{width:auto;max-width:32ch;font-weight:550;color:var(--ds-gray-1000);overflow-wrap:anywhere}.usage .row-cost{font-weight:600;background:var(--ds-background-200)}.usage tbody tr:hover>*{background:var(--ds-gray-100)}.cost-reason,.row-note{display:block;font:12px/1.45 Geist,system-ui,sans-serif;color:var(--muted);margin-top:3px}.row-cost{min-width:15ch}.row-note{max-width:30ch}.share-line{overflow-wrap:anywhere;padding:12px 20px}.stats{margin:18px 0}.stat{background:var(--ds-background-200)}.stat small{color:var(--muted);font-size:12px}.panel{margin-bottom:14px}.usage-guide{margin-bottom:12px}@media(max-width:700px){.stats{grid-template-columns:1fr}.page-heading .button{display:inline-block;margin-top:12px}}
   </style>${productHeader("Session usage", true)}<main><div class="page-heading"><div><h1>Usage from the last ${entries.length} sessions</h1><p>${dates.length ? "Last updated " + dates[0] + " to " + dates.at(-1) + " UTC · " : ""}${sample.finished} sessions with a finished latest response</p></div><a class="button" href="?view=comparison">Compare deployments</a></div>
-  ${dayPicker(new Date().toLocaleDateString("sv-SE"))}<div class="stats">${[
+  ${dailyTotal}${dayPicker(new Date().toLocaleDateString("sv-SE"))}<div class="stats">${[
     [
       "Fully priced sessions",
       (cb?.matched.size ? totals.length : sample.priced) +

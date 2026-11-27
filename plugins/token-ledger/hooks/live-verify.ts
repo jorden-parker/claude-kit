@@ -1,5 +1,5 @@
 import { loadDay } from "./codeburn-usage.ts";
-import { dailyPage } from "./daily-page.ts";
+import { dailyPage, dayTotal } from "./daily-page.ts";
 import { liveCodeburn, type loadCodeburnUsage } from "./codeburn-usage.ts";
 import { shareUsagePage } from "./share-usage.ts";
 import { parseRates } from "./usage-metrics.ts";
@@ -16,6 +16,7 @@ import { verifyPage } from "./verify-page.ts";
 export function startVerifyServer(
   userHome: string,
   options: {
+    loadDaily?: typeof loadDay;
     loadUsage?: typeof loadCodeburnUsage;
     discover?: (home: string) => Promise<CodeburnStatus>;
   } = {}
@@ -27,10 +28,34 @@ export function startVerifyServer(
     for (const listener of listeners) listener.enqueue(event);
   });
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const days = new Map<
-    string,
-    { at: number; result: ReturnType<typeof loadDay> }
-  >();
+  type DailyData = Awaited<ReturnType<typeof loadDay>>;
+  type DailyReading = { at: number; data?: DailyData; pending?: Promise<void> };
+  const days = new Map<string, DailyReading>();
+  function dailyReading(day: string) {
+    let cached = days.get(day);
+    if (!cached) {
+      if (days.size >= 16) days.delete(days.keys().next().value!);
+      cached = { at: 0 };
+      days.set(day, cached);
+    }
+    const reading = cached;
+    if (!reading.pending && Date.now() - reading.at >= 60000) {
+      reading.pending = (options.loadDaily ?? loadDay)(userHome, day, zone)
+        .then(
+          (data) => {
+            reading.data = data;
+          },
+          () => {
+            reading.data = undefined;
+          }
+        )
+        .finally(() => {
+          reading.at = Date.now();
+          reading.pending = undefined;
+        });
+    }
+    return reading;
+  }
   const path = "/" + crypto.randomUUID();
   const comparisonPath = join(
     userHome,
@@ -94,16 +119,9 @@ export function startVerifyServer(
           new Date(day).toISOString().slice(0, 10) !== day
         )
           return new Response("Invalid date", { status: 400 });
-        let cached = days.get(day);
-        if (!cached || Date.now() - cached.at > 60000) {
-          if (days.size >= 16) days.delete(days.keys().next().value!);
-          cached = { at: Date.now(), result: loadDay(userHome, day, zone) };
-          days.set(day, cached);
-        }
-        const report = await cached.result.then(
-          (data) => dailyPage(day, zone, data),
-          () => dailyPage(day, zone)
-        );
+        const reading = dailyReading(day);
+        await reading.pending;
+        const report = dailyPage(day, zone, reading.data);
         return new Response(report, {
           headers: {
             "Content-Type": "text/html; charset=utf-8",
@@ -137,11 +155,21 @@ export function startVerifyServer(
       ) {
         void collect(fix?.appliedAt).catch(() => {});
         const sample = readNewestEntries(userHome, 20);
+        const today = new Date().toLocaleDateString("sv-SE", {
+          timeZone: zone,
+        });
+        const reading = dailyReading(today);
         return new Response(
           shareUsagePage(
             sample,
             parseRates(process.env.TOKEN_LEDGER_PRICING),
-            external(sample)
+            external(sample),
+            dayTotal(
+              today,
+              zone,
+              reading.data,
+              !!reading.pending && !reading.at
+            )
           ),
           {
             headers: {

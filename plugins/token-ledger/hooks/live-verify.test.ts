@@ -10,6 +10,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startVerifyServer } from "./live-verify.ts";
 
+test("the overview automatically shows today's Codeburn total and reuses the daily export", async () => {
+  const home = mkdtempSync(join(tmpdir(), "daily-overview-"));
+  const dates: string[] = [];
+  const { server, url } = startVerifyServer(home, {
+    discover: async () => ({ roots: [], message: "Test discovery" }),
+    loadDaily: async (_home, day) => {
+      dates.push(day);
+      return { currency: "USD", cost: 12.34, calls: 5, unpriced: false };
+    },
+  });
+  try {
+    const today = new Date().toLocaleDateString("sv-SE");
+    expect(await (await fetch(url)).text()).toContain("Daily total");
+    const page = await (await fetch(url)).text();
+    expect(page).toContain("12.34");
+    expect(page).toContain("Usage by model and role");
+    expect(await (await fetch(url + "?day=" + today)).text()).toContain(
+      "12.34"
+    );
+    expect(dates).toEqual([today]);
+  } finally {
+    server.stop(true);
+    rmSync(home, { recursive: true, force: true });
+  }
+});
 test("live report reads new session results without restarting", async () => {
   const home = mkdtempSync(join(tmpdir(), "live-ledger-"));
   const folder = join(home, ".cache/token-ledger");

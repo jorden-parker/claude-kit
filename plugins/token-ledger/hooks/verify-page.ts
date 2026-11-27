@@ -224,7 +224,8 @@ async function refreshReadings() {
     if (!next || !current) throw new Error("Invalid report");
     if (next.innerHTML !== lastReadings && !getSelection()?.toString() && !document.activeElement?.matches("select,input")) {
       const expanded = [...current.querySelectorAll("details[open][id]")].map(el => el.id);
-      const day = current.querySelector("#day")?.value;
+      const oldPicker = current.querySelector("#day");
+      const editedDay = oldPicker?.value !== oldPicker?.defaultValue ? oldPicker?.value : undefined;
       current.innerHTML = next.innerHTML;
       lastReadings = next.innerHTML;
       for (const id of expanded) {
@@ -232,7 +233,7 @@ async function refreshReadings() {
         if (details) details.open = true;
       }
       const picker = current.querySelector("#day");
-      if (picker && day !== undefined) picker.value = day;
+      if (picker && editedDay !== undefined) picker.value = editedDay;
     }
     status.textContent = "Live · checks for new recorded results every 2 seconds";
   } catch {

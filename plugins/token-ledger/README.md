@@ -69,3 +69,5 @@ Run `claude-ledger analyze` for the latest 40 local sessions, or `claude-ledger 
 Run `claude-ledger verify` for two rows of laptop answer codes around the newest deployment, or `claude-ledger verify since 2026-11-25` to supply a boundary. Use `claude-ledger verify all` for detailed comparisons and saved observations across all deployments. Read the answer codes on the work screen and select them in the laptop form. Both commands run locally without calling a model. The collector continues recording automatically. For recommendations, ask your assistant to review `claude-ledger analyze` or `claude-ledger --checkins`.
 
 Run `claude-ledger verify browser` on the work machine to open the latest deployment as a local HTML report. Each measurement shows its Before and After codes beside the exact readings.
+
+The deployment check-in browser page includes a read-only results box with **Select all** and **Copy results**, ready to paste into chat. Its Before/After calculation uses all locally recorded sessions across projects, includes subagent totals, and shows how many spanning/unknown-start sessions are excluded. Other machines are not included automatically.

@@ -58,20 +58,27 @@ function describe(values: (number | undefined)[], start: number) {
     .join("\n");
 }
 
+function groupValues(group: SessionGroup) {
+  return [
+    group.sessions,
+    ...[
+      group.medianContextTokens,
+      group.medianToolResultCharacters,
+      group.medianTokens,
+      group.cacheReadPercent,
+      group.nudgedSessions,
+    ].map((n) => (group.sessions ? n : undefined)),
+  ];
+}
+
 export function groupAnswers(group: SessionGroup) {
-  return describe(
-    [
-      group.sessions,
-      ...[
-        group.medianContextTokens,
-        group.medianToolResultCharacters,
-        group.medianTokens,
-        group.cacheReadPercent,
-        group.nudgedSessions,
-      ].map((n) => (group.sessions ? n : undefined)),
-    ],
-    0
-  );
+  return describe(groupValues(group), 0);
+}
+
+export function groupCodes(group: SessionGroup) {
+  return groupValues(group)
+    .map((value, index) => answer(index, value).code)
+    .join("  ");
 }
 
 export function sessionAnswers(entry: LedgerEntry) {

@@ -7,11 +7,12 @@ case "${1:-}" in
   analyze) shift; exec bun "$plugin_folder/hooks/run.ts" analyze "$@" ;;
   verify)
     shift
-    if [ "$#" -eq 0 ]; then exec bun "$plugin_folder/hooks/run.ts" verify; fi
+    if [ "$#" -eq 0 ]; then exec bun "$plugin_folder/hooks/run.ts" compact-verify; fi
+    if [ "$#" -eq 1 ] && [ "$1" = all ]; then exec bun "$plugin_folder/hooks/run.ts" verify; fi
     if [ "$#" -eq 2 ] && [ "$1" = since ] && [[ "$2" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-      exec bun "$plugin_folder/hooks/run.ts" verify "$2"
+      exec bun "$plugin_folder/hooks/run.ts" compact-verify "$2"
     fi
-    echo "Usage: claude-ledger verify [since YYYY-MM-DD]" >&2
+    echo "Usage: claude-ledger verify [all | since YYYY-MM-DD]" >&2
     exit 2 ;;
 esac
 if [ "${1:-}" = "--checkins" ]; then

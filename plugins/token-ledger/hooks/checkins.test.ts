@@ -70,8 +70,7 @@ test("CLI analysis and verification read saved work answers without local sessio
     save(home, form);
     for (const args of [
       ["analyze", "1"],
-      ["verify"],
-      ["verify", "since", "2026-11-25"],
+      ["verify", "all"],
       ["--verify", "2026-11-25"],
     ]) {
       const result = run(...args);
@@ -79,6 +78,19 @@ test("CLI analysis and verification read saved work answers without local sessio
       expect(result.stdout.toString()).toContain("B2 · 40k–<80k (lower)");
       expect(result.stdout.toString()).toContain("too early");
     }
+    run("--fixed", "older deployment");
+    run("--fixed", "latest deployment");
+    const compact = run("verify").stdout.toString();
+    expect(compact).toContain("latest deployment");
+    expect(compact).not.toContain("older deployment");
+    expect(compact).toContain("After    A1  B?  C?  D?  E?  F?");
+    expect(compact.split("\n").length).toBeLessThan(9);
+    expect(run("verify", "all").stdout.toString()).toContain(
+      "older deployment"
+    );
+    expect(run("verify", "since", "2026-11-25").stdout.toString()).toContain(
+      "Before   A1"
+    );
     for (const args of [
       ["analyze", "0"],
       ["verify", "since", "2026-02-30"],

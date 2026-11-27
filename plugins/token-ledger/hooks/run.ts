@@ -1,8 +1,9 @@
 import { homedir } from "node:os";
 import { entries, formPage, html, save, summary } from "./checkin-form.ts";
-import { sessionAnswers, scale } from "./checkins.ts";
+import { groupCodes, sessionAnswers, scale } from "./checkins.ts";
 import { composeLedgerPage } from "./ledger-page.ts";
 import {
+  compareSessions,
   formatReport,
   formatAnalysis,
   formatVerification,
@@ -44,7 +45,7 @@ if (command === "analyze") {
   }
   recordFix(userHome, title);
   console.log(`Recorded fix: ${title}`);
-} else if (command === "verify") {
+} else if (command === "verify" || command === "compact-verify") {
   const date = process.argv[3];
   if (
     date !== undefined &&
@@ -67,14 +68,45 @@ if (command === "analyze") {
         since: fix.appliedAt,
       }));
   const sessions = readNewestEntries(userHome, Infinity);
-  console.log(
-    checks.length
-      ? formatVerification(sessions, checks) +
-          "\n\n" +
-          verificationAnswers(sessions, checks)
-      : "No fixes recorded. Pass a date: claude-ledger --verify YYYY-MM-DD"
-  );
-  printWorkResults();
+  if (command === "compact-verify") {
+    const check = checks.sort((a, b) => b.since.localeCompare(a.since))[0];
+    if (check) {
+      const { before, after } = compareSessions(sessions, check.since);
+      console.log(
+        [
+          check.title + " · " + check.since.slice(0, 10),
+          "Laptop check-in · " + scale + " · click these codes in row order",
+          "Before   " +
+            groupCodes(before) +
+            "   (" +
+            before.sessions +
+            " sessions)",
+          "After    " +
+            groupCodes(after) +
+            "   (" +
+            after.sessions +
+            " sessions)",
+          ...(after.sessions < 5
+            ? ["Too early to judge: fewer than five follow-up sessions."]
+            : []),
+        ].join("\n")
+      );
+    } else {
+      console.log(
+        "No fixes recorded. Use claude-ledger verify since YYYY-MM-DD."
+      );
+    }
+    console.log("Full report: claude-ledger verify all");
+  } else {
+    console.log(
+      checks.length
+        ? formatVerification(sessions, checks) +
+            "\n\n" +
+            verificationAnswers(sessions, checks)
+        : "No fixes recorded. Pass a date: claude-ledger --verify YYYY-MM-DD"
+    );
+    printWorkResults();
+  }
 } else if (command === "checkins") {
   console.log(summary(entries(userHome)));
 } else if (command === "table") {

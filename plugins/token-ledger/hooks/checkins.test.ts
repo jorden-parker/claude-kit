@@ -84,6 +84,9 @@ test("CLI analysis and verification read saved work answers without local sessio
     expect(compact).toContain("latest deployment");
     expect(compact).not.toContain("older deployment");
     expect(compact).toContain("After    A1  B?  C?  D?  E?  F?");
+    expect(compact).toContain(
+      "On your personal laptop, open claude-ledger → Record work results."
+    );
     expect(compact.split("\n").length).toBeLessThan(9);
     expect(run("verify", "all").stdout.toString()).toContain(
       "older deployment"

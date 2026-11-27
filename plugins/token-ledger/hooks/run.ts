@@ -1,3 +1,6 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { verifyPage } from "./verify-page.ts";
 import { homedir } from "node:os";
 import { entries, formPage, html, save, summary } from "./checkin-form.ts";
 import { groupCodes, sessionAnswers, scale } from "./checkins.ts";
@@ -35,6 +38,27 @@ if (command === "analyze") {
   }
   console.log(formatAnalysis(readNewestEntries(userHome, limit)));
   printWorkResults();
+} else if (command === "browser-verify") {
+  const fix = readFixes(userHome).sort((a, b) =>
+    b.appliedAt.localeCompare(a.appliedAt)
+  )[0];
+  const page = verifyPage(
+    fix && {
+      title: fix.title,
+      since: fix.appliedAt,
+      ...compareSessions(readNewestEntries(userHome, Infinity), fix.appliedAt),
+    }
+  );
+  const folder = join(userHome, ".cache/token-ledger");
+  mkdirSync(folder, { recursive: true });
+  const path = join(folder, "deployment-check-in.html");
+  writeFileSync(path, page, { mode: 0o600 });
+  console.log(path);
+  const opener = Bun.spawn([
+    process.platform === "darwin" ? "open" : "xdg-open",
+    path,
+  ]);
+  process.exitCode = await opener.exited;
 } else if (command === "report") {
   console.log(formatReport(readNewestEntries(userHome, sessionCount)));
 } else if (command === "fixed") {
@@ -75,7 +99,10 @@ if (command === "analyze") {
       console.log(
         [
           check.title + " · " + check.since.slice(0, 10),
-          "Laptop check-in · " + scale + " · click these codes in row order",
+          "Laptop check-in · " +
+            scale +
+            " · On your personal laptop, open claude-ledger → Record work results.",
+          "Choose Before or After in the form, then select the matching codes shown below.",
           "Before   " +
             groupCodes(before) +
             "   (" +

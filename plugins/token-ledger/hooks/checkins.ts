@@ -58,7 +58,7 @@ function describe(values: (number | undefined)[], start: number) {
     .join("\n");
 }
 
-function groupValues(group: SessionGroup) {
+export function groupValues(group: SessionGroup) {
   return [
     group.sessions,
     ...[

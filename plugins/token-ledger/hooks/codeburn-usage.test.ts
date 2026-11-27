@@ -69,3 +69,21 @@ test("zero unpriced, explicitly covered, and session-only totals stay distinct",
   });
   expect(() => parseExport({}, [entry])).toThrow("Unsupported");
 });
+
+test("v3 uses raw records first and camelCase session totals when no record matches", () => {
+  const snapshot = {
+    ...base,
+    schema: "codeburn.export.v3",
+    records: [{ ...record, costBasis: "calculated" }],
+    sessions: [{ sessionId: entry.session, cost: 3, apiCalls: 4 }],
+  };
+  const detailed = parseExport(snapshot, [entry]);
+  expect(detailed.costs.get(entry.session)).toBe(1.25);
+  expect(detailed.rows[0].basis.has("calculated")).toBe(true);
+  expect(
+    shareUsagePage([entry], {}, { data: detailed, message: "" })
+  ).not.toContain("Missing per-call records");
+  expect(
+    parseExport({ ...snapshot, records: [] }, [entry]).rows[0]
+  ).toMatchObject({ model: "Session total", cost: 3, calls: 4 });
+});

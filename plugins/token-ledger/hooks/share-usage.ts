@@ -165,6 +165,7 @@ export function shareUsagePage(
       ...fields.map((f) => number(row.tokens[f])),
       row.cost === undefined
         ? 'Unknown<small class="cost-reason">' +
+          "Ledger: " +
           [...row.costIssues].join(" · ") +
           "</small>"
         : money(row.cost),

@@ -33,8 +33,9 @@ export type ExternalUsage = {
 };
 const identity = (model: string, role: string) => JSON.stringify([model, role]);
 export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
+  const currentSchema = data?.schema === "codeburn.export.v3";
   if (
-    data?.schema !== "codeburn.export.v2" ||
+    (!currentSchema && data?.schema !== "codeburn.export.v2") ||
     !/^[A-Z]{3}$/.test(data.currency?.code ?? "") ||
     !Array.isArray(data.records) ||
     !Array.isArray(data.sessions)
@@ -122,14 +123,14 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
     include(entry, r.model, role, r, r.supplementary ? 0 : 1);
   }
   for (const r of data.sessions) {
-    const entry = byId.get(r?.["Session ID"]);
+    const entry = byId.get(currentSchema ? r?.sessionId : r?.["Session ID"]);
     if (!entry || matched.has(entry.session)) continue;
     include(
       entry,
       "Session total",
       "Role unavailable",
-      { cost: r["Cost (" + data.currency.code + ")"] },
-      numeric(r["API Calls"])
+      { cost: currentSchema ? r.cost : r["Cost (" + data.currency.code + ")"] },
+      numeric(currentSchema ? r.apiCalls : r["API Calls"])
     );
   }
   for (const entry of entries) {

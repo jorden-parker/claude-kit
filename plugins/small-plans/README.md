@@ -11,7 +11,7 @@ Breaks work into small plans, each simple enough for a weaker model to implement
 | `/small-plans handoff [id] [extra context]` | Plans the work a saved handoff leaves: one picked from the list, or handoff `<id>`                                                                |
 | `/small-plans build [set] [order]`          | Builds a whole set or one plan: Haiku implements, a Sonnet reviewer reviews and sends back fixes                                                  |
 | `/small-plans rename [set] [new name]`      | Gives a saved set a new name; its date or handoff prefix stays. Leave out the name, or both, and Claude finds the set and names it from its plans |
-| `/small-plans review [set]`                 | Review the plans of one set, list proposed changes, then make them                                                                                |
+| `/small-plans review [set] [order]`         | Reviews a whole set or one plan: pick the set, then the whole set or one plan; lists proposed changes, then makes them                            |
 | `/small-plans board`                        | Shows the build board again after you hide it                                                                                                     |
 
 Typing `/small-plans ` suggests the actions.

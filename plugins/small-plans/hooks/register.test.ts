@@ -1599,6 +1599,114 @@ test("/small-plans review with several saved sets lists them newest first before
   expect(submittedPrompts).toHaveLength(0);
 });
 
+test("/small-plans review asks for the whole set or one plan that is not done", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, "Whole set");
+  const { submittedPrompts } = await runCommand(
+    $,
+    on,
+    "review",
+    THREE_PLAN_SET
+  );
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "2 · Store the Choice",
+    "3 · Test the Toggle",
+    "Whole set",
+  ]);
+  expect(submittedPrompts[0]).toContain(
+    `Review the plans of the saved set of small plans "${STANDALONE_SET}", in ${SET_FOLDER}.`
+  );
+});
+
+test("/small-plans review reviews only the plan picked", async ($, on) => {
+  answerAskUserQuestion(on, "3 · Test the Toggle");
+  const { reply, submittedPrompts } = await runCommand(
+    $,
+    on,
+    "review",
+    THREE_PLAN_SET
+  );
+
+  expect(reply.text).toBe(
+    `Reviewing plan 03-test-the-toggle of set ${STANDALONE_SET}…`
+  );
+  expect(submittedPrompts[0]).toContain(
+    `Review only the plan at ${SET_FOLDER}/03-test-the-toggle.md, from the saved set of small plans "${STANDALONE_SET}".`
+  );
+  expect(submittedPrompts[0]).not.toContain("Conflicts or overlap");
+});
+
+test("/small-plans review <set> still asks for the plan when two or more are not done", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on, "Whole set");
+  await runCommand($, on, "review dark-mode", THREE_PLAN_SET);
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "2 · Store the Choice",
+    "3 · Test the Toggle",
+    "Whole set",
+  ]);
+});
+
+test("/small-plans review <set> <order> reviews that plan without asking", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  const { reply, submittedPrompts } = await runCommand(
+    $,
+    on,
+    "review dark-mode 2",
+    THREE_PLAN_SET
+  );
+
+  expect(askedQuestions).toHaveLength(0);
+  expect(reply.text).toBe(
+    `Reviewing plan 02-store-the-choice of set ${STANDALONE_SET}…`
+  );
+  expect(submittedPrompts[0]).toContain(
+    `Review only the plan at ${SET_FOLDER}/02-store-the-choice.md,`
+  );
+  expect(submittedPrompts[0]).not.toContain("03-test-the-toggle");
+});
+
+test("/small-plans review <set> <order> names the valid plans when none matches", async ($, on) => {
+  const { reply, submittedPrompts } = await runCommand(
+    $,
+    on,
+    "review dark-mode 9",
+    THREE_PLAN_SET
+  );
+
+  expect(reply.text).toContain("No plan was picked.");
+  expect(reply.text).toContain("02-store-the-choice, 03-test-the-toggle");
+  expect(submittedPrompts).toHaveLength(0);
+});
+
+test("/small-plans review skips the plan question when fewer than two plans are not done", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  const { submittedPrompts } = await runCommand($, on, "review", {
+    [`${SET_FOLDER}/01-add-the-toggle.md`]: "status: done",
+    [`${SET_FOLDER}/02-store-the-choice.md`]: "status: pending",
+  });
+
+  expect(askedQuestions).toHaveLength(0);
+  expect(submittedPrompts[0]).toContain(
+    `Review the plans of the saved set of small plans "${STANDALONE_SET}", in ${SET_FOLDER}.`
+  );
+});
+
+test("/small-plans review says how to name a plan when the plan question is dismissed", async ($, on) => {
+  answerAskUserQuestion(on);
+  const { reply, submittedPrompts } = await runCommand(
+    $,
+    on,
+    "review",
+    THREE_PLAN_SET
+  );
+
+  expect(reply.text).toContain(
+    `Run /small-plans review ${STANDALONE_SET} <order> with one of the plans not done:`
+  );
+  expect(submittedPrompts).toHaveLength(0);
+});
+
 test("/small-plans review says so when no set matches", async ($, on) => {
   const { reply, submittedPrompts } = await runCommand($, on, "review nope", {
     [STANDALONE_SET_PLAN]: "newer",

@@ -128,7 +128,7 @@ const SUBCOMMAND_SUGGESTIONS = [
   {
     text: "review",
     description:
-      "Review the plans of one set, list proposed changes, then make them; the set is optional",
+      "Review a whole set or one plan of it, list proposed changes, then make them; the set and plan order are optional",
   },
 ];
 const WRITE_TOOL_NAME = "write_small_plan";
@@ -1991,21 +1991,28 @@ const buildPlans = async (
 const askClaudeToReview = (
   engine: EngineInterface,
   setName: string,
-  setFolder: string
+  setFolder: string,
+  planName: string
 ) => {
   askClaude(
     engine,
     [
-      `Review the plans of the saved set of small plans "${setName}", in ${setFolder}.`,
+      planName
+        ? `Review only the plan at ${setFolder}/${planName}.md, from the saved set of small plans "${setName}". Read the other plans of the set only for context, and propose no changes to them.`
+        : `Review the plans of the saved set of small plans "${setName}", in ${setFolder}.`,
       "",
-      "Read every plan of the set in full, and read the code and files each plan refers to, so your review rests on what is really there.",
+      planName
+        ? "Read the plan in full, and read the code and files it refers to, so your review rests on what is really there."
+        : "Read every plan of the set in full, and read the code and files each plan refers to, so your review rests on what is really there.",
       "",
-      "For each plan, check:",
+      planName ? "Check the plan for:" : "For each plan, check:",
       "- Steps that are missing, out of order, or depend on something not yet built",
       "- Claims about the code that are wrong (names, paths, behaviour)",
       "- Risks: data loss, security, breaking callers, no way to test or roll back",
       "- Scope: work nobody asked for, or parts of the goal left out",
-      "- Conflicts or overlap between the plans in this set",
+      ...(planName
+        ? []
+        : ["- Conflicts or overlap between the plans in this set"]),
       "",
       'Then write a "Proposed changes" list, grouped by plan. Each entry: the problem, the change, and why, in one or two lines. Leave out anything that is only taste.',
       "",
@@ -2014,7 +2021,11 @@ const askClaudeToReview = (
       "Finish with a short summary: what changed in each plan, and anything you left unchanged because it needs the user's decision.",
     ].join("\n")
   );
-  return { text: `Reviewing the plans of set ${setName}…` };
+  return {
+    text: planName
+      ? `Reviewing plan ${planName} of set ${setName}…`
+      : `Reviewing the plans of set ${setName}…`,
+  };
 };
 
 const reviewSet = async (
@@ -2022,7 +2033,8 @@ const reviewSet = async (
   projectFolder: string,
   setNames: string[],
   pickedName: string | undefined,
-  requestedName: string
+  requestedName: string,
+  requestedPlan: string
 ): Promise<{ text: string }> => {
   if (pickedName === undefined)
     return {
@@ -2033,17 +2045,55 @@ const reviewSet = async (
     return {
       text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
     };
-  return askClaudeToReview(engine, setName, `${projectFolder}/${setName}`);
+  const setFolder = `${projectFolder}/${setName}`;
+  const planNames = await listPlanNamesNotDone(engine, setFolder);
+  const noPlanText = `No plan was picked. Run /${COMMAND_NAME} review ${setName} <order> with one of the plans not done: ${planNames.join(", ")}.`;
+  if (requestedPlan) {
+    const foundPlan = findPlanName(planNames, requestedPlan);
+    return foundPlan === undefined
+      ? { text: noPlanText }
+      : askClaudeToReview(engine, setName, setFolder, foundPlan);
+  }
+  if (planNames.length < 2)
+    return askClaudeToReview(engine, setName, setFolder, "");
+  return chooseFromList(
+    engine,
+    "Plans",
+    PLAN_QUESTION,
+    [...planNames, WHOLE_SET_OPTION],
+    (name) => (name === WHOLE_SET_OPTION ? name : labelNumbered("")(name)),
+    async (pickedOption) => {
+      if (pickedOption === undefined) return { text: noPlanText };
+      const pickedPlan =
+        pickedOption === WHOLE_SET_OPTION
+          ? ""
+          : findPlanName(planNames, pickedOption);
+      return pickedPlan === undefined
+        ? { text: noPlanText }
+        : askClaudeToReview(engine, setName, setFolder, pickedPlan);
+    }
+  );
 };
 
-const reviewPlans = async (engine: EngineInterface, requestedName: string) => {
+const reviewPlans = async (
+  engine: EngineInterface,
+  requestedName: string,
+  requestedPlan: string
+) => {
   const projectFolder = await resolveProjectFolder(engine);
   const savedSetNames = await listSetsNewestFirst(engine);
   const setNames = requestedName
     ? savedSetNames
     : await listSetNamesNotDone(engine, projectFolder, savedSetNames);
   const reviewPicked = (pickedName: string | undefined) =>
-    reviewSet(engine, projectFolder, setNames, pickedName, requestedName);
+    reviewSet(
+      engine,
+      projectFolder,
+      setNames,
+      pickedName,
+      requestedName,
+      requestedPlan
+    );
   return !requestedName && setNames.length > 1
     ? chooseFromList(
         engine,
@@ -2061,8 +2111,9 @@ const runReviewCommand = (
   laterWords: string[],
   requestedWork: string
 ) =>
-  laterWords.length <= 1
-    ? reviewPlans(engine, laterWords[0] ?? "")
+  laterWords.length <= 1 ||
+  (laterWords.length === 2 && /^\d+$/.test(laterWords[1] ?? ""))
+    ? reviewPlans(engine, laterWords[0] ?? "", laterWords[1] ?? "")
     : planWork(engine, requestedWork);
 
 type BoardPlan = {
@@ -2406,9 +2457,9 @@ export const register: Register = (on) => {
     await $.command.register({
       name: COMMAND_NAME,
       description:
-        "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename, review [set], board.",
+        "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename, review [set] [order], board.",
       argumentHint:
-        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename [set] [new name] | review [set]",
+        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename [set] [new name] | review [set] [plan order]",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,

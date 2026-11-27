@@ -1,7 +1,7 @@
 ---
 name: small-plans-menu
 description: Split work into small plans a small model can build, then build a set or one plan with small-model agents
-argument-hint: "[work to plan] | build [set] [plan order]"
+argument-hint: "[work to plan] | build [set] [plan order] | review [set] [plan order]"
 disable-model-invocation: true
 ---
 

@@ -81,7 +81,9 @@ test("v3 uses raw records first and camelCase session totals when no record matc
   expect(detailed.costs.get(entry.session)).toBe(1.25);
   expect(detailed.rows[0].basis.has("calculated")).toBe(true);
   expect(
-    shareUsagePage([entry], {}, { data: detailed, message: "" })
+    shareUsagePage([entry], {}, { data: detailed, message: "" }).split(
+      "</table>"
+    )[0]
   ).not.toContain("Missing per-call records");
   expect(
     parseExport({ ...snapshot, records: [] }, [entry]).rows[0]

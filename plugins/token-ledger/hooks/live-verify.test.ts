@@ -64,7 +64,11 @@ test("browser refresh retains readings on disconnect and defers replacing select
   const { liveVerifyScript } = await import("./verify-page.ts");
   const timers: (() => Promise<void>)[] = [];
   const status = { textContent: "" };
-  const current = { innerHTML: "old readings" };
+  const current = {
+    innerHTML: "old readings",
+    querySelectorAll: () => [],
+    querySelector: () => null,
+  };
   let next = "new readings";
   let selection = "";
   let disconnected = false;

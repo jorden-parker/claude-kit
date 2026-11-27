@@ -210,6 +210,7 @@ export const liveVerifyScript = `
 const status = document.getElementById("live-status");
 let scheduled;
 let refreshing = false;
+let lastReadings = document.querySelector("main")?.innerHTML;
 async function refreshReadings() {
   if (refreshing) return;
   refreshing = true;
@@ -221,11 +222,17 @@ async function refreshReadings() {
     const next = new DOMParser().parseFromString(await response.text(), "text/html").querySelector("main");
     const current = document.querySelector("main");
     if (!next || !current) throw new Error("Invalid report");
-    if (next.innerHTML !== current.innerHTML && !getSelection()?.toString() && document.activeElement?.tagName !== "SELECT") {
-      const expanded = document.getElementById("recording")?.open;
+    if (next.innerHTML !== lastReadings && !getSelection()?.toString() && !document.activeElement?.matches("select,input")) {
+      const expanded = [...current.querySelectorAll("details[open][id]")].map(el => el.id);
+      const day = current.querySelector("#day")?.value;
       current.innerHTML = next.innerHTML;
-      const recording = document.getElementById("recording");
-      if (recording && expanded) recording.open = true;
+      lastReadings = next.innerHTML;
+      for (const id of expanded) {
+        const details = document.getElementById(id);
+        if (details) details.open = true;
+      }
+      const picker = current.querySelector("#day");
+      if (picker && day !== undefined) picker.value = day;
     }
     status.textContent = "Live · checks for new recorded results every 2 seconds";
   } catch {

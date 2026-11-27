@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { usageSample } from "./share-usage.ts";
+import { shareUsagePage, usageSample } from "./share-usage.ts";
 import type { LedgerEntry } from "./ledger.ts";
 const tokens = { input: 100, output: 20, cacheRead: 5, cacheWrite: 0 };
 const task = {
@@ -44,4 +44,22 @@ test("legacy recorded counts remain visible while missing detail and costs remai
   expect(result.rows[0].calls).toBeUndefined();
   expect(result.priced).toBe(0);
   expect(result.share).toBeUndefined();
+});
+
+test("cost cells identify missing rates, old records and absent counters independently", () => {
+  const partial = {
+    ...entry,
+    tasks: [
+      { ...task, requests: [{ ...task.requests[0], cacheRead: undefined }] },
+    ],
+    workerTasks: undefined,
+  };
+  const page = shareUsagePage([partial], {});
+  expect(page).toContain("No matching rate · Missing cache-read tokens");
+  expect(page).toContain("No matching rate · Missing per-call records");
+  expect(
+    shareUsagePage([partial], {
+      model: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+    })
+  ).not.toContain("No matching rate ·");
 });

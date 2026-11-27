@@ -12,6 +12,7 @@ type UsageRow = {
   sessions: number;
   calls: Metric;
   cost: Metric;
+  costIssues: Set<string>;
   tokens: Record<keyof Rates, Metric>;
 };
 function add(a: Metric, b: Metric) {
@@ -70,10 +71,27 @@ export function usageSample(
           model,
           role,
           sessions: 0,
+          costIssues: new Set<string>(),
           calls: 0,
           cost: 0,
           tokens: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 },
         };
+        if (!Object.hasOwn(rates, model))
+          row.costIssues.add("No matching rate");
+        if (!requests) row.costIssues.add("Missing per-call records");
+        for (const field of fields) {
+          if (requests?.some((request) => request[field] === undefined))
+            row.costIssues.add(
+              "Missing " +
+                {
+                  cacheRead: "cache-read",
+                  cacheWrite: "cache-write",
+                  input: "input",
+                  output: "output",
+                }[field] +
+                " tokens"
+            );
+        }
         row.sessions++;
         row.calls = add(row.calls, requests?.length);
         const cost = requests?.reduce<Metric>(
@@ -143,7 +161,11 @@ export function shareUsagePage(
       number(row.sessions),
       number(row.calls),
       ...fields.map((f) => number(row.tokens[f])),
-      money(row.cost),
+      row.cost === undefined
+        ? 'Unknown<small class="cost-reason">' +
+          [...row.costIssues].join(" · ") +
+          "</small>"
+        : money(row.cost),
     ]
       .map((v) => "<td>" + v + "</td>")
       .join("");
@@ -153,7 +175,7 @@ export function shareUsagePage(
     .map((r) => r.model)
     .filter((m, i, a) => a.indexOf(m) === i && rates[m]);
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Session usage · Token Ledger</title><style>${geistStyle}
-  main{max-width:1440px}.usage th,.usage td{padding:10px}.usage tbody th{width:auto}.usage td{text-align:right}.usage td:first-of-type{text-align:left}.share-line{overflow-wrap:anywhere;padding:12px 20px}.stats{margin:18px 0}.panel{margin-bottom:14px}</style>${productHeader("Session usage", true)}<main><div class="page-heading"><div><h1>Usage from the last ${entries.length} sessions</h1><p>${dates.length ? "Last updated " + dates[0] + " to " + dates.at(-1) + " UTC · " : ""}Newest 20 local records · ${sample.finished} with latest response finished</p></div><a class="button" href="?view=comparison">Compare deployments</a></div>
+  main{max-width:1440px}.usage th,.usage td{padding:10px}.usage tbody th{width:auto}.usage td{text-align:right}.usage td:first-of-type{text-align:left}.cost-reason{display:block;max-width:24ch;font:12px/1.4 Geist,system-ui,sans-serif}.share-line{overflow-wrap:anywhere;padding:12px 20px}.stats{margin:18px 0}.panel{margin-bottom:14px}</style>${productHeader("Session usage", true)}<main><div class="page-heading"><div><h1>Usage from the last ${entries.length} sessions</h1><p>${dates.length ? "Last updated " + dates[0] + " to " + dates.at(-1) + " UTC · " : ""}Newest 20 local records · ${sample.finished} with latest response finished</p></div><a class="button" href="?view=comparison">Compare deployments</a></div>
   <div class="stats">${[
     ["Fully priced sessions", sample.priced + " / " + entries.length],
     ["Median cost · finished responses", money(sample.median)],
@@ -173,5 +195,5 @@ export function shareUsagePage(
     .join("")}</div>
   <section class="panel"><div class="panel-heading"><h2>Usage by model and role</h2></div><div class="table-scroll"><table class="usage"><thead><tr>${["Model", "Role", "Sessions", "Calls", "Input", "Cache write", "Cache read", "Output", "Est. cost"].map((label) => "<th>" + label + "</th>").join("")}</tr></thead><tbody>${sample.rows.map((row) => '<tr><th class="model-name" scope="row">' + html(row.model) + "</th>" + rowCells(row) + "</tr>").join("")}</tbody></table></div><p class="panel-footer">${sample.rows.length ? "Sessions can appear in multiple rows. Unknown means the recorded usage or configured rates are incomplete." : "No recorded model usage in this sample."}</p></section>
   ${top && sample.priced === entries.length && top.cost !== undefined ? '<section class="panel share-line"><h2>Largest cost contributor</h2><p>' + html(top.model) + " · " + top.role + " · " + number(top.calls) + " calls · estimated cost " + money(top.cost) + "</p></section>" : ""}
-  <details id="recording" class="details"><summary>Rates used for estimates</summary><div class="details-body"><p>Current TOKEN_LEDGER_PRICING per million tokens, in your configured currency. Estimates cover recorded usage and may differ from billing.</p>${ratesUsed.map((m) => "<p>" + html(m) + " · " + fields.map((f) => f + " " + rates[m][f]).join(" · ") + "</p>").join("") || "<p>No matching rates configured.</p>"}</div></details></main><script>${liveVerifyScript}</script></html>`;
+  <details id="recording" class="details"><summary>Rates used for estimates</summary><div class="details-body"><p>Current TOKEN_LEDGER_PRICING per million tokens, in your configured currency. Estimates cover recorded usage and may differ from billing.</p>${ratesUsed.map((m) => "<p>" + html(m) + " · " + fields.map((f) => f + " " + rates[m][f]).join(" · ") + "</p>").join("") || "<p>No matching rates configured. Set TOKEN_LEDGER_PRICING in the shell that starts this report, using the exact model IDs above and your provider’s input, output, cacheRead and cacheWrite prices per million tokens. Then relaunch the report.</p>"}</div></details></main><script>${liveVerifyScript}</script></html>`;
 }

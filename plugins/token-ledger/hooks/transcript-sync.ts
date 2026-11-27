@@ -1,6 +1,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import { recordSession, summarizeTranscript } from "./ledger.ts";
+import {
+  recordSession,
+  summarizeTranscript,
+  readNewestEntries,
+} from "./ledger.ts";
 
 export type SyncStatus = {
   synced: number;
@@ -41,6 +45,11 @@ export function createTranscriptSync(
   configRoot = process.env.CLAUDE_CONFIG_DIR
 ) {
   const seen = new Map<string, string>();
+  const legacy = new Map(
+    readNewestEntries(home, 20)
+      .filter((entry) => !entry.tasks || !entry.workerTasks)
+      .map((entry) => [entry.session, entry])
+  );
   let previousCutoff: string | undefined;
   return (
     cutoff: string | undefined,
@@ -51,7 +60,8 @@ export function createTranscriptSync(
       previousCutoff = cutoff;
     }
     const status = { synced: 0, found: 0, errors: 0, pending: 0 };
-    if (!cutoff || !Number.isFinite(Date.parse(cutoff))) return status;
+    const boundary = cutoff ? Date.parse(cutoff) : Infinity;
+    if (!legacy.size && !Number.isFinite(boundary)) return status;
     const roots = new Set([
       join(home, ".claude/projects"),
       ...(configRoot ? [join(configRoot, "projects")] : []),
@@ -69,6 +79,18 @@ export function createTranscriptSync(
       try {
         const stats = statSync(path);
         const id = basename(path, ".jsonl");
+        const old = legacy.get(id);
+        if (old) {
+          const recovered = recordSession(
+            { session_id: id, transcript_path: path, cwd: old.project },
+            home,
+            new Date(old.updatedAt),
+            { background: true, restoreDetails: old }
+          );
+          if (recovered) status.synced++;
+          legacy.delete(id);
+        }
+        if (!Number.isFinite(boundary)) continue;
         const children = join(path.slice(0, -6), "subagents");
         const childSignature = existsSync(children)
           ? readdirSync(children)
@@ -79,7 +101,7 @@ export function createTranscriptSync(
               })
               .join(":")
           : "";
-        if (stats.mtimeMs < Date.parse(cutoff) && !childSignature) continue;
+        if (stats.mtimeMs < boundary && !childSignature) continue;
         const signature =
           stats.size + ":" + stats.mtimeMs + ":" + childSignature;
         status.found++;
@@ -101,7 +123,7 @@ export function createTranscriptSync(
             ).latest;
             if (childLatest > lastSourceTime) lastSourceTime = childLatest;
           }
-        if (Date.parse(lastSourceTime) < Date.parse(cutoff)) {
+        if (Date.parse(lastSourceTime) < boundary) {
           seen.set(path, signature);
           continue;
         }

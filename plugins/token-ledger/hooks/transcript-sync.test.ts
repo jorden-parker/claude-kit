@@ -134,3 +134,27 @@ test("Codeburn discovery accepts local existing roots and fails safely for unsup
   expect(result.message).toContain("70 candidate sessions");
   expect(parseCodeburnDiscovery({}).roots).toEqual([]);
 });
+
+test("recovers historical per-call detail only when archived totals match", () => {
+  const { home, path, record } = fixture();
+  try {
+    writeFileSync(path, usageLine("2026-11-27T15:00:00.000Z"));
+    createTranscriptSync(home)(cutoff);
+    const old = JSON.parse(readFileSync(record, "utf8"));
+    delete old.tasks;
+    delete old.workerTasks;
+    old.lastNudgeTokens = 72100;
+    writeFileSync(record, JSON.stringify(old));
+    createTranscriptSync(home)("2026-11-28T00:00:00Z");
+    const recovered = JSON.parse(readFileSync(record, "utf8"));
+    expect(recovered.tasks[0].requests[0].input).toBe(7);
+    expect(recovered.updatedAt).toBe(old.updatedAt);
+    expect(recovered.lastNudgeTokens).toBe(72100);
+    old.main.sol.input++;
+    writeFileSync(record, JSON.stringify(old));
+    createTranscriptSync(home)(undefined);
+    expect(JSON.parse(readFileSync(record, "utf8"))).toEqual(old);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

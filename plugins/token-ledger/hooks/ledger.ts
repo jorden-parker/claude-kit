@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { summarizeRuns } from "../bin/compare-runs.ts";
 import { groupAnswers, scale } from "./checkins.ts";
 import {
@@ -291,7 +292,7 @@ export function recordSession(
   event: StopEvent,
   userHome: string,
   now: Date,
-  options: { background?: boolean } = {}
+  options: { background?: boolean; restoreDetails?: LedgerEntry } = {}
 ): { systemMessage: string } | null {
   const transcriptPath = event.transcript_path;
   if (!event.session_id || !transcriptPath || !existsSync(transcriptPath))
@@ -336,6 +337,20 @@ export function recordSession(
     ),
     resultCharactersByTool: mainSummary.resultCharactersByTool,
   };
+  if (options.restoreDetails) {
+    const old = options.restoreDetails;
+    if (
+      !isDeepStrictEqual(old.main, entry.main) ||
+      !isDeepStrictEqual(old.subagents, entry.subagents) ||
+      !isDeepStrictEqual(readEntry(entryPath), old)
+    )
+      return null;
+    const details = {
+      tasks: old.tasks ?? entry.tasks,
+      workerTasks: old.workerTasks ?? entry.workerTasks,
+    };
+    Object.assign(entry, old, details);
+  }
   mkdirSync(dirname(entryPath), { recursive: true });
   const temporary = entryPath + "." + crypto.randomUUID() + ".tmp";
   writeFileSync(temporary, `${JSON.stringify(entry, null, 2)}\n`, {

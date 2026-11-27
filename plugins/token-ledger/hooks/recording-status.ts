@@ -1,6 +1,12 @@
+import type { RecorderStatus } from "./recorder.ts";
 import type { LedgerEntry } from "./ledger.ts";
 
-export function recordingStatus(entries: LedgerEntry[], cutoff?: string) {
+export function recordingStatus(
+  entries: LedgerEntry[],
+  cutoff?: string,
+  recorder?: RecorderStatus,
+  launch?: RecorderStatus
+) {
   const latest = [...entries].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt)
   )[0];
@@ -36,6 +42,8 @@ export function recordingStatus(entries: LedgerEntry[], cutoff?: string) {
     latestUpdatedAt: latest?.updatedAt ?? "Unknown",
     qualifyingSessions: qualifying.length,
     excludedSessions: updated.length - qualifying.length,
+    recorder,
+    launch,
   };
 }
 
@@ -47,6 +55,17 @@ export function formatRecordingStatus(
     "Deployment cutoff: " + status.deployment,
     "Latest recorded session started: " + status.latestStartedAt,
     "Latest result recorded: " + status.latestUpdatedAt,
+    "Recorder launch: " +
+      (status.launch
+        ? status.launch.outcome + " · " + status.launch.updatedAt
+        : "No launcher attempt recorded yet"),
+    "Recorder result: " +
+      (status.recorder
+        ? status.recorder.outcome +
+          (status.recorder.reason ? " · " + status.recorder.reason : "") +
+          " · " +
+          status.recorder.updatedAt
+        : "No runtime attempt recorded yet"),
     "After sessions: " +
       status.qualifyingSessions +
       "; excluded since deployment: " +

@@ -1,3 +1,4 @@
+import { readRecorderStatus } from "./recorder.ts";
 import { recordingStatus } from "./recording-status.ts";
 import { compareSessions, readFixes, readNewestEntries } from "./ledger.ts";
 import { verifyPage } from "./verify-page.ts";
@@ -24,7 +25,12 @@ export function startVerifyServer(userHome: string) {
             ...compareSessions(sessions, fix.appliedAt),
           },
           true,
-          recordingStatus(sessions, fix?.appliedAt)
+          recordingStatus(
+            sessions,
+            fix?.appliedAt,
+            readRecorderStatus(userHome),
+            readRecorderStatus(userHome, "recorder-launch.json")
+          )
         ),
         {
           headers: {

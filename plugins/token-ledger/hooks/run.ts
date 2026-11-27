@@ -1,3 +1,4 @@
+import { recordHook, readRecorderStatus } from "./recorder.ts";
 import { recordingStatus, formatRecordingStatus } from "./recording-status.ts";
 import { startVerifyServer } from "./live-verify.ts";
 import { homedir } from "node:os";
@@ -13,14 +14,9 @@ import {
   readFixes,
   readNewestEntries,
   recordFix,
-  recordReplyMeter,
-  recordSession,
   takeReplyNote,
-  waitForLastReply,
 } from "./ledger.ts";
 
-const LAST_REPLY_PAUSE_MILLISECONDS = 50;
-const LAST_REPLY_ATTEMPTS = 40;
 const userHome = process.env.HOME ?? homedir();
 const command = process.argv[2];
 const sessionCount = Number(process.argv[3]) || Infinity;
@@ -35,7 +31,12 @@ if (command === "diagnose") {
   )[0];
   console.log(
     formatRecordingStatus(
-      recordingStatus(readNewestEntries(userHome, Infinity), fix?.appliedAt)
+      recordingStatus(
+        readNewestEntries(userHome, Infinity),
+        fix?.appliedAt,
+        readRecorderStatus(userHome),
+        readRecorderStatus(userHome, "recorder-launch.json")
+      )
     )
   );
 } else if (command === "analyze") {
@@ -221,22 +222,17 @@ if (command === "diagnose") {
   Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", url]);
   console.log("Press Ctrl-C to close this local report.");
 } else {
-  try {
-    const event = JSON.parse(await Bun.stdin.text());
-    if (command === "nudge") {
+  const input = await Bun.stdin.text();
+  if (command === "nudge") {
+    try {
+      const event = JSON.parse(input);
       const output = takeReplyNote(event.session_id, userHome);
       if (output) console.log(JSON.stringify(output));
-    } else {
-      await waitForLastReply(
-        event.transcript_path,
-        LAST_REPLY_PAUSE_MILLISECONDS,
-        LAST_REPLY_ATTEMPTS
-      );
-      const output = recordSession(event, userHome, new Date());
-      if (output) console.log(JSON.stringify(output));
-      recordReplyMeter(event, userHome);
+    } catch (error) {
+      console.error("token-ledger: " + String(error));
     }
-  } catch (error) {
-    console.error("token-ledger: recording failed: " + String(error));
+  } else {
+    const output = await recordHook(input, userHome);
+    if (output) console.log(JSON.stringify(output));
   }
 }

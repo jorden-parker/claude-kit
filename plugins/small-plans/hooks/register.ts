@@ -125,6 +125,11 @@ const SUBCOMMAND_SUGGESTIONS = [
     description:
       "Give a saved set a new name, keeping its date or handoff prefix; the set and new name are optional",
   },
+  {
+    text: "review",
+    description:
+      "Review the plans of one set, list proposed changes, then make them; the set is optional",
+  },
 ];
 const WRITE_TOOL_NAME = "write_small_plan";
 const QUALIFIED_WRITE_TOOL_NAME = `mcp__small-plans__${WRITE_TOOL_NAME}`;
@@ -1477,6 +1482,40 @@ const askClaudeToRename = (engine: EngineInterface, requestedSet: string) => {
   return { text: "Renaming a set of small plans…" };
 };
 
+const askClaudeToReview = (engine: EngineInterface, requestedSet: string) => {
+  askClaude(
+    engine,
+    [
+      `Review the plans of one saved set of small plans${requestedSet ? `. The user typed "${requestedSet}": if a saved set's name holds it, that is the set to review.` : "."} Call ${QUALIFIED_LIST_TOOL_NAME} to find it: the set this conversation made or talks about, else ask the user with AskUserQuestion which of the newest sets they mean.`,
+      "",
+      "Read every plan of the set in full, and read the code and files each plan refers to, so your review rests on what is really there.",
+      "",
+      "For each plan, check:",
+      "- Steps that are missing, out of order, or depend on something not yet built",
+      "- Claims about the code that are wrong (names, paths, behaviour)",
+      "- Risks: data loss, security, breaking callers, no way to test or roll back",
+      "- Scope: work nobody asked for, or parts of the goal left out",
+      "- Conflicts or overlap between the plans in this set",
+      "",
+      'Then write a "Proposed changes" list, grouped by plan. Each entry: the problem, the change, and why, in one or two lines. Leave out anything that is only taste.',
+      "",
+      `Then apply the proposed changes with ${QUALIFIED_UPDATE_TOOL_NAME}. Keep each plan's structure and voice, change only what the list names, and leave a plan that is in progress or done unchanged.`,
+      "",
+      "Finish with a short summary: what changed in each plan, and anything you left unchanged because it needs the user's decision.",
+    ].join("\n")
+  );
+  return { text: "Reviewing a set of small plans…" };
+};
+
+const runReviewCommand = (
+  engine: EngineInterface,
+  laterWords: string[],
+  requestedWork: string
+) =>
+  laterWords.length <= 1
+    ? askClaudeToReview(engine, laterWords[0] ?? "")
+    : planWork(engine, requestedWork);
+
 const runRenameCommand = (engine: EngineInterface, laterWords: string[]) => {
   const requestedSet = laterWords[0] ?? "";
   const newName = laterWords.slice(1).join(" ");
@@ -1805,6 +1844,11 @@ const splitHandoff = async (
   );
   return { text: `Splitting the handoff into small plans in set ${setName}…` };
 };
+
+const runHandoffCommand = (engine: EngineInterface, laterWords: string[]) =>
+  /^\d+$/.test(laterWords[0] ?? "")
+    ? splitHandoff(engine, laterWords[0] ?? "", laterWords.slice(1).join(" "))
+    : splitHandoff(engine, "", laterWords.join(" "));
 
 const listPlanNamesNotDone = async (
   engine: EngineInterface,
@@ -2308,9 +2352,9 @@ export const register: Register = (on) => {
     await $.command.register({
       name: COMMAND_NAME,
       description:
-        "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename, board.",
+        "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename, review [set], board.",
       argumentHint:
-        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename [set] [new name]",
+        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename [set] [new name] | review [set]",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,
@@ -2381,10 +2425,10 @@ export const register: Register = (on) => {
       return buildPlans($, laterWords[0] ?? "", laterWords[1] ?? "");
     if (/^board$/i.test(requestedWork)) return showBoard($);
     if (/^rename$/i.test(firstWord)) return runRenameCommand($, laterWords);
+    if (/^review$/i.test(firstWord))
+      return runReviewCommand($, laterWords, requestedWork);
     if (!/^handoff$/i.test(firstWord)) return planWork($, requestedWork);
-    return /^\d+$/.test(laterWords[0] ?? "")
-      ? splitHandoff($, laterWords[0] ?? "", laterWords.slice(1).join(" "))
-      : splitHandoff($, "", laterWords.join(" "));
+    return runHandoffCommand($, laterWords);
   });
 
   on("tool.run", { tool: QUALIFIED_WRITE_TOOL_NAME as never }, ($, e) =>

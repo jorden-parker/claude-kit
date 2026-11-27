@@ -1554,6 +1554,45 @@ test("/small-plans rename with only a set submits one prompt naming that set and
   expect(files.get(HANDOFF_SET_PLAN)).toBe(FIX_LOGIN_PLAN_TEXT);
 });
 
+test("/small-plans review with only a set submits one prompt naming that set", async ($, on) => {
+  const { reply, submittedPrompts } = await runCommand(
+    $,
+    on,
+    "review fix-login",
+    { [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT }
+  );
+
+  expect(reply.text).toBe("Reviewing a set of small plans…");
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain("fix-login");
+  expect(submittedPrompts[0]).toContain("list_small_plans");
+  expect(submittedPrompts[0]).toContain("update_small_plan");
+  expect(submittedPrompts[0]).toContain("Proposed changes");
+});
+
+test("/small-plans review with no set asks which set", async ($, on) => {
+  const { reply, submittedPrompts } = await runCommand($, on, "review", {
+    [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT,
+  });
+
+  expect(reply.text).toBe("Reviewing a set of small plans…");
+  expect(submittedPrompts).toHaveLength(1);
+  expect(submittedPrompts[0]).toContain("ask the user with AskUserQuestion");
+});
+
+test("/small-plans review followed by several words plans that work instead", async ($, on) => {
+  const { reply } = await runCommand(
+    $,
+    on,
+    "review the login code and fix it",
+    {
+      [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT,
+    }
+  );
+
+  expect(reply.text).not.toBe("Reviewing a set of small plans…");
+});
+
 test("the rename tool renames a set and returns the result", async ($, on) => {
   const { files } = mockEngine(on, { [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT });
 
@@ -1706,6 +1745,7 @@ test("typing the first word after /small-plans suggests every action", async ($,
     "build",
     "board",
     "rename",
+    "review",
   ]);
   expect(reply.suggestions[0]!.description).toContain("saved handoff");
 });

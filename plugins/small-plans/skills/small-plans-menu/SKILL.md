@@ -9,7 +9,7 @@ This lists the small-plans command in menus that only show skills.
 
 Arguments: $ARGUMENTS
 
-If the first word of the arguments is `build`, follow the build instructions at the end. If it is `handoff`, `rename` or `board`, tell the user that needs the `/small-plans` command in the Claude Code terminal, and stop. Otherwise follow the planning instructions.
+If the first word of the arguments is `build`, follow the build instructions at the end. If it is `handoff`, `rename`, `review` or `board`, tell the user that needs the `/small-plans` command in the Claude Code terminal, and stop. Otherwise follow the planning instructions.
 
 ## Plan the work
 

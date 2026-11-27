@@ -70,4 +70,4 @@ Run `claude-ledger verify` for two rows of laptop answer codes around the newest
 
 Run `claude-ledger verify browser` on the work machine to open the latest deployment as a local HTML report. Each measurement shows its Before and After codes beside the exact readings.
 
-The deployment check-in browser page includes a read-only results box with **Select all** and **Copy results**, ready to paste into chat. Its Before/After calculation uses all locally recorded sessions across projects, includes subagent totals, and shows how many spanning/unknown-start sessions are excluded. Other machines are not included automatically.
+The **Record work results** form includes a live preview and **Copy selected results**. Choose the relevant readings, then copy only those selections into chat without saving first. Unselected/Unknown readings are omitted. Its Before/After calculation uses all locally recorded sessions across projects, includes subagent totals, and shows how many spanning/unknown-start sessions are excluded. Other machines are not included automatically.

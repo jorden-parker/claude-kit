@@ -122,6 +122,32 @@ export function summary(records: Entry[]) {
     .join("\n\n");
 }
 
+export function selectedResults(
+  values: Record<string, string>,
+  available: {
+    id: string;
+    title: string;
+    choices: { code: string; label: string }[];
+  }[],
+  version: string
+): string {
+  const selected = available.flatMap((row) => {
+    const choice = row.choices.find(
+      (choice) => choice.code === values[row.id] && choice.code !== row.id + "?"
+    );
+    return choice ? [row.title + ": " + choice.label] : [];
+  });
+  return [
+    (values.experiment || "Work check-in") +
+      " · " +
+      values.phase +
+      " · " +
+      version,
+    "Checks passed: " + (values.quality || "Unknown"),
+    ...(selected.length ? selected : ["No readings selected."]),
+  ].join("\n");
+}
+
 export function formPage(records: Entry[], query: URLSearchParams) {
   const experiment =
     query.get("experiment") ?? records.at(-1)?.experiment ?? "Work check-in";
@@ -145,12 +171,12 @@ export function formPage(records: Entry[], query: URLSearchParams) {
       )
       .join("");
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Record work results</title>
-<style>body{font:16px system-ui;margin:2rem auto;max-width:62rem;padding:0 1rem}fieldset{border:0;border-top:1px solid #aaa;margin:1rem 0}label{display:inline-block;padding:.45rem}label:has(input:checked){background:#dbeafe;color:#132544}button,select,input{font:inherit}button{padding:.4rem .8rem}</style>
+<style>body{font:16px system-ui;margin:2rem auto;max-width:62rem;padding:0 1rem}fieldset{border:0;border-top:1px solid #aaa;margin:1rem 0}label{display:inline-block;padding:.45rem}label:has(input:checked){background:#dbeafe;color:#132544}button,select,input{font:inherit}button{padding:.4rem .8rem;min-height:44px}textarea{display:block;width:100%;box-sizing:border-box;padding:12px;font:14px/1.5 monospace;resize:vertical}button:focus-visible,textarea:focus-visible{outline:2px solid #165dcc;outline-offset:3px}</style>
 <h1>Record work results</h1><p>Match the codes in Laptop check-in · ${scale} on the work screen.</p>
 <form><label>Experiment and workload <input name="experiment" maxlength="160" required list="names" value="${html(experiment)}"></label><datalist id="names">${options([...new Set(records.map((r) => r.experiment))], "")}</datalist>
 <label>Report <select name="phase">${options(phases, phase)}</select></label><button>Open selections</button></form>
 <h2>${html(experiment)} · ${html(phase)}</h2>${query.has("saved") ? '<p role="status">Selections saved.</p>' : ""}
-<form method="post"><input type="hidden" name="version" value="${scale}"><input type="hidden" name="experiment" value="${html(experiment)}"><input type="hidden" name="phase" value="${html(phase)}">
+<form method="post" id="readings-form"><input type="hidden" name="version" value="${scale}"><input type="hidden" name="experiment" value="${html(experiment)}"><input type="hidden" name="phase" value="${html(phase)}">
 ${relevant(phase)
   .map(
     (row, i) =>
@@ -174,5 +200,32 @@ ${relevant(phase)
       "</fieldset>"
   )
   .join("")}
-<label>Checks passed <select name="quality">${options(qualities, current?.quality ?? "Unknown")}</select></label><button>Save selections</button></form></html>`;
+<label>Checks passed <select name="quality">${options(qualities, current?.quality ?? "Unknown")}</select></label><button>Save selections</button>
+<h2>Selected results to paste into chat</h2><p>Choose the readings above, then copy this result. Unselected or Unknown readings are omitted. Copying does not require saving.</p>
+<textarea id="selected-results" readonly rows="8" aria-label="Selected results" spellcheck="false"></textarea>
+<button type="button" id="copy-selected">Copy selected results</button><button type="button" id="select-selected">Select result text</button><span id="copy-status" role="status" aria-live="polite"></span>
+</form><script>
+const form = document.getElementById("readings-form");
+const output = document.getElementById("selected-results");
+const status = document.getElementById("copy-status");
+const available = ${JSON.stringify(relevant(phase).map(({ id, title, choices }) => ({ id, title, choices: choices.map(({ code, label }) => ({ code, label })) }))).replaceAll("<", "\\u003c")};
+const formatSelected = ${selectedResults.toString()};
+function updateResult() {
+  output.value = formatSelected(Object.fromEntries(new FormData(form)), available, ${JSON.stringify(scale)});
+  status.textContent = "";
+}
+function selectResult() { output.focus(); output.select(); }
+form.addEventListener("input", updateResult);
+form.addEventListener("change", updateResult);
+document.getElementById("select-selected").addEventListener("click", selectResult);
+document.getElementById("copy-selected").addEventListener("click", async () => {
+  updateResult(); selectResult();
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(output.value);
+    else if (!document.execCommand("copy")) throw new Error("Clipboard unavailable");
+    status.textContent = "Selected results copied. Paste into chat.";
+  } catch { status.textContent = "Result selected. Press Cmd+C or Ctrl+C to copy."; }
+});
+updateResult();
+</script></html>`;
 }

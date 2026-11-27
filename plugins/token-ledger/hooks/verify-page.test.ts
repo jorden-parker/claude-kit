@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { verifyPage } from "./verify-page.ts";
 
-test("deployment results are selectable, escaped and explain session coverage", () => {
+test("deployment readings are escaped and explain session coverage", () => {
   const group = {
     sessions: 8,
     medianContextTokens: 40000,
@@ -17,19 +17,14 @@ test("deployment results are selectable, escaped and explain session coverage", 
     after: { ...group, sessions: 2 },
     spanningSessions: 3,
   });
-  expect(page).toContain('id="copy-results" readonly');
-  expect(page).toContain('id="select-results"');
-  expect(page).toContain('id="copy-results-button"');
-  expect(page).toContain("Before: 8 sessions");
-  expect(page).toContain("After: 2 sessions");
-  expect(page).toContain("Excluded: 3 sessions");
-  expect(page).toContain("all locally recorded sessions, across projects");
-  expect(page).toContain("includes subagent totals");
+  expect(page).toContain("8 sessions");
+  expect(page).toContain("2 sessions");
+  expect(page).toContain("Excludes 3 sessions");
+  expect(page).toContain("all locally recorded sessions across projects");
+  expect(page).toContain("including subagent totals");
   expect(page).toContain("Sessions on other machines");
-  expect(page).toContain("Too early to judge");
+  expect(page).toContain("Fewer than five follow-up sessions");
   expect(page).not.toContain("Update </textarea><script>");
-  expect(page).toContain("results.select()");
-  expect(page).toContain("Press Cmd+C or Ctrl+C");
 });
 test("no deployment still renders without copy controls", () => {
   expect(verifyPage()).toContain("No deployments recorded");

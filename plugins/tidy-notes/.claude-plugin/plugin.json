@@ -1,5 +1,5 @@
 {
   "name": "tidy-notes",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "/tidy-notes reformats the Markdown notes in the handoffs, project-notes, small-plans and brainstorm stores so they are consistently formatted without changing their content; a dry run lists what would change and what looks wrong, and /tidy-notes apply writes the changes."
 }

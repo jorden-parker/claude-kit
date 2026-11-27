@@ -208,7 +208,12 @@ export function verifyPage(
 
 export const liveVerifyScript = `
 const status = document.getElementById("live-status");
+let scheduled;
+let refreshing = false;
 async function refreshReadings() {
+  if (refreshing) return;
+  refreshing = true;
+  if (scheduled) clearTimeout(scheduled);
   try {
     if (document.hidden) return;
     const response = await fetch(location.href, { cache: "no-store" });
@@ -225,7 +230,11 @@ async function refreshReadings() {
     status.textContent = "Live · checks for new recorded results every 2 seconds";
   } catch {
     status.textContent = "Disconnected · showing last results; retrying automatically. Keep claude-ledger verify browser running.";
-  } finally { setTimeout(refreshReadings, 2000); }
+  } finally { refreshing=false; scheduled=setTimeout(refreshReadings, 2000); }
 }
-setTimeout(refreshReadings, 2000);
+if (typeof EventSource !== "undefined" && document.querySelector(".usage")) {
+  const events = new EventSource(location.pathname + "/events");
+  events.addEventListener("usage", refreshReadings);
+}
+scheduled=setTimeout(refreshReadings, 2000);
 `;

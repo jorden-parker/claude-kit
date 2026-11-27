@@ -1,3 +1,4 @@
+import { liveCodeburn, type loadCodeburnUsage } from "./codeburn-usage.ts";
 import { shareUsagePage } from "./share-usage.ts";
 import { parseRates } from "./usage-metrics.ts";
 import { compareModelCohorts } from "./model-comparison.ts";
@@ -12,9 +13,17 @@ import { verifyPage } from "./verify-page.ts";
 
 export function startVerifyServer(
   userHome: string,
-  options: { discover?: (home: string) => Promise<CodeburnStatus> } = {}
+  options: {
+    loadUsage?: typeof loadCodeburnUsage;
+    discover?: (home: string) => Promise<CodeburnStatus>;
+  } = {}
 ) {
   const collect = createUsageCollector(userHome, options.discover);
+  const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
+  const event = new TextEncoder().encode("event: usage\ndata: updated\n\n");
+  const external = liveCodeburn(userHome, options.loadUsage, () => {
+    for (const listener of listeners) listener.enqueue(event);
+  });
   const path = "/" + crypto.randomUUID();
   const comparisonPath = join(
     userHome,
@@ -27,7 +36,7 @@ export function startVerifyServer(
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    async fetch(request) {
+    async fetch(request, connection) {
       const pathname = new URL(request.url).pathname;
       if (
         request.method === "GET" &&
@@ -41,6 +50,28 @@ export function startVerifyServer(
             headers: {
               "Content-Type": "font/woff2",
               "Cache-Control": "private, max-age=86400",
+            },
+          }
+        );
+      }
+      if (pathname === path + "/events" && request.method === "GET") {
+        connection.timeout(request, 0);
+        let subscriber: ReadableStreamDefaultController<Uint8Array>;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              subscriber = controller;
+              listeners.add(controller);
+              controller.enqueue(new TextEncoder().encode(": connected\n\n"));
+            },
+            cancel() {
+              listeners.delete(subscriber);
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-store",
             },
           }
         );
@@ -65,17 +96,20 @@ export function startVerifyServer(
       }
       const fix =
         fixes.find((fix) => fix.appliedAt === selectedDeployment) ?? fixes[0];
-      const collection = await collect(fix?.appliedAt);
+
       const query = new URL(request.url).searchParams;
       if (
         !requested &&
         !query.has("cohort") &&
         query.get("view") !== "comparison"
       ) {
+        void collect(fix?.appliedAt).catch(() => {});
+        const sample = readNewestEntries(userHome, 20);
         return new Response(
           shareUsagePage(
-            readNewestEntries(userHome, 20),
-            parseRates(process.env.TOKEN_LEDGER_PRICING)
+            sample,
+            parseRates(process.env.TOKEN_LEDGER_PRICING),
+            external(sample)
           ),
           {
             headers: {
@@ -87,6 +121,7 @@ export function startVerifyServer(
           }
         );
       }
+      const collection = await collect(fix?.appliedAt);
       const sessions = readNewestEntries(userHome, Infinity);
       const models = fix
         ? compareModelCohorts(

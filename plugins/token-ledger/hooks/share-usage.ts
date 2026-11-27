@@ -1,3 +1,4 @@
+import type { ExternalUsage } from "./codeburn-usage.ts";
 import type { LedgerEntry } from "./ledger.ts";
 import type { Rates, RequestUsage } from "./usage-metrics.ts";
 import { html } from "./checkin-form.ts";
@@ -148,7 +149,8 @@ export function usageSample(
 
 export function shareUsagePage(
   entries: LedgerEntry[],
-  rates: Record<string, Rates>
+  rates: Record<string, Rates>,
+  external?: { data?: ExternalUsage; message: string }
 ) {
   const sample = usageSample(entries, rates);
   const number = (v: Metric) =>
@@ -169,7 +171,79 @@ export function shareUsagePage(
     ]
       .map((v) => "<td>" + v + "</td>")
       .join("");
-  const top = sample.rows[0];
+  const cb = external?.data;
+  const localRows = cb
+    ? sample.rows.flatMap((row) => {
+        const remaining = entries.filter((entry) => {
+          const keys = cb.covered.get(entry.session);
+          return (
+            !keys?.has(JSON.stringify([row.model, row.role])) &&
+            !keys?.has(JSON.stringify([row.model, "Role unavailable"]))
+          );
+        });
+        return usageSample(remaining, rates).rows.filter(
+          (other) => other.model === row.model && other.role === row.role
+        );
+      })
+    : sample.rows;
+  const cbRows =
+    cb?.rows
+      .filter((row) => row.model !== "Session total")
+      .map((row) => {
+        const exactRole = usageSample(
+          entries.filter((e) => row.sessions.has(e.session)),
+          rates
+        ).rows.find((r) => r.model === row.model && r.role === row.role);
+        const cells = [
+          row.role,
+          number(row.sessions.size),
+          number(exactRole?.calls ?? row.calls),
+          ...fields.map((f) => number(exactRole?.tokens[f] ?? row[f])),
+        ];
+        return (
+          '<tr><th scope="row">' +
+          html(row.model) +
+          "</th>" +
+          cells.map((cell) => "<td>" + cell + "</td>").join("") +
+          "<td>" +
+          money(row.cost) +
+          " " +
+          html(cb.currency) +
+          '<small class="cost-reason">Codeburn · ' +
+          html([...row.basis].join(", ")) +
+          (row.partial ? " · partial usage" : "") +
+          "</small></td></tr>"
+        );
+      })
+      .join("") ?? "";
+  const totals = cb
+    ? [...cb.costs.values()]
+        .filter((v): v is number => v !== undefined)
+        .sort((a, b) => b - a)
+    : [];
+  const finished = entries.filter(
+    (e) => e.sessionState === "response-finished"
+  );
+  const finishedTotals = finished
+    .map((e) => cb?.costs.get(e.session))
+    .filter((v): v is number => v !== undefined)
+    .sort((a, b) => a - b);
+  const middle = Math.floor(finished.length / 2);
+  const median =
+    finished.length && finishedTotals.length === finished.length
+      ? (finishedTotals[middle] +
+          finishedTotals[Math.floor((finished.length - 1) / 2)]) /
+        2
+      : undefined;
+  const total = totals.reduce((a, b) => a + b, 0);
+  const share =
+    totals.length === entries.length && totals.length >= 3 && total > 0
+      ? (totals.slice(0, 3).reduce((a, b) => a + b, 0) / total) * 100
+      : undefined;
+  const supplemental = cb?.rows.find(
+    (row) => row.model === "Session total" && row.role === "Role unavailable"
+  );
+  const top = cb?.matched.size ? undefined : sample.rows[0];
   const dates = entries.map((e) => e.updatedAt.slice(0, 10)).sort();
   const ratesUsed = sample.rows
     .map((r) => r.model)
@@ -177,11 +251,22 @@ export function shareUsagePage(
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Session usage · Token Ledger</title><style>${geistStyle}
   main{max-width:1440px}.usage th,.usage td{padding:10px}.usage tbody th{width:auto}.usage td{text-align:right}.usage td:first-of-type{text-align:left}.cost-reason{display:block;max-width:24ch;font:12px/1.4 Geist,system-ui,sans-serif}.share-line{overflow-wrap:anywhere;padding:12px 20px}.stats{margin:18px 0}.panel{margin-bottom:14px}</style>${productHeader("Session usage", true)}<main><div class="page-heading"><div><h1>Usage from the last ${entries.length} sessions</h1><p>${dates.length ? "Last updated " + dates[0] + " to " + dates.at(-1) + " UTC · " : ""}Newest 20 local records · ${sample.finished} with latest response finished</p></div><a class="button" href="?view=comparison">Compare deployments</a></div>
   <div class="stats">${[
-    ["Fully priced sessions", sample.priced + " / " + entries.length],
-    ["Median cost · finished responses", money(sample.median)],
+    [
+      "Fully priced sessions",
+      (cb?.matched.size ? totals.length : sample.priced) +
+        " / " +
+        entries.length,
+    ],
+    [
+      "Median cost · finished responses",
+      cb?.matched.size
+        ? money(median) + " " + html(cb.currency)
+        : money(sample.median),
+    ],
     [
       "Top three sessions · share of cost",
-      sample.share === undefined ? "Unknown" : sample.share.toFixed(1) + "%",
+      (cb?.matched.size ? share : sample.share)?.toFixed(1)?.concat("%") ??
+        "Unknown",
     ],
   ]
     .map(
@@ -193,7 +278,8 @@ export function shareUsagePage(
         "</div></div>"
     )
     .join("")}</div>
-  <section class="panel"><div class="panel-heading"><h2>Usage by model and role</h2></div><div class="table-scroll"><table class="usage"><thead><tr>${["Model", "Role", "Sessions", "Calls", "Input", "Cache write", "Cache read", "Output", "Est. cost"].map((label) => "<th>" + label + "</th>").join("")}</tr></thead><tbody>${sample.rows.map((row) => '<tr><th class="model-name" scope="row">' + html(row.model) + "</th>" + rowCells(row) + "</tr>").join("")}</tbody></table></div><p class="panel-footer">${sample.rows.length ? "Sessions can appear in multiple rows. Unknown means the recorded usage or configured rates are incomplete." : "No recorded model usage in this sample."}</p></section>
+  <section class="panel"><div class="panel-heading"><h2>Usage by model and role</h2></div><div class="table-scroll"><table class="usage"><thead><tr>${["Model", "Role", "Sessions", "Calls", "Input", "Cache write", "Cache read", "Output", "Est. cost"].map((label) => "<th>" + label + "</th>").join("")}</tr></thead><tbody>${cbRows}${localRows.map((row) => '<tr><th class="model-name" scope="row">' + html(row.model) + "</th>" + rowCells(row) + "</tr>").join("")}</tbody></table></div><p class="panel-footer">${external ? html((cb ? "Codeburn matched " + cb.matched.size + " of " + entries.length + " sessions. " : "") + external.message) + " " : ""}${cbRows || localRows.length ? "Sessions can appear in multiple rows. Unknown means the recorded usage or configured rates are incomplete." : "No recorded model usage in this sample."}</p></section>
+  ${supplemental && cb ? "<p>Codeburn session-only total · " + supplemental.sessions.size + " sessions · " + money(supplemental.cost) + " " + html(cb.currency) + ". Included in session statistics; model allocation unavailable.</p>" : ""}
   ${top && sample.priced === entries.length && top.cost !== undefined ? '<section class="panel share-line"><h2>Largest cost contributor</h2><p>' + html(top.model) + " · " + top.role + " · " + number(top.calls) + " calls · estimated cost " + money(top.cost) + "</p></section>" : ""}
   <details id="recording" class="details"><summary>Rates used for estimates</summary><div class="details-body"><p>Current TOKEN_LEDGER_PRICING per million tokens, in your configured currency. Estimates cover recorded usage and may differ from billing.</p>${ratesUsed.map((m) => "<p>" + html(m) + " · " + fields.map((f) => f + " " + rates[m][f]).join(" · ") + "</p>").join("") || "<p>No matching rates configured. Set TOKEN_LEDGER_PRICING in the shell that starts this report, using the exact model IDs above and your provider’s input, output, cacheRead and cacheWrite prices per million tokens. Then relaunch the report.</p>"}</div></details></main><script>${liveVerifyScript}</script></html>`;
 }

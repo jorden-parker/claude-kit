@@ -183,3 +183,59 @@ test("a report records raw transcripts without Stop hooks and preserves selected
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("background export pushes a usage event and updates the same report URL", async () => {
+  const home = mkdtempSync(join(tmpdir(), "ledger-stream-"));
+  const dir = join(home, ".cache/token-ledger/sessions");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "id.json"),
+    JSON.stringify({
+      session: "id",
+      project: "private",
+      updatedAt: "2026-11-27",
+      main: {},
+      subagents: {},
+      resultCharactersByTool: {},
+    })
+  );
+  const { parseExport } = await import("./codeburn-usage.ts");
+  let finish!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const { server, url } = startVerifyServer(home, {
+    discover: async () => ({ roots: [], message: "test" }),
+    loadUsage: async (_, entries) => {
+      await ready;
+      return parseExport(
+        {
+          schema: "codeburn.export.v2",
+          currency: { code: "GBP" },
+          records: [],
+          sessions: [{ "Session ID": "id", "Cost (GBP)": 2 }],
+        },
+        entries
+      );
+    },
+  });
+  const abort = new AbortController();
+  try {
+    const stream = await fetch(url + "/events", { signal: abort.signal });
+    const reader = stream.body!.getReader();
+    await reader.read();
+    expect(await (await fetch(url)).text()).toContain("Refreshing Codeburn");
+    finish();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain(
+      "event: usage"
+    );
+    expect(await (await fetch(url)).text()).toContain(
+      "Codeburn matched 1 of 1"
+    );
+  } finally {
+    finish();
+    abort.abort();
+    server.stop(true);
+    rmSync(home, { recursive: true, force: true });
+  }
+});

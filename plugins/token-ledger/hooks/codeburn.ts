@@ -2,14 +2,7 @@ import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 export type CodeburnStatus = { roots: string[]; message: string };
 export async function codeburnDiscovery(home: string): Promise<CodeburnStatus> {
-  const executable =
-    process.env.TOKEN_LEDGER_CODEBURN ||
-    Bun.which("codeburn") ||
-    [
-      join(home, ".local/bin/codeburn"),
-      "/opt/homebrew/bin/codeburn",
-      "/usr/local/bin/codeburn",
-    ].find((path) => existsSync(path));
+  const executable = codeburnExecutable(home);
   if (!executable)
     return {
       roots: [],
@@ -70,4 +63,16 @@ export function parseCodeburnDiscovery(report: any): CodeburnStatus {
         ? provider.candidatesFound + " candidate sessions"
         : "session count unknown"),
   };
+}
+
+export function codeburnExecutable(home: string) {
+  return (
+    process.env.TOKEN_LEDGER_CODEBURN ||
+    Bun.which("codeburn") ||
+    [
+      join(home, ".local/bin/codeburn"),
+      "/opt/homebrew/bin/codeburn",
+      "/usr/local/bin/codeburn",
+    ].find((path) => existsSync(path))
+  );
 }

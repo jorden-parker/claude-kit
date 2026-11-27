@@ -41,7 +41,9 @@ test("updating a follow-up preserves the baseline and compares only known bands"
     form.set("B", "B2");
     save(home, form);
     expect(entries(home)).toHaveLength(2);
-    expect(summary(entries(home))).toContain("B2 · 40k–<80k (lower)");
+    expect(summary(entries(home))).toContain(
+      "B2 · 40k–<80k (direction uncertain)"
+    );
     expect(formPage(entries(home), form)).toContain('value="B2" checked');
     form.set("version", "v0");
     expect(() => save(home, form)).toThrow();
@@ -75,7 +77,9 @@ test("CLI analysis and verification read saved work answers without local sessio
     ]) {
       const result = run(...args);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.toString()).toContain("B2 · 40k–<80k (lower)");
+      expect(result.stdout.toString()).toContain(
+        "B2 · 40k–<80k (direction uncertain)"
+      );
       expect(result.stdout.toString()).toContain("too early");
     }
     run("--fixed", "older deployment");
@@ -101,6 +105,37 @@ test("CLI analysis and verification read saved work answers without local sessio
     ]) {
       expect(run(...args).exitCode).toBe(2);
     }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("model context survives saving and mismatched models suppress directional claims", () => {
+  const home = mkdtempSync(join(tmpdir(), "ledger-model-context-"));
+  try {
+    const form = new URLSearchParams({
+      version: "v1",
+      experiment: "same workload",
+      phase: "Before",
+      quality: "First try",
+      main_model: "Sol",
+      worker_models: "None recorded",
+      effort: "medium",
+      A: "A3",
+      B: "B3",
+    });
+    save(home, form);
+    form.set("phase", "After");
+    form.set("B", "B2");
+    save(home, form);
+    expect(summary(entries(home))).toContain("lower, descriptive only");
+    form.set("main_model", "Opus");
+    save(home, form);
+    const report = summary(entries(home));
+    expect(report).toContain("Comparison unavailable");
+    expect(report).not.toContain("lower, descriptive only");
+    expect(report).toContain("Main model(s): Opus");
+    expect(formPage(entries(home), form)).toContain('name="effort"');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

@@ -41,6 +41,7 @@ type TranscriptSummary = {
 };
 
 export type LedgerEntry = {
+  sessionState?: "working" | "response-finished" | "unknown";
   tasks?: TaskMetrics[];
   workerTasks?: TaskMetrics[][];
   session: string;
@@ -267,6 +268,25 @@ function nudgeGrowth(): number {
   return configured > 0 ? configured : DEFAULT_NUDGE_GROWTH_TOKENS;
 }
 
+export function transcriptSessionState(
+  transcript: string
+): "working" | "response-finished" | "unknown" {
+  for (const line of transcript.split("\n").reverse()) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry?.type !== "assistant" && entry?.message?.role !== "assistant")
+        continue;
+      const reason = entry.message?.stop_reason;
+      return reason === "tool_use"
+        ? "working"
+        : ["end_turn", "stop_sequence"].includes(reason)
+          ? "response-finished"
+          : "unknown";
+    } catch {}
+  }
+  return "unknown";
+}
+
 export function recordSession(
   event: StopEvent,
   userHome: string,
@@ -294,6 +314,7 @@ export function recordSession(
         mainSummary.startContextTokens
       );
   const entry: LedgerEntry = {
+    sessionState: transcriptSessionState(transcript),
     tasks: taskMetrics(
       transcript,
       parseRates(process.env.TOKEN_LEDGER_PRICING)

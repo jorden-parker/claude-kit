@@ -1,3 +1,4 @@
+import { compareModelCohorts } from "./model-comparison.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createUsageCollector } from "./usage-collector.ts";
@@ -48,12 +49,20 @@ export function startVerifyServer(
         fixes.find((fix) => fix.appliedAt === selectedDeployment) ?? fixes[0];
       const collection = await collect(fix?.appliedAt);
       const sessions = readNewestEntries(userHome, Infinity);
+      const models = fix
+        ? compareModelCohorts(
+            sessions,
+            fix.appliedAt,
+            new URL(request.url).searchParams.get("cohort") ?? undefined
+          )
+        : undefined;
       return new Response(
         verifyPage(
           fix && {
             title: fix.title,
             since: fix.appliedAt,
-            ...compareSessions(sessions, fix.appliedAt),
+            ...(models ?? compareSessions(sessions, fix.appliedAt)),
+            models,
           },
           true,
           recordingStatus(

@@ -12,6 +12,16 @@ export const html = (value: string) =>
       ]!
   );
 const phases = ["Before", "After", "Single session"];
+const efforts = [
+  "Unknown",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+  "mixed",
+];
 const qualities = ["Unknown", "First try", "After rework", "Failed", "Mixed"];
 type Entry = {
   experiment: string;
@@ -19,6 +29,9 @@ type Entry = {
   answers: string;
   quality: string;
   version: string;
+  main_model?: string;
+  worker_models?: string;
+  effort?: string;
 };
 const folder = (home: string) => join(home, ".cache/token-ledger");
 const path = (home: string) => join(folder(home), "work-checkins.sqlite");
@@ -47,6 +60,15 @@ export function save(home: string, form: URLSearchParams) {
     form.get("version") !== scale
   )
     throw Error("Invalid check-in");
+  const mainModel = form.get("main_model")?.trim() || "Unknown";
+  const workerModels = form.get("worker_models")?.trim() || "Unknown";
+  const effort = form.get("effort") || "Unknown";
+  if (
+    mainModel.length > 160 ||
+    workerModels.length > 160 ||
+    !efforts.includes(effort)
+  )
+    throw Error("Invalid model context");
   const answers = relevant(phase).map((row) => {
     const code = form.get(row.id) ?? row.id + "?";
     if (!row.choices.some((choice) => choice.code === code))
@@ -59,12 +81,26 @@ export function save(home: string, form: URLSearchParams) {
     db.exec(
       "CREATE TABLE IF NOT EXISTS observations (experiment TEXT, phase TEXT, answers TEXT, quality TEXT, version TEXT, PRIMARY KEY(experiment, phase, version))"
     );
-    db.query("INSERT OR REPLACE INTO observations VALUES (?, ?, ?, ?, ?)").run(
+    const columns = new Set(
+      db
+        .query<{ name: string }, []>("PRAGMA table_info(observations)")
+        .all()
+        .map((column) => column.name)
+    );
+    for (const column of ["main_model", "worker_models", "effort"])
+      if (!columns.has(column))
+        db.exec("ALTER TABLE observations ADD COLUMN " + column + " TEXT");
+    db.query(
+      "INSERT OR REPLACE INTO observations (experiment, phase, answers, quality, version, main_model, worker_models, effort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(
       experiment,
       phase,
       JSON.stringify(answers),
       quality,
-      scale
+      scale,
+      mainModel,
+      workerModels,
+      effort
     );
   } finally {
     db.close();
@@ -88,6 +124,19 @@ export function summary(records: Entry[]) {
             other.version === record.version
         );
       const prior = baseline ? JSON.parse(baseline.answers) : [];
+      const contextKnown =
+        baseline &&
+        ["main_model", "worker_models", "effort"].every((key) => {
+          const field = key as "main_model" | "worker_models" | "effort";
+          return (
+            record[field] &&
+            !["unknown", "mixed"].includes(record[field]!.toLowerCase()) &&
+            record[field] === baseline[field]
+          );
+        });
+      const sufficient =
+        ![undefined, "A?", "A1", "A2"].includes(codes[0]) &&
+        ![undefined, "A?", "A1", "A2"].includes(prior[0]);
       return [
         record.experiment +
           " · " +
@@ -102,6 +151,16 @@ export function summary(records: Entry[]) {
         ...(record.phase === "After" && codes[0] === "A?"
           ? ["Follow-up sample size unknown."]
           : []),
+        "Main model(s): " + (record.main_model || "Unknown"),
+        "Worker model(s): " + (record.worker_models || "Unknown"),
+        "Reasoning effort: " + (record.effort || "Unknown"),
+        ...(baseline
+          ? [
+              contextKnown && sufficient
+                ? "Matched recorded model context; workload and duration remain uncontrolled. Descriptive only."
+                : "Comparison unavailable: insufficient samples or model/effort context changed or unknown.",
+            ]
+          : []),
         "Estimated cost: unknown",
         ...relevant(record.phase).map((row, i) => {
           const chosen = row.choices.find((c) => c.code === codes[i]);
@@ -109,12 +168,14 @@ export function summary(records: Entry[]) {
           const direction =
             !before || !chosen
               ? ""
-              : !Number.isFinite(before.low + chosen.low) ||
+              : !contextKnown ||
+                  !sufficient ||
+                  !Number.isFinite(before.low + chosen.low) ||
                   before.low === chosen.low
                 ? " (direction uncertain)"
                 : chosen.low < before.low
-                  ? " (lower)"
-                  : " (higher)";
+                  ? " (lower, descriptive only)"
+                  : " (higher, descriptive only)";
           return row.title + ": " + (chosen?.label ?? "Unknown") + direction;
         }),
       ].join("\n");
@@ -144,6 +205,9 @@ export function selectedResults(
       " · " +
       version,
     "Checks passed: " + (values.quality || "Unknown"),
+    "Main model(s): " + (values.main_model || "Unknown"),
+    "Worker model(s): " + (values.worker_models || "Unknown"),
+    "Reasoning effort: " + (values.effort || "Unknown"),
     ...(selected.length ? selected : ["No readings selected."]),
   ].join("\n");
 }
@@ -177,6 +241,7 @@ export function formPage(records: Entry[], query: URLSearchParams) {
 <label>Report <select name="phase">${options(phases, phase)}</select></label><button>Open selections</button></form>
 <h2>${html(experiment)} · ${html(phase)}</h2>${query.has("saved") ? '<p role="status">Selections saved.</p>' : ""}
 <form method="post" id="readings-form"><input type="hidden" name="version" value="${scale}"><input type="hidden" name="experiment" value="${html(experiment)}"><input type="hidden" name="phase" value="${html(phase)}">
+<fieldset><legend>Comparison context</legend><label>Main model(s) <input name="main_model" maxlength="160" value="${html(current?.main_model || "Unknown")}"></label><label>Worker model(s) <input name="worker_models" maxlength="160" value="${html(current?.worker_models || "Unknown")}"></label><label>Reasoning effort <select name="effort">${options(efforts, current?.effort || "Unknown")}</select></label><p>Copy the model mix from the work report. Use None recorded for workers when none are listed. Leave effort Unknown unless you know the setting used for this sample.</p></fieldset>
 ${relevant(phase)
   .map(
     (row, i) =>

@@ -1,3 +1,4 @@
+import { compareModelCohorts, modelCohort } from "./model-comparison.ts";
 import { createUsageCollector } from "./usage-collector.ts";
 import { recordHook, readRecorderStatus } from "./recorder.ts";
 import { recordingStatus, formatRecordingStatus } from "./recording-status.ts";
@@ -97,14 +98,16 @@ if (command === "diagnose") {
   if (command === "compact-verify") {
     const check = checks.sort((a, b) => b.since.localeCompare(a.since))[0];
     if (check) {
-      const { before, after } = compareSessions(sessions, check.since);
+      const comparison = compareModelCohorts(sessions, check.since);
+      const { before, after } = comparison;
       console.log(
         [
           check.title + " · " + check.since.slice(0, 10),
           "Laptop check-in · " +
             scale +
             " · On your personal laptop, open claude-ledger → Record work results.",
-          "Choose Before or After in the form, then select the matching codes shown below.",
+          (comparison.selected?.label ?? "Model context unknown") +
+            " · Descriptive only; effort, provider route and workload uncontrolled.",
           "Before   " +
             groupCodes(before) +
             "   (" +
@@ -115,8 +118,10 @@ if (command === "diagnose") {
             "   (" +
             after.sessions +
             " sessions)",
-          ...(after.sessions < 5
-            ? ["Too early to judge: fewer than five follow-up sessions."]
+          ...(!comparison.enough
+            ? [
+                "Too early to judge: insufficient comparable data (five matched sessions per side not established).",
+              ]
             : []),
         ].join("\n")
       );
@@ -129,9 +134,26 @@ if (command === "diagnose") {
   } else {
     console.log(
       checks.length
-        ? formatVerification(sessions, checks) +
-            "\n\n" +
-            verificationAnswers(sessions, checks)
+        ? checks
+            .map((check) => {
+              const comparison = compareModelCohorts(sessions, check.since);
+              const matched = sessions.filter(
+                (session) =>
+                  modelCohort(session).key === comparison.selected?.key
+              );
+              return [
+                comparison.selected?.label ?? "Model context unknown",
+                "Descriptive comparison only; effort, provider route and workload are uncontrolled.",
+                ...(!comparison.enough
+                  ? [
+                      "Insufficient comparable data: five matched sessions per side have not been established.",
+                    ]
+                  : []),
+                formatVerification(matched, [check]),
+                verificationAnswers(matched, [check]),
+              ].join("\n\n");
+            })
+            .join("\n\n")
         : "No fixes recorded. Pass a date: claude-ledger --verify YYYY-MM-DD"
     );
     printWorkResults();

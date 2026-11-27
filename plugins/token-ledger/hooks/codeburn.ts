@@ -2,16 +2,16 @@ import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 export type CodeburnStatus = { roots: string[]; message: string };
 export async function codeburnDiscovery(home: string): Promise<CodeburnStatus> {
-  const executable = codeburnExecutable(home);
-  if (!executable)
+  const engine = codeburnEngine(home);
+  if (!engine)
     return {
       roots: [],
       message: "CLI not found; using standard Claude Code transcript paths",
     };
   try {
     const child = Bun.spawn(
-      [executable, "doctor", "--provider", "claude", "--json"],
-      { env: { ...process.env, HOME: home }, stdout: "pipe", stderr: "pipe" }
+      [...engine.command, "doctor", "--provider", "claude", "--json"],
+      { env: engine.env, stdout: "pipe", stderr: "pipe" }
     );
     const timeout = setTimeout(() => child.kill(), 5000);
     try {
@@ -65,14 +65,36 @@ export function parseCodeburnDiscovery(report: any): CodeburnStatus {
   };
 }
 
-export function codeburnExecutable(home: string) {
-  return (
+export function macDesktopEngine(app: string) {
+  const contents = join(app, "Contents");
+  const cli = join(contents, "Resources/cli");
+  const launcher = join(cli, "codeburn");
+  if (Bun.which(launcher)) return { command: [launcher], env: {} };
+  const runtime = join(contents, "MacOS/CodeBurn");
+  const script = join(cli, "dist/launch.js");
+  if (Bun.which(runtime) && existsSync(script))
+    return { command: [runtime, script], env: { ELECTRON_RUN_AS_NODE: "1" } };
+}
+
+export function codeburnEngine(home: string) {
+  const env = { ...process.env, HOME: home };
+  const executable =
     process.env.TOKEN_LEDGER_CODEBURN ||
     Bun.which("codeburn") ||
     [
       join(home, ".local/bin/codeburn"),
       "/opt/homebrew/bin/codeburn",
       "/usr/local/bin/codeburn",
-    ].find((path) => existsSync(path))
-  );
+    ].find((path) => Bun.which(path));
+  if (executable) return { command: [executable], env };
+  if (process.platform === "darwin") {
+    for (const app of [
+      join(home, "Applications/CodeBurn.app"),
+      "/Applications/CodeBurn.app",
+    ]) {
+      const desktop = macDesktopEngine(app);
+      if (desktop)
+        return { command: desktop.command, env: { ...env, ...desktop.env } };
+    }
+  }
 }

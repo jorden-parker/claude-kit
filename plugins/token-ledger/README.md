@@ -99,3 +99,5 @@ The default live browser view summarizes the 20 most recently updated local sess
 When Codeburn is installed, the live usage view matches its local Claude export to the same session IDs. Exports run in the background and refresh 15 seconds after completion while the visible report is open. An event stream updates the browser on completion; two-second polling also refreshes ledger readings. Codeburn costs include their currency and provenance. Partial coverage, unknown roles and session-only amounts are labeled. No AWS access or separate export command is required.
 
 The live report reads both Codeburn JSON export formats, v2 and v3. When a session has both detailed records and a session total, the detailed records take precedence. See the [Codeburn export format](https://codeburn.app/docs/export-format).
+
+On macOS, a desktop-only CodeBurn installation in `/Applications` or `~/Applications` also works. The ledger runs the app’s bundled engine for discovery and exports.

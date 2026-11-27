@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { codeburnExecutable } from "./codeburn.ts";
+import { codeburnEngine } from "./codeburn.ts";
 import type { LedgerEntry } from "./ledger.ts";
 
 type Metric = number | undefined;
@@ -179,8 +179,8 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
   };
 }
 export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
-  const executable = codeburnExecutable(home);
-  if (!executable) throw Error("Codeburn unavailable");
+  const engine = codeburnEngine(home);
+  if (!engine) throw Error("Codeburn unavailable");
   const dates = entries
     .flatMap((e) => [e.startedAt, e.updatedAt])
     .filter((s): s is string => !!s)
@@ -190,7 +190,7 @@ export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
     const file = join(dir, "usage.json");
     const child = Bun.spawn(
       [
-        executable,
+        ...engine.command,
         "--timezone",
         "UTC",
         "export",
@@ -206,7 +206,7 @@ export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
         file,
       ],
       {
-        env: { ...process.env, HOME: home },
+        env: engine.env,
         stdout: "ignore",
         stderr: "ignore",
       }

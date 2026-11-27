@@ -87,3 +87,29 @@ test("v3 uses raw records first and camelCase session totals when no record matc
     parseExport({ ...snapshot, records: [] }, [entry]).rows[0]
   ).toMatchObject({ model: "Session total", cost: 3, calls: 4 });
 });
+
+test("macOS desktop engine uses the packaged launcher or its bundled Electron runtime", async () => {
+  const { macDesktopEngine } = await import("./codeburn.ts");
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } =
+    await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const app = mkdtempSync(join(tmpdir(), "CodeBurn Desktop "));
+  try {
+    const cli = join(app, "Contents/Resources/cli");
+    const runtime = join(app, "Contents/MacOS/CodeBurn");
+    mkdirSync(join(cli, "dist"), { recursive: true });
+    mkdirSync(join(app, "Contents/MacOS"), { recursive: true });
+    writeFileSync(runtime, "#!/bin/sh\n", { mode: 0o755 });
+    expect(macDesktopEngine(app)).toBeUndefined();
+    writeFileSync(join(cli, "dist/launch.js"), "");
+    expect(macDesktopEngine(app)).toEqual({
+      command: [runtime, join(cli, "dist/launch.js")],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+    });
+    writeFileSync(join(cli, "codeburn"), "#!/bin/sh\n", { mode: 0o755 });
+    expect(macDesktopEngine(app)?.command).toEqual([join(cli, "codeburn")]);
+  } finally {
+    rmSync(app, { recursive: true, force: true });
+  }
+});

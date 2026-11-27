@@ -2,6 +2,7 @@
 set -uo pipefail
 
 source "$(dirname "$0")/hook-bypass-lib.sh"
+source "$(dirname "$0")/changed-text-lib.sh"
 
 payload=$(cat)
 file_path=$(printf '%s' "$payload" | /usr/bin/jq -r '.tool_input.file_path // empty' 2>/dev/null) || exit 0
@@ -22,6 +23,7 @@ hook_bypass_granted "$file_path" && exit 0
 allowlist_file="${working_directory}/.claude/naming-allowlist.txt"
 [ -f "$allowlist_file" ] || allowlist_file=""
 
+new_text="$(changed_text_for_payload "$payload" "$file_path" "$new_text")"
 violations=$(printf '%s\n' "$new_text" | EXTENSION="$extension" ALLOWLIST_FILE="$allowlist_file" perl -e '
   my %allowed = map { $_ => 1 } qw(i j k e x y z id _ db io ok fs os up to);
   my %vague = map { $_ => 1 } qw(tmp temp val vals res ret ctx cfg usr btn str num obj arr fn cb el elem idx cnt len buf ptr msg err data info item items thing stuff foo bar baz handler manager helper util utils process handle dosomething);
@@ -64,8 +66,8 @@ violations=$(printf '%s\n' "$new_text" | EXTENSION="$extension" ALLOWLIST_FILE="
 
 [ -z "$violations" ] && exit 0
 
-readonly FULL_INSTRUCTIONS="Rename each failing name, including pre-existing ones. Spawn a subagent with the Agent tool to do it (subagent_type guards:worker when listed, else model haiku). Not a fit for this file (seed data, fixtures, config)? Ask the user with the request_hook_bypass tool."
-readonly REPEAT_INSTRUCTIONS="Rename every failing name in the file, then carry on. Not a fit? Ask the user with the request_hook_bypass tool."
+readonly FULL_INSTRUCTIONS="Rename failing names introduced or changed by this task. Report unrelated existing names separately. Not a fit for this file (seed data, fixtures, config)? Ask the user with the request_hook_bypass tool."
+readonly REPEAT_INSTRUCTIONS="Rename failing names introduced or changed by this task, then carry on. Not a fit? Ask the user with the request_hook_bypass tool."
 
 instructions_for_session() {
   local session_id marker_directory marker_path

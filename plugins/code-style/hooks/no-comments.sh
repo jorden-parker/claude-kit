@@ -2,11 +2,12 @@
 set -uo pipefail
 
 source "$(dirname "$0")/hook-bypass-lib.sh"
+source "$(dirname "$0")/changed-text-lib.sh"
 
 readonly MAX_REPORTED_LINES=5
-readonly VIOLATION_MESSAGE="Comments are not allowed. Remove every comment in this file. Spawn a subagent with the Agent tool to do it (subagent_type guards:worker when listed, else model haiku). Not a fit for this file (seed data, fixtures, config)? Ask the user with the request_hook_bypass tool."
+readonly VIOLATION_MESSAGE="Comments are not allowed. Remove comments introduced or changed by this task. Leave unrelated existing comments alone. Not a fit for this file (seed data, fixtures, config)? Ask the user with the request_hook_bypass tool."
 
-readonly REPEAT_VIOLATION_MESSAGE="Comments are not allowed. Remove them all, then carry on. Not a fit? Ask the user via request_hook_bypass."
+readonly REPEAT_VIOLATION_MESSAGE="Comments are not allowed. Remove newly introduced comments, then carry on. Not a fit? Ask the user via request_hook_bypass."
 
 violation_message_for_session() {
   local session_id="$1" marker_directory marker_path
@@ -133,6 +134,7 @@ main() {
   [[ -n "$file_path" && -n "$new_text" ]] || exit 0
   hook_bypass_granted "$file_path" && exit 0
 
+  new_text="$(changed_text_for_payload "$payload" "$file_path" "$new_text")"
   style="$(comment_style_for_file "$file_path")"
   [[ -n "$style" ]] || exit 0
 

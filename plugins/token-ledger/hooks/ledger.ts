@@ -1,4 +1,10 @@
 import {
+  taskMetrics,
+  parseRates,
+  normalizeUsage,
+  type TaskMetrics,
+} from "./usage-metrics.ts";
+import {
   appendFileSync,
   existsSync,
   mkdirSync,
@@ -32,6 +38,8 @@ type TranscriptSummary = {
 };
 
 export type LedgerEntry = {
+  tasks?: TaskMetrics[];
+  workerTasks?: TaskMetrics[][];
   session: string;
   project: string;
   updatedAt: string;
@@ -70,12 +78,15 @@ type TranscriptLine = {
   message?: TranscriptMessage;
 };
 
-const toTotals = (usage: ApiUsage): TokenTotals => ({
-  input: usage.input_tokens ?? 0,
-  cacheWrite: usage.cache_creation_input_tokens ?? 0,
-  cacheRead: usage.cache_read_input_tokens ?? 0,
-  output: usage.output_tokens ?? 0,
-});
+const toTotals = (usage: ApiUsage): TokenTotals => {
+  const normalized = normalizeUsage({ usage });
+  return {
+    input: normalized.input ?? 0,
+    cacheWrite: normalized.cacheWrite ?? 0,
+    cacheRead: normalized.cacheRead ?? 0,
+    output: normalized.output ?? 0,
+  };
+};
 
 const addTotals = (first: TokenTotals, second: TokenTotals): TokenTotals => ({
   input: first.input + second.input,
@@ -221,7 +232,7 @@ export function composeNudge(
     (lastNudgeTokens === 0 ||
       contextTokens >= lastNudgeTokens + NUDGE_STEP_TOKENS);
   return isDue
-    ? `Context is at ${inThousands(contextTokens)} tokens, up from ${inThousands(startTokens)} at the start, and every turn reads all of it again. /handoff then /clear starts the next task small.`
+    ? `Context is at ${inThousands(contextTokens)} tokens, up from ${inThousands(startTokens)} at the start, Consider /handoff then /clear at the next task boundary if earlier context is no longer useful. Keep useful context while finishing this task; restarting has a cost too.`
     : null;
 }
 
@@ -275,6 +286,13 @@ export function recordSession(
     mainSummary.startContextTokens
   );
   const entry: LedgerEntry = {
+    tasks: taskMetrics(
+      readFileSync(transcriptPath, "utf8"),
+      parseRates(process.env.TOKEN_LEDGER_PRICING)
+    ),
+    workerTasks: readSubagentTranscripts(transcriptPath).map((transcript) =>
+      taskMetrics(transcript, parseRates(process.env.TOKEN_LEDGER_PRICING))
+    ),
     session: event.session_id,
     project: basename(event.cwd ?? ""),
     updatedAt: now.toISOString(),
@@ -377,6 +395,10 @@ export function formatReport(entries: LedgerEntry[]): string {
       ...describeModels("", entry.main),
       ...describeModels("subagents ", entry.subagents),
       ...describeTools(entry.resultCharactersByTool ?? {}),
+      ...(entry.tasks ?? []).map(
+        (task) =>
+          `  task ${task.task}: ${task.workerCalls} worker calls, ${task.resumedWorkers} resumes, ${task.hookDenials} hook denials; reasoning ${task.requests.every((request) => request.reasoning !== undefined) && task.requests.length ? task.requests.reduce((sum, request) => sum + (request.reasoning ?? 0), 0) : "unknown"}; estimated cost ${task.requests.length && task.requests.every((request) => request.estimatedCost !== undefined) ? task.requests.reduce((sum, request) => sum + (request.estimatedCost ?? 0), 0).toFixed(6) : "unknown"} (main requests; worker usage stored separately)`
+      ),
     ]),
     ...describeToolCaps(entries),
   ].join("\n");

@@ -22,7 +22,7 @@ Your prompt may also hold a line `Fix: <absolute path>` after the `Worktree:` li
 3. Take the steps in order, one at a time. Make the one edit the step describes, in the file it names.
 4. After the last step, run the command under `## Check` and compare its output with `- Expect:`.
 5. Run the project's lint command (the "lint" script in package.json, or the lintCommand in .claude/quality.json) and, in a JavaScript or TypeScript project, `fallow audit`. A hook blocks you from finishing while lint, fallow, the code style checks or the tests fail.
-6. When lint, fallow, a code style hook or the tests fail, fix every reported failure, including pre-existing ones and ones in files the plan does not name, and run it again until it passes. A failing guard is never a reason to answer BLOCKED. If the plan's own check fails, read the output, fix your own edits, and run it again; try at most three times.
+6. When lint, fallow, a code style hook or the tests fail, fix regressions caused by this task; report unrelated existing failures separately only when an observed unchanged-revision baseline establishes them, and report unexplained failures as unresolved, and run it again until it passes. A failing guard is never a reason to answer BLOCKED. If the plan's own check fails, read the output, fix your own edits, and run it again; try at most three times.
 7. If running the plan's check command is denied, do not retry it: answer BLOCKED and say the check command was denied.
 
 ## Rules
@@ -39,3 +39,5 @@ End with one of these, and nothing after it:
 
 - `DONE`, then the files you changed and the last line of the check's output.
 - `BLOCKED`, then the step number, what you found, and what you would need to know to go on.
+
+For direct or standard steps, implement the Instructions or concise Steps and acceptance criteria using targeted reads. Exact Find/Replace blocks are required only for detailed steps or legacy steps without a level. Read common Context from plan.md once.

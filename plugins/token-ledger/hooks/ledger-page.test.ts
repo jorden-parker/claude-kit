@@ -243,12 +243,12 @@ test("composeLedgerPage starts each session on a row with a top border class", (
 
 test("composeLedgerPage shows the legend and a summary above the table", () => {
   const page = composeLedgerPage([sampleEntry]);
-  expect(page).toContain("What Good Looks Like");
+  expect(page).toContain("Interpreting Usage");
   expect(page).toContain(
     "<strong>Session Share</strong> is each row's part of its session's tokens."
   );
   expect(page).toContain(
-    "<li><strong>Last Nudge Tokens</strong> is the context size when the session was last told to hand off and clear. 0 means it never was. Context Tokens well above it means the session kept growing after the nudge.</li>"
+    "<li><strong>Last Nudge Tokens</strong> is the context size when the session was last told to hand off and clear. 0 means it never was. A large context alone does not justify a reset when it remains useful.</li>"
   );
   expect(page).toContain(
     "<li><strong>Main Tool Result Characters</strong> lists what each tool returned into the main agent's context, largest first, on each session's first row. MCP tools are grouped as one total.</li>"
@@ -360,9 +360,9 @@ test("composeLedgerCopy writes a plain text summary and one line per row", () =>
       "COLUMNS",
       "Context Tokens: the main session's context size, reread on every turn.",
       "Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
-      "Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
+      "Session Share: the row's part of its session's tokens. A high main share alone does not prove delegation would save cost.",
       "Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
-      "Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+      "Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. These are usage observations, not proof of waste. Evaluate provider prices, session age, and reuse before recommending changes.",
       "",
       "SESSIONS",
       'One line per session, scope (main agent or subagents) and model. Cells are separated by " | ", the first line names the columns, and an empty cell is written as -.',

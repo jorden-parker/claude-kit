@@ -19,17 +19,10 @@ test("adds the delegation rules as session context", () => {
   });
   expect(contextOf(result)).toContain("guards:context-scout");
   expect(contextOf(result)).toContain("guards:worker");
-  expect(contextOf(result)).toContain("orchestrator");
-  expect(contextOf(result)).toContain('names a model: `"haiku"` by default');
-  expect(contextOf(result)).toContain("only after Haiku failed the task");
+  expect(contextOf(result)).toContain("Handle a bounded task directly");
+  expect(contextOf(result)).toContain("Resume the same worker");
   expect(contextOf(result)).toContain(
-    "Send independent pieces as several Agent calls in one message"
-  );
-  expect(contextOf(result)).toContain("never the user's");
-  expect(contextOf(result)).toContain("up to 1,000 changed characters");
-  expect(contextOf(result)).toContain("offset and limit");
-  expect(contextOf(result)).toContain(
-    "Read one file or symbol you can already name yourself"
+    "Saved per-agent model overrides remain authoritative"
   );
 });
 
@@ -63,7 +56,6 @@ test("names the GUARDS_DELEGATE_MODEL model on every Agent call", () => {
     );
     expect(context).not.toContain("haiku");
     expect(context).not.toContain("Haiku delegation");
-    expect(context).toContain("since the last delegation");
   });
 });
 
@@ -75,7 +67,6 @@ test.each([undefined, ""])(
       expect(context).toContain(
         '- Any other Agent call names a model: `"haiku"` by default, `"sonnet"` only after Haiku failed the task.'
       );
-      expect(context).toContain("since the last Haiku delegation");
     });
   }
 );

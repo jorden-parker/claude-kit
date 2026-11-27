@@ -1,7 +1,7 @@
 ---
 name: brainstorm-menu
 description: Brainstorm ideas for this project, shown in the browser. "build" has small models implement saved plans and a strong model review them
-argument-hint: "[focus] | build [runs] [--topic <name>]"
+argument-hint: "[focus] | plan <picks> | build [runs] [--topic <name>]"
 disable-model-invocation: true
 ---
 

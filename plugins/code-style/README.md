@@ -12,3 +12,5 @@ edits that break them.
   `.claude/naming-allowlist.txt` in the project.
 
 Tests: `pnpm test`. Typecheck (syntax check of the shell hooks): `pnpm typecheck`.
+
+Checks and naming review apply only to introduced or changed code. Edit payloads are compared with old_string; full-file writes are compared with a pre-write snapshot when the harness exposes a tool-use ID, falling back to HEAD otherwise. Existing comments and names outside changed lines are left alone. Review reminders are deduplicated by file contents, so new edits trigger a fresh review.

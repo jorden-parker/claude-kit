@@ -742,10 +742,10 @@ test("/small-plans <work> plans that work with no handoff", async ($, on) => {
   expect(submittedPrompts[0]).toContain(
     'Set "project" from the work being planned (the files, services and repositories it names), not from the working directory'
   );
-  expect(submittedPrompts[0]).not.toContain("handoff");
+  expect(submittedPrompts[0]).toContain("Choose planning level");
   expect(submittedPrompts[0]).toContain(`Load ${WRITE_TOOL} before`);
   expect(submittedPrompts[0]).not.toContain("- Goal: one sentence");
-  expect(submittedPrompts[0]).toContain("run /clear first");
+  expect(submittedPrompts[0]).toContain("only at a task boundary");
 });
 
 test("/small-plans alone plans the work this conversation leaves", async ($, on) => {

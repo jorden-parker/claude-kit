@@ -172,3 +172,7 @@ claude plugin uninstall brainstorm@claude-kit
 pnpm test
 pnpm typecheck
 ```
+
+## Planning levels
+
+New plans choose **direct** for one bounded change, **standard** for related multi-step work, and **detailed** for explicit exact edits or demonstrated worker ambiguity. Existing plans without a level remain detailed and continue to use the full workflow described above. Direct plans implement, check and review directly; standard plans use one worker and one review, resuming corrections when supported. Detailed plans retain exact edits and separate reviewers. All levels preserve status, worktrees, acceptance checks and publishing requirements. A context reset is optional at a task boundary when old context is irrelevant.

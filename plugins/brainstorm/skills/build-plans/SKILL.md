@@ -54,6 +54,10 @@ If there is no run folder, say so and suggest `/brainstorm plan`. If the request
    - A plan in its Depends on column is not `done`: skip the plan and leave its status as it is.
    - Otherwise build the plan, through to its final review, before you start the next one.
 
+## Planning levels
+
+A plan without `- Level:` is a legacy detailed plan. Direct and standard plans keep the same index, statuses, checkboxes and checks. Their steps contain `## Instructions` rather than exact edits. Read common Context once from plan.md. For direct plans implement and verify directly in the plan worktree; no worker or separate reviewer is mandatory. For standard plans use one worker for the related steps and check, then review the diff once. Resume that worker for corrections when supported. Detailed plans follow the full step and review workflow below. Never change the user's selected model mappings. Status, done criteria and publishing requirements remain the same for every level.
+
 ## Build a plan
 
 A `pending` plan starts at its first step. An `in-progress` or `blocked` plan was started by an earlier build: it carries on at its first unticked line.

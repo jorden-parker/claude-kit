@@ -360,6 +360,16 @@ const checkStepEditBlocks = (
   stepText: string,
   stepSectionHeadings: string[]
 ) => {
+  if (
+    ["direct", "standard"].includes(readFieldValue(stepText, "Level") ?? "")
+  ) {
+    return stepSectionHeadings.includes("Instructions") &&
+      (findSection(stepText, "Instructions")?.body.trim().length ?? 0) > 0
+      ? []
+      : [
+          `${stepPath}: compact step needs ## Instructions with paths, goal and acceptance criteria`,
+        ];
+  }
   if (readIsSpikeStep(stepText)) return [];
   const problems: string[] = stepSectionHeadings.includes("Edits")
     ? []

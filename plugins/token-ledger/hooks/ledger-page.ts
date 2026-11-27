@@ -161,9 +161,9 @@ export function composeLedgerCopy(
     "COLUMNS",
     "Context Tokens: the main session's context size, reread on every turn.",
     "Last Nudge Tokens: the context size when the session was last told to hand off and clear, 0 if never.",
-    "Session Share: the row's part of its session's tokens. A high main share means the main agent did work its subagents could take.",
+    "Session Share: the row's part of its session's tokens. A high main share alone does not prove delegation would save cost.",
     "Main Tool Result Characters: what each tool returned into the main agent's context, on each session's first row.",
-    "Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. Cache writes cost more than input and cache reads cost far less, so a flagged row is waste.",
+    "Cache Status: OK when cache reads are at least cache writes. Flagged values: Not cached, Never read (writes paid for, never reused), Writes exceed reads. These are usage observations, not proof of waste. Evaluate provider prices, session age, and reuse before recommending changes.",
     "",
     "SESSIONS",
     'One line per session, scope (main agent or subagents) and model. Cells are separated by " | ", the first line names the columns, and an empty cell is written as -.',
@@ -375,7 +375,7 @@ function composeLegend(rowCount: number, flaggedCount: number): string {
     : `All ${rowCount} rows OK.`;
   const summaryClass = hasProblem ? "summary has-problem" : "summary";
   return (
-    '<section class="legend" aria-labelledby="legend-title"><h2 id="legend-title">What Good Looks Like</h2><ul><li><strong>Cache Read Tokens</strong> should be well above Cache Write Tokens. The prompt is being reused instead of resent.</li><li><strong>Cache Write Tokens</strong> should stay at or below reads. A write only pays off when it is read back later.</li><li><strong>Cache Status</strong> says OK when that holds. Otherwise it names the fault: Writes exceed reads, Never read, or Not cached.</li><li><strong>Session Share</strong> is each row\'s part of its session\'s tokens. Rows of one session sit together, main agent first. A high main share next to a low subagent share means the main agent did work its subagents could take.</li><li><strong>Last Nudge Tokens</strong> is the context size when the session was last told to hand off and clear. 0 means it never was. Context Tokens well above it means the session kept growing after the nudge.</li><li><strong>Main Tool Result Characters</strong> lists what each tool returned into the main agent\'s context, largest first, on each session\'s first row. MCP tools are grouped as one total.</li></ul>' +
+    '<section class="legend" aria-labelledby="legend-title"><h2 id="legend-title">Interpreting Usage</h2><ul><li><strong>Cache Read Tokens</strong> measure reuse of earlier input. Cached input still occupies context.</li><li><strong>Cache Write Tokens</strong> are not a fault on their own. Evaluate cache economics using provider prices and later reuse.</li><li><strong>Cache Status</strong> says OK when that holds. Otherwise it describes usage: Writes exceed reads, Never read, or Not cached.</li><li><strong>Session Share</strong> is each row\'s part of its session\'s tokens. Rows of one session sit together, main agent first. Model share alone does not establish avoidable cost; include worker startup, retries and correctness.</li><li><strong>Last Nudge Tokens</strong> is the context size when the session was last told to hand off and clear. 0 means it never was. A large context alone does not justify a reset when it remains useful.</li><li><strong>Main Tool Result Characters</strong> lists what each tool returned into the main agent\'s context, largest first, on each session\'s first row. MCP tools are grouped as one total.</li></ul>' +
     `<p class="${summaryClass}" role="status">${summary}</p></section>`
   );
 }

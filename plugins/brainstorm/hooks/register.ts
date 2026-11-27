@@ -28,7 +28,7 @@ const PICKER_PANE_ID = "brainstorm-picker-pane";
 const PICK_IN_PANE_TEXT = "Pick one in the pane below…";
 const BRAINSTORM_COMMAND_PREFIX = "/brainstorm ";
 
-const BRAINSTORM_MODE_SUGGESTIONS = [
+const SUBCOMMAND_SUGGESTIONS = [
   { text: PLAN_MODE, description: "Turn picked ideas into a small-step plan" },
   {
     text: BUILD_MODE,
@@ -1037,11 +1037,14 @@ The user picked ideas ${listPickedNumbers(pickedIdeas)} on the brainstorm page a
 
 ${pickedIdeas.map(describeIdeaForPlanner).join("\n\n")}
 
+Planning level: choose direct for one bounded change, standard for related multi-step work, and detailed only when the user asks for exact edits or worker ambiguity has been demonstrated. Record - Level: direct, standard or detailed in each plan.md. Existing plans without Level remain detailed.
+For direct and standard plans, keep the existing index, statuses and linked step files, but steps use - Level: direct or standard, ## Context, ## Instructions (paths, goal and acceptance criteria), and ## Check with Run and Expect. Do not generate Find/Replace blocks or run step-reader for these levels. Direct plans have one implementation step; standard plans have a short sequence. The detailed templates and exact-edit rules below apply only to detailed plans. Keep common context in plan.md and refer to it from steps instead of repeating it.
+
 Who reads the plan: one small-model subagent builds each plan, working through its step files one at a time; it cannot ask questions, and it makes poor judgement calls. After the steps run one after another, a strong model reviews the finished work against the plan.
 
 Write the plan as a run folder at ${runFolderPath}. Work in this order:
 
-1. Study the code. Read the real files each idea touches. Read the hooks in .claude/settings*.json and ~/.claude/settings.json, and any CLAUDE.md that is not already in your context (~/.claude/CLAUDE.md, the project's). Copy every rule and every edit-blocking hook you find into the Context of each plan that needs it: TDD red-first, no code comments, naming, and any other hook that can block an edit. Say in Context that a blocked edit means reply BLOCKED.
+1. Study the code. Read the real files each idea touches. Read the hooks in .claude/settings*.json and ~/.claude/settings.json, and any CLAUDE.md that is not already in your context (~/.claude/CLAUDE.md, the project's). Summarize applicable rules and cite their source paths in the Context of each plan that needs them: TDD red-first, no code comments, naming, and any other hook that can block an edit. Say in Context that a blocked edit means reply BLOCKED.
 2. Split into plans. Make one plan folder per idea by default. Merge ideas into one plan only when they change the same code. Name each folder NN-slug, numbered in build order. Order the plans so each depends only on earlier ones, and record Depends on in each plan.md and in index.md.
 3. Spikes. An idea whose effort is large, or whose category is moonshot, gets a plan with Kind: spike. A spike has spike steps with Questions, which write findings.md in the plan folder, and no product code. Its idea needs re-planning, with a new ${PLAN_INVOCATION} run, once findings.md is written.
 4. Decide. Ask the user with AskUserQuestion only for a choice that changes the plan materially. Make every smaller decision yourself and write it down in the plan. Drop an idea that the code contradicts, and list it with its reason under Dropped in index.md.
@@ -1079,8 +1082,8 @@ Rules for every step file:
 - A spike step has no Edits. It has a numbered Questions list, and its Check is test -s on its findings.md path.
 
 6. Check. Call the ${QUALIFIED_CHECK_TOOL_NAME} tool with the run folder path. Fix every problem it returns, and call it again until it returns OK.
-7. Clarity pass. For every plan folder, call the Agent tool once with subagent_type "brainstorm:step-reader" and the plan folder's absolute path as its prompt. One call reads every step of that plan: never call it once per step. Send the calls for all plans in one message so they run in parallel. Rewrite each step a QUESTIONS reply names, then run the checker again. Do at most two rounds of this.
-8. Reply with the run folder path, one line per plan (title, kind, step count), and: Run /clear first, then ${BUILD_INVOCATION} to implement it, because the build re-reads the session on every step.`;
+7. Clarity pass (detailed plans only). For every detailed plan folder, call the Agent tool once with subagent_type "brainstorm:step-reader" and the plan folder's absolute path as its prompt. One call reads every step of that plan: never call it once per step. Send the calls for all plans in one message so they run in parallel. Rewrite each step a QUESTIONS reply names, then run the checker again. Do at most two rounds of this.
+8. Reply with the run folder path, one line per plan (title, kind, step count), and: Use ${BUILD_INVOCATION} to implement it. At a task boundary, /handoff then /clear is optional when earlier context is no longer useful.`;
 
 const describeRunsToBuild = (requestedRuns: string) =>
   requestedRuns
@@ -1509,7 +1512,7 @@ export const register: Register = (on) => {
       e.text.slice(BRAINSTORM_COMMAND_PREFIX.length, e.start).trim() === "";
     if (!isFirstBrainstormArgument) return next(e);
     const { suggestions } = await next(e);
-    const matchingModes = BRAINSTORM_MODE_SUGGESTIONS.filter((mode) =>
+    const matchingModes = SUBCOMMAND_SUGGESTIONS.filter((mode) =>
       mode.text.startsWith(e.token)
     );
     return { suggestions: [...suggestions, ...matchingModes] };

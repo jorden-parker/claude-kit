@@ -29,7 +29,7 @@ changed_source_files=$(printf '%s\n%s\n' "$tracked_changes" "$untracked_files" \
 
 [ -z "$changed_source_files" ] && exit 0
 
-file_list_hash=$(printf '%s\n' "$changed_source_files" | shasum | cut -c1-12)
+file_list_hash=$({ printf '%s\n' "$changed_source_files"; while IFS= read -r source_path; do shasum "$repository_root/$source_path"; done <<< "$changed_source_files"; } | shasum | cut -c1-12)
 safe_session_id=$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9_-' '_')
 marker_file="/tmp/claude-naming-review-${safe_session_id}-${file_list_hash}"
 
@@ -37,5 +37,5 @@ marker_file="/tmp/claude-naming-review-${safe_session_id}-${file_list_hash}"
 touch "$marker_file" 2>/dev/null || exit 0
 
 changed_file_summary=$(printf '%s\n' "$changed_source_files" | head -n 20 | paste -sd ' ' -)
-echo "Before finishing, run the naming-review skill over the changed files. Spawn a subagent with the Agent tool to fix every identifier that fails, including pre-existing ones this change did not introduce and ones in files no plan names. Name subagent_type guards:worker when it is listed, otherwise model haiku. If you have no Agent tool, or the fix is a few lines in one file that you may edit, fix them all yourself. A failing check is never a reason to stop or report the work as blocked: fix it, then carry on. Changed files: ${changed_file_summary}" >&2
+echo "Before finishing, run the naming-review skill over the changed files. Review only introduced or changed identifiers. Report unrelated existing issues separately. Handle bounded fixes directly; delegate larger fixes with their check. Changed files: ${changed_file_summary}" >&2
 exit 2

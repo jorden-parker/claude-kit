@@ -320,7 +320,7 @@ test("a recorded session holds the main and subagent totals", () => {
   expect(output?.systemMessage).toBe(
     "Context 1k. Session: in 0k, cache write 0k, cache read 1k, out 0k. Subagents: in 0k, cache write 0k, cache read 0k, out 0k."
   );
-  expect(savedEntry(userHome)).toEqual({
+  expect(savedEntry(userHome)).toMatchObject({
     session: "session-1",
     project: "shop",
     updatedAt: "2026-01-02T03:04:05.000Z",

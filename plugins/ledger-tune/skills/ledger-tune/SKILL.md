@@ -35,3 +35,7 @@ To verify, read `verify.md` in this skill folder.
 2. Live check, where a fix can be triggered directly in this session. Hooks load when a session starts, so a fix installed during this session shows only in a new one; say that instead of calling the fix failed.
 3. Ledger check: `claude-ledger --verify` compares the sessions before and after each recorded fix. `claude-kit-update` records one each time it updates plugins, so a fix made on another machine is compared from the time it reached this one.
 4. Report each fix as Working (the number moved as expected; give it before and after), Not working (give the numbers) or Too early (fewer than 5 sessions since the fix; say when to run `/ledger-tune verify` again), and never call a fix working from its tests alone; the before and after groups are different sessions doing different work, so a number that moved the wrong way is not proof on its own: say that, and check the tool the fix targets in `claude-ledger --text`.
+
+## Evidence before recommendations
+
+Treat cache status and main/subagent token shares as observations, not proof of waste. Check actual resolved models, provider rates, reasoning usage when available, worker startup, retry costs and correctness. Unknown usage is not zero. Compare complete tasks including all workers; a fresh session has not had time to reuse cache. Prefer task-boundary resets when context is irrelevant, not automatic /clear at a fixed count. Keep effort unchanged during the first comparison, and assess effort changes separately.

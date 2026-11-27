@@ -47,3 +47,11 @@ Tests: `pnpm test`. Typecheck: `pnpm typecheck`.
 ```
 claude plugin install token-ledger@claude-kit --scope user
 ```
+
+## Provider-aware metrics
+
+New records optionally include `tasks` and `workerTasks`, with requested/resolved model IDs where exposed, worker calls/resumes, observed hook denials, reasoning usage and estimated costs. Missing usage is unknown, never evidence of zero cost. Legacy counters and records remain readable. Anthropic, OpenAI and Bedrock usage field shapes are normalized; OpenAI cache counts are subtracted from inclusive input totals. Reasoning is part of output and is not charged twice.
+
+Set `TOKEN_LEDGER_PRICING` to a JSON object keyed by exact returned model ID; each value has nonnegative `input`, `output`, `cacheRead` and `cacheWrite` rates per million tokens in one currency. Incomplete usage or missing rates produces unknown cost. Estimates are not authoritative billing. Worker usage is retained separately when parent-task attribution is unavailable; use one task per session when comparing complete task costs. See [comparison instructions](../../docs/cost-comparison.md) and `bun bin/compare-runs.ts <baseline-folder> <candidate-folder>`.
+
+Cache labels describe observed reuse, not waste. Model token shares do not establish whether delegation saves money. Context nudges recommend a reset only at a task boundary when old context is no longer useful.

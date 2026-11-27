@@ -15,5 +15,7 @@ description: Review new and renamed identifiers in the git diff for clear, descr
    - Functions are verb phrases; classes and types are nouns.
    - Reuse the repository's existing domain vocabulary instead of inventing synonyms. Search the codebase if unsure.
 4. Prefer a long clear name over a short vague one.
-5. Rename every failure at its definition and all usages, then re-run tests or type checks if the rename touched many sites.
+5. Rename every introduced or changed failure at its definition and all usages, then re-run tests or type checks if the rename touched many sites.
 6. Finish with one line: the renames made (`old -> new, ...`) or `all identifiers pass`.
+
+Review introduced or changed identifiers in the diff only. Report unrelated existing violations separately; do not rename them.

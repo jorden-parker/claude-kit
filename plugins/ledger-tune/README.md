@@ -21,3 +21,5 @@ It runs in three steps:
 - The [token-ledger](../token-ledger/) plugin, which records the data and provides the `claude-ledger` command
 
 Updates to claude-kit plugins are installed with `claude-kit-update`.
+
+Recommendations now require actual model routing, provider pricing and whole-task evidence including worker retries. Cache labels, large context and main-agent share alone are not proof of waste. Unknown metrics are reported as unknown.

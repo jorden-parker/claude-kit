@@ -27,9 +27,9 @@ first_message="$(violation_message repeat-session)"
 second_message="$(violation_message repeat-session)"
 
 expect_message "first violation names the identifier" present "tmp" "$first_message"
-expect_message "first violation gets the full instructions" present "Spawn a subagent" "$first_message"
+expect_message "first violation gets the full instructions" present "Report unrelated existing names separately." "$first_message"
 expect_message "a repeat violation still names the identifier" present "tmp" "$second_message"
-expect_message "a repeat violation leaves out the long instructions" absent "Spawn a subagent" "$second_message"
+expect_message "a repeat violation leaves out the long instructions" absent "Report unrelated existing names separately." "$second_message"
 
 grant_home="$fixture_directory/home"
 mkdir -p "$grant_home/.claude/hook-bypass"

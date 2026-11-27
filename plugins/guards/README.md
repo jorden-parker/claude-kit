@@ -21,13 +21,7 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
   it can read on. Denies a text file over 5 MB unless `limit` is 300 or less.
   Denies a file over 20,000 bytes with very long lines (minified) and points
   Claude at `head -c 3600 FILE | fold -w 200` slices or `grep -o`.
-- **delegation-rules** (SessionStart): makes the main session an orchestrator.
-  It plans, talks to the user and judges results, and hands lookups to
-  `guards:context-scout` and implementation and verification to `guards:worker`
-  (Haiku), sending independent work out in parallel. It also tells Claude to
-  run checks itself rather than ask the user to run them. Off with
-  `GUARDS_DELEGATE_GUARD=0`, and also off when `ANTHROPIC_BASE_URL` is a loopback address on port 11434 or 8435 (a claude-lite launch).
-  `GUARDS_DELEGATE_MODEL=sonnet` makes delegated subagents (guards:context-scout, guards:worker and other Agent calls) run on that model instead of haiku. Allowed values are the Agent tool's model names: haiku, sonnet, opus, fable.
+- **delegation-rules** (SessionStart): use direct edits and checks for bounded tasks, scouts for verbose research, and cheaper workers for well-specified implementation plus verification. Resume workers for corrections when supported, and compare actual total cost before assuming delegation saves money. Saved agent model overrides remain authoritative. `GUARDS_DELEGATE_MODEL` chooses the default delegated alias; it does not change saved overrides. `GUARDS_DELEGATE_GUARD=0` disables these instructions.
 - **ci-status** (SessionStart): in a repository whose `origin` is on GitHub,
   asks `gh` for the latest run on `main` and shows one warning line when it
   failed. Silent when `gh` is missing or signed out, when it takes over 10
@@ -35,29 +29,7 @@ check. Each hook is a pure `decide(event)` function in `hooks/`, run through
 - **worker** (agent, Haiku): implements a fully specified change or runs a
   check, then replies DONE or BLOCKED with changed `path:line`s and the check's
   result line.
-- **delegate-guard** (PreToolUse, Read, Grep, Glob, Bash, Agent): forces
-  context-heavy work onto Haiku subagents. In the main session it adds up the
-  characters that lookups (`Read`, `Grep`, `Glob`, and Bash commands that start
-  with `cat`, `grep`, `rg`, `find`, `ls`, `git log`, `git diff` and the like)
-  put into the context. From 10,000 characters it warns with each lookup; at
-  20,000 it denies the next lookup and points Claude at the
-  `guards:context-scout` agent. Only a delegation to Haiku
-  (`guards:context-scout`, `guards:worker`, or any agent spawned with
-  `model: "haiku"`) resets the budget;
-  a new user prompt does not, since the context keeps the earlier reads. It
-  also denies three kinds of Agent call: an `Explore` subagent (the scout is
-  the only lookup agent, since its reply is capped), a scout prompt over 1,500
-  characters, and a `general-purpose` or `claude` agent (or one with no
-  `subagent_type`) that names no `model`, since it would run on the session
-  model. Plugin agents keep the model their own file pins.
-  It also denies Edit, Write, MultiEdit and NotebookEdit of any file outside
-  `~/.claude`, the note stores `~/.local/share/{handoffs,project-notes,small-plans,brainstorm}`
-  and the temp folders, and points Claude at `guards:worker`. The
-  one exception: an Edit or MultiEdit whose old and new strings total 1,000
-  characters or less is allowed, so small edits stay in the main session.
-  Subagents are never limited. Claude Code only. Opt out with
-  `GUARDS_DELEGATE_GUARD=0`, and also off when `ANTHROPIC_BASE_URL` is a loopback address on port 11434 or 8435 (a claude-lite launch). Hooks load when a session starts, so a session
-  opened before the plugin was updated runs without this guard.
+- **delegate-guard** (PreToolUse): selective delegation is the default. Direct reads, writes, edits and checks are allowed. Agent type/model validation remains active. `GUARDS_DELEGATE_POLICY=strict` restores the legacy 20,000-character lookup budget and 1,000-character edit limit; `GUARDS_DELEGATE_GUARD=0` disables this tool guard. The repository agent allowlist still applies at spawn time. Subagents and claude-lite sessions remain exempt.
 - **bash-trim** (PostToolUse: Bash, `mcp__*`, Grep, Glob, WebFetch, WebSearch,
   Agent, Task, BashOutput, TaskOutput, ListMcpResourcesTool,
   ReadMcpResourceTool): walks the whole result and trims every text value at
@@ -126,3 +98,7 @@ Hook events are logged to `~/.cache/guards/hooks.log`.
 Requires `bun` on the PATH.
 
 Tests: `pnpm test`. Typecheck: `pnpm typecheck`.
+
+## Compact results and measuring savings
+
+Run `bun <guards-plugin-path>/bin/compact-run <command> [arguments...]` for verbose checks. It prints up to 20 summary lines, retains a private full log and propagates the command exit status. This reduces output at source even when a harness ignores PostToolUse replacement. See [the comparison and live harness check](../../docs/cost-comparison.md).

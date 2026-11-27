@@ -16,7 +16,7 @@ install any of them on its own. Sync scripts install the same plugins into
 | [code-style](plugins/code-style/) | Writes the comment and naming rules into each session and blocks edits that break them. |
 | [tdd](plugins/tdd/) | Enforces red, green, refactor: blocks implementation edits until a failing test run and finishing while tests fail. |
 | [quality-gates](plugins/quality-gates/) | Blocks commits and pushes that fail fallow audit, and finishing a code change with no verification. |
-| [guards](plugins/guards/) | Command guards: caps unbounded git log, diff and find at 150 lines, trims long Bash and MCP output and saves the full text to a file, caps Reads of large files at 300 lines, forces context-heavy lookups onto a Haiku subagent, blocks commits that skip hooks or fail checks, and, opted in, asks for a browser check after UI edits. |
+| [guards](plugins/guards/) | Command guards: caps unbounded git log, diff and find at 150 lines, trims long Bash and MCP output and saves the full text to a file, caps Reads of large files at 300 lines, supports selective delegation for verbose lookups and larger changes, blocks commits that skip hooks or fail checks, and, opted in, asks for a browser check after UI edits. |
 | [ui-design](plugins/ui-design/) | `/ui-design`, with `new`, `redesign`, `audit`, `apply`, `fix` and `gallery` modes: mockups in the project's own theme, opened in the browser, a consistency audit, fixes for its findings, and a gallery of every saved design and audit. |
 | [project-notes](plugins/project-notes/) | Claude writes categorised project notes (`fact`, `finding`, `decision`, `reference`, `debugging`) as Markdown files under `~/.local/share/project-notes/<project>/<category>/`; a debugging note must hold the reasoning, steps, evidence, findings, next steps and a drafted Shortcut ticket; `/project-notes organise` files existing session notes the same way |
 | [tidy-notes](plugins/tidy-notes/) | `/tidy-notes` reformats the Markdown notes in the handoffs, project-notes, small-plans and brainstorm stores so they are consistently formatted without changing their content; a dry run lists what would change and what looks wrong, and `/tidy-notes apply` writes the changes |
@@ -105,17 +105,17 @@ It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not 
 
 ### Plugin profiles
 
-Every enabled plugin puts its rules, skills and tool names into each session, whether the project uses them or not. `claude-kit-update profile` turns plugins on and off for one project, so a session loads only what fits it. Run it in the project's folder:
+Use `claude-kit-update profile coding|ui|planning|notes` in a project to load the plugins it needs. `code` aliases `coding`; `web` aliases `ui`.
 
-```
-claude-kit-update profile web     # code-style, tdd, quality-gates, ui-design, vercel and frontend-design on
-claude-kit-update profile code    # code-style, tdd and quality-gates on; ui-design, vercel and frontend-design off
-claude-kit-update profile notes   # all six off, for folders of notes and documents
-```
+- Every profile keeps guards, token-ledger, ledger-tune, handoff and adhd-style.
+- Coding adds code-style, TDD, quality-gates and project-notes.
+- UI adds those plus ui-design, Vercel and frontend-design.
+- Planning adds brainstorm, small-plans, project-notes and prompt-optimizer.
+- Notes adds project-notes and tidy-notes.
 
-- It writes `enabledPlugins` in the project's `.claude/settings.local.json`, which is yours alone, and keeps every other setting in that file
-- Plugins it does not name, such as guards and handoff, keep their user-level setting
-- It pulls and updates nothing. Start a new Claude Code session in the project to load the profile
+Profiles explicitly toggle every claude-kit plugin in `.claude/settings.local.json`, preserve unrelated settings and plugins, and perform no updates. Start a new session to load the selected profile. Plugin updates do not apply a profile or change your model mappings automatically.
+
+See [cost comparison](docs/cost-comparison.md) for provider-aware accounting, selective delegation, planning levels, verification reuse and the live harness trimming check.
 
 ## Install
 

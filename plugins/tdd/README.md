@@ -18,3 +18,5 @@ Red, green, refactor, enforced.
   `.claude/tdd.json`. Pin the test command with `{"testCommand": "..."}`.
 
 Tests: `pnpm test`. Typecheck (syntax check of the shell hooks): `pnpm typecheck`.
+
+Successful checks can be reused for up to 60 seconds within a session, keyed by command, HEAD, tracked/untracked nonignored files and environment. Set `CLAUDE_KIT_VERIFY_CACHE=0` for checks with ignored, external or time-dependent inputs. New content, commands or environment invalidate reuse. Only an observed unchanged-revision baseline establishes an existing failure; unexplained failures remain unresolved and regressions must be fixed.

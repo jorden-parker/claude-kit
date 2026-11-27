@@ -2,6 +2,7 @@
 set -uo pipefail
 
 source "$(dirname "$0")/tdd-lib.sh"
+source "$(dirname "$0")/verification-cache.sh"
 source "$(dirname "$0")/turn-edits-lib.sh"
 
 payload="$(cat)" || exit 0
@@ -28,6 +29,9 @@ changed_source_files="$(
 
 test_command="$(tdd_detect_test_command "$project_directory")" || exit 0
 
+cache_path="$(verification_cache_path "$repository_root" "$test_command" "$session_id")"
+verification_cached "$cache_path" && exit 0
+
 if command -v timeout >/dev/null 2>&1; then
   test_output="$(timeout 300 bash -c "$test_command" 2>&1)"
 elif command -v gtimeout >/dev/null 2>&1; then
@@ -42,6 +46,7 @@ test_status=$?
 block_count_file="$(tdd_state_directory "$session_id")/green-gate-blocks-$(printf '%s' "$transcript_path" | shasum | cut -c1-16)"
 
 if [ "$test_status" -eq 0 ]; then
+  verification_save "$cache_path"
   [ -n "$session_id" ] && tdd_record_result "$session_id" "pass"
   rm -f "$block_count_file"
   exit 0
@@ -58,7 +63,7 @@ fi
 mkdir -p "$(dirname "$block_count_file")" 2>/dev/null
 echo $((blocks_so_far + 1)) > "$block_count_file"
 {
-  echo "Tests are failing. If you have an Agent tool, spawn a subagent to fix every failure below, including pre-existing ones (guards:worker if listed, else haiku). Otherwise fix them yourself."
+  echo "Tests are failing. Fix regressions from this task. Classify a failure as pre-existing only with an observed baseline from the unchanged revision using the same command and environment; otherwise report it as unresolved. Report unrelated baseline failures separately."
   printf '%s\n' "$test_output" | tail -n 40
 } >&2
 exit 2

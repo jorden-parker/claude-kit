@@ -1,0 +1,42 @@
+#!/usr/bin/env bun
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const command = process.argv.slice(2);
+if (!command.length) {
+  console.error("Usage: compact-run <command> [arguments...]");
+  process.exit(2);
+}
+const folder = join(tmpdir(), "guards-output");
+mkdirSync(folder, { recursive: true });
+const log = join(folder, `command-${crypto.randomUUID()}.txt`);
+try {
+  const child = Bun.spawn(command, {
+    stdin: "inherit",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, status] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  const output = `${stdout}\n${stderr}`;
+  writeFileSync(log, output, { mode: 0o600 });
+  const lines = output.split("\n");
+  const signals = lines.filter((line) =>
+    /\b(pass|fail|error|tests?|suites?|duration|warning)\b/i.test(line)
+  );
+  console.log(`Exit ${status}; full log: ${log}`);
+  console.log(
+    (signals.length ? signals : lines.filter(Boolean))
+      .slice(-20)
+      .join("\n")
+      .slice(-4000)
+  );
+  process.exit(status);
+} catch (error) {
+  console.error(String(error));
+  process.exit(1);
+}

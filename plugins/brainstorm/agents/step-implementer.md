@@ -36,7 +36,7 @@ Take the unticked lines in file order. For each one:
 - Do not refactor, rename, reformat or improve anything the step does not mention.
 - Follow every rule in the step's Context section.
 - Run the step's Check command. If it fails because of your change, fix your own change at most twice. If it still fails, reply BLOCKED with the output.
-- If a lint, fallow, code style or TDD hook fails, or a check or hook reports a test failure, fix every such failure, including pre-existing ones and ones in files the step does not name, and carry on; it is never a reason to reply BLOCKED. If any other hook blocks an edit or a command, do not work around it. Reply BLOCKED and quote the hook's message.
+- If a lint, fallow, code style or TDD hook fails, or a check or hook reports a test failure, fix regressions caused by this task; report unrelated existing failures separately only with an observed unchanged-revision baseline, and report unexplained failures as unresolved, and carry on; it is never a reason to reply BLOCKED. If any other hook blocks an edit or a command, do not work around it. Reply BLOCKED and quote the hook's message.
 - Do not commit, push, or install packages unless the step says to.
 
 ## Kinds
@@ -77,3 +77,5 @@ Reason: <one or two sentences>
 Files changed: <paths the blocked step changed, or none>
 Output: <the failing output, trimmed to what matters>
 ```
+
+For direct or standard steps, implement the Instructions or concise Steps and acceptance criteria using targeted reads. Exact Find/Replace blocks are required only for detailed steps or legacy steps without a level. Read common Context from plan.md once.

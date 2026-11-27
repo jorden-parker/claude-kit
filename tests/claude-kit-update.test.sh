@@ -215,10 +215,18 @@ run_profile "$fresh_project" web >/dev/null
 expect "web turns the code plugins on in a project with no settings" [ "$(plugin_setting "$fresh_project" quality-gates@claude-kit)" = true ]
 expect "web turns the web plugins on" [ "$(plugin_setting "$fresh_project" vercel@claude-plugins-official)" = true ]
 
+run_profile "$fresh_project" planning >/dev/null
+expect "planning enables brainstorm" [ "$(plugin_setting "$fresh_project" brainstorm@claude-kit)" = true ]
+expect "planning disables implementation gates" [ "$(plugin_setting "$fresh_project" tdd@claude-kit)" = false ]
+run_profile "$fresh_project" notes >/dev/null
+expect "notes disables planning plugins" [ "$(plugin_setting "$fresh_project" brainstorm@claude-kit)" = false ]
+expect "notes keeps accounting" [ "$(plugin_setting "$fresh_project" token-ledger@claude-kit)" = true ]
+expect "notes keeps guards" [ "$(plugin_setting "$fresh_project" guards@claude-kit)" = true ]
+
 output="$(run_profile "$fresh_project" games)"
 status=$?
 expect "an unknown profile exits 2" [ "$status" -eq 2 ]
-expect "an unknown profile names the three profiles" grep -qF "web|code|notes" <<<"$output"
+expect "an unknown profile names the three profiles" grep -qF "coding|ui|planning|notes" <<<"$output"
 
 home_moved="$sandbox/home-moved"
 mkdir -p "$home_moved/.claude/small-plans/alpha/set-one"

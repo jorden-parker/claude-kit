@@ -692,3 +692,20 @@ test("a ticked step is already built, so its edits are not checked against the f
 
   expect(problems).toEqual([]);
 });
+
+test("compact steps accept instructions and checks without exact replacements", async () => {
+  for (const level of ["direct", "standard"]) {
+    const problems = await checkPlan(
+      createPlanFiles({
+        [`${PLAN_RUN_FOLDER}/index.md`]: buildIndexText([ALPHA_INDEX_LINE]),
+        [ALPHA_PLAN_PATH]: buildPlanText([
+          "- [ ] [Implement alpha](step-01.md)",
+        ]).replace("- Status:", `- Level: ${level}\n- Status:`),
+        [`${PLAN_RUN_FOLDER}/01-alpha/step-01.md`]: `# Step 01: Implement alpha\n\n- Kind: code\n- Level: ${level}\n\n## Context\n\nRead plan.md.\n\n## Instructions\n\nChange src/alpha.ts so expired tokens are rejected. Add rejection coverage in tests/alpha.test.ts.\n\n## Check\n\n- Run: \`bun test tests/alpha.test.ts\`\n- Expect: exit 0\n`,
+      }),
+      PLAN_RUN_FOLDER,
+      PROJECT_ROOT
+    );
+    expect(problems).toEqual([]);
+  }
+});

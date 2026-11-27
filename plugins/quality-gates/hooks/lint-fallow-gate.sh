@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+source "$(dirname "$0")/verification-cache.sh"
+
 maximum_blocks_in_a_row=5
 check_timeout_seconds=300
 
@@ -80,9 +82,14 @@ run_with_timeout() {
 
 failure_report=""
 append_failure_if_check_fails() {
-  local check_name="$1" check_command="$2" check_output
+  local check_name="$1" check_command="$2" check_output cache_path
   [ -n "$check_command" ] || return 0
-  check_output="$(cd "$repository_root" && run_with_timeout "$check_command")" && return 0
+  cache_path="$(verification_cache_path "$repository_root" "$check_command" "$session_id")"
+  verification_cached "$cache_path" && return 0
+  if check_output="$(cd "$repository_root" && run_with_timeout "$check_command")"; then
+    verification_save "$cache_path"
+    return 0
+  fi
   failure_report+="$check_name failed (\`$check_command\`):"$'\n'"$(printf '%s\n' "$check_output" | tail -n 40)"$'\n\n'
 }
 
@@ -110,7 +117,7 @@ fi
 echo $((blocks_so_far + 1)) > "$block_count_file"
 
 {
-  echo "lint-fallow-gate: lint or fallow failed. If you have an Agent tool, spawn a subagent to fix the failures below (guards:worker if listed, else model haiku), then retry. Otherwise fix them yourself."
+  echo "lint-fallow-gate: lint or fallow failed. Fix task regressions, then retry. Report unrelated issues separately only when an observed unchanged-revision baseline establishes them; otherwise report unresolved failures."
   echo
   printf '%s' "$failure_report"
   echo "Pin the commands in .claude/quality.json as {\"lintCommand\": \"...\", \"fallowCommand\": \"...\"} when the detected ones are wrong."

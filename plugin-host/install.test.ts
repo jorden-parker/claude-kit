@@ -55,7 +55,7 @@ test("qwen: the MCP server is declared in .mcp.json and commands call the run to
   );
   expect(commandText).toStartWith('---\ndescription: "Brainstorm ideas');
   expect(commandText).toContain(
-    'argument-hint: "[focus] | plan <picks> | build [runs]"'
+    'argument-hint: "[focus] | plan <picks> | build [runs] [--topic <name>]"'
   );
   expect(commandText).toContain("`mcp__brainstorm__run_brainstorm`");
   expect(commandText).toContain("<arguments>\n{{args}}\n</arguments>");
@@ -93,7 +93,7 @@ test("pi: a hand-written portable command becomes a prompt with pi's placeholder
   expect(promptText).toContain("<draft>\n$ARGUMENTS\n</draft>");
   expect(
     JSON.parse(await readFile(join(installedFolder, "package.json"), "utf8")).pi
-  ).toEqual({ prompts: ["./prompts"] });
+  ).toEqual({ prompts: ["./prompts"], skills: ["./skills"] });
 });
 
 const readOpenCodeConfig = async (targetHome: string) =>

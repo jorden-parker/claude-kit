@@ -804,13 +804,13 @@ test("the planning prompt runs the checker and the step-reader clarity pass", as
   expect(instructions).toContain("mcp__brainstorm__check_brainstorm_plan");
   expect(instructions).toContain("brainstorm:step-reader");
   expect(instructions).toContain(
-    "For every plan folder, call the Agent tool once"
+    "For every detailed plan folder, call the Agent tool once"
   );
   expect(instructions).not.toContain("For every step file, call the Agent");
   expect(instructions).toContain("QUESTIONS");
   expect(instructions).toContain("at most two rounds");
   expect(instructions).toContain(
-    "Run /clear first, then /brainstorm build to implement it, because the build re-reads the session on every step."
+    "Use /brainstorm build to implement it. At a task boundary, /handoff then /clear is optional when earlier context is no longer useful."
   );
   expect(instructions).not.toContain("numberRanges");
 });

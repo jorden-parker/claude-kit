@@ -1,6 +1,6 @@
 {
   "name": "brainstorm",
-  "version": "0.8.1",
+  "version": "0.21.1",
   "scripts": {
     "test": "claude plugin test . && node --test tests/",
     "typecheck": "tsc -p ."

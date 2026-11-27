@@ -1,5 +1,5 @@
 {
   "name": "code-style",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Comment and naming rules at session start; hooks block comments, short or vague identifiers, and finishing before a naming review"
 }

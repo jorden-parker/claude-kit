@@ -1,6 +1,6 @@
 {
   "name": "tdd",
-  "version": "0.1.0",
+  "version": "0.4.5",
   "scripts": {
     "test": "for test_file in tests/*.test.sh; do bash \"$test_file\" || exit 1; done",
     "typecheck": "for hook_file in hooks/*.sh; do bash -n \"$hook_file\" || exit 1; done"

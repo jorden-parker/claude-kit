@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { beforeEach, afterEach, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -541,4 +541,25 @@ test("allows a Read after a delegation to any agent on the GUARDS_DELEGATE_MODEL
     );
     expect(decideDelegation(readEvent, delegated)).toBeNull();
   });
+});
+
+beforeEach(() => {
+  process.env.GUARDS_DELEGATE_POLICY = "strict";
+});
+afterEach(() => {
+  delete process.env.GUARDS_DELEGATE_POLICY;
+});
+test("selective default permits direct writes, large edits and bounded checks", () => {
+  delete process.env.GUARDS_DELEGATE_POLICY;
+  expect(
+    decideDelegation(
+      mainEvent("Write", {
+        file_path: "/project/a.ts",
+        content: "x".repeat(3000),
+      }),
+      overBudget
+    )
+  ).toBeNull();
+  expect(decideDelegation(readEvent, overBudget)).toBeNull();
+  expect(decideDelegation(bashEvent("pnpm test"), overBudget)).toBeNull();
 });

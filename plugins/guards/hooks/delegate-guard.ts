@@ -230,12 +230,16 @@ export function decideDelegation(
   transcript: string
 ): HookResult {
   if (isExempt(event)) return null;
-  if (isProjectEdit(event)) return deny(editReason(event));
+  if (process.env.GUARDS_DELEGATE_POLICY === "strict" && isProjectEdit(event))
+    return deny(editReason(event));
   if (isAgentCall(event)) return delegationProblem(event);
   if (!isLookup(event.tool_name, event.tool_input)) return null;
   const spent = lookupCharacters(transcript);
-  if (spent >= LOOKUP_BUDGET) return deny(budgetReason(spent));
-  return spent >= WARNING_LINE ? budgetWarning(spent) : null;
+  if (process.env.GUARDS_DELEGATE_POLICY === "strict") {
+    if (spent >= LOOKUP_BUDGET) return deny(budgetReason(spent));
+    return spent >= WARNING_LINE ? budgetWarning(spent) : null;
+  }
+  return null;
 }
 
 export function decideDelegationFromTranscript(

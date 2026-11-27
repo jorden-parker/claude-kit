@@ -1364,6 +1364,7 @@ const composePlanInstruction = (
 ) =>
   [
     workSource,
+    "Choose planning level from the work: direct for one bounded change, standard for related multi-step work, detailed for an explicit exact-edit request or demonstrated ambiguity. Record Level: direct, standard or detailed in Context. Preserve Goal, Context, Steps, Check and Review at every level. Direct uses one concise implementation step; standard uses a short sequence with paths and acceptance criteria; only detailed requires exact code. Do not duplicate repo rules; summarize and cite their source paths.",
     `1. List the work that is still left. Check each item against the project as it is now (the files it names, the recent commits) and drop what is already done. If nothing is left, say so and stop.
 2. Split that work into plans. A plan is one change that a small model can implement in one sitting and a second small model can review in one read: one goal, at most ${MAX_STEPS} steps, few files. Work that needs more becomes two plans. Leave out work that waits on a decision only the user can make.
 3. Declare the dependency order: number the plans from 1 so that each one needs earlier plans only, and its number is its place in the build order.
@@ -1371,7 +1372,7 @@ const composePlanInstruction = (
     `Load ${QUALIFIED_WRITE_TOOL_NAME} before you draft the first plan: its description states the shape every plan body must have, and the tool refuses a body that breaks it.`,
     `The plugin writes ${INDEX_FILE_NAME} in the set folder, listing every plan with its order, kind, status and dependencies, and rewrites it each time a plan is saved, edited with Edit or Write, or changes status. Never write or edit ${INDEX_FILE_NAME} yourself, and change a saved plan with ${QUALIFIED_UPDATE_TOOL_NAME}, or Edit for a wording fix, never with a shell command, so the index stays true.`,
     ...laterNotes,
-    `When every plan is saved, reply with one line per plan (order, kind, title, the orders it depends on), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them, and say to run /clear first: the build reads the saved plans and needs nothing from this conversation.`,
+    `When every plan is saved, reply with one line per plan (order, kind, title, the orders it depends on), then the work you left out and why. End by naming claude-notes, a terminal command, to read the plans and /${COMMAND_NAME} build to have small models build them, and suggest /handoff then /clear only at a task boundary when prior context is no longer useful.`,
   ].join("\n\n");
 
 const composeBuildInstruction = (
@@ -1383,7 +1384,7 @@ const composeBuildInstruction = (
   planName
     ? `Build only the plan at ${setFolder}/${planName}.md. If it depends on another plan listed below, which is not done, stop and say which.`
     : `Build the plans in ${setFolder}, in the order listed below. A plan waits until every plan it depends on is done.`
-} You coordinate: never edit project files or read diffs yourself, and read a plan, report or findings file only in step 7. A plan's status changes through ${QUALIFIED_START_TOOL_NAME}, ${QUALIFIED_FINISH_TOOL_NAME} and, for blocked, ${QUALIFIED_STATUS_TOOL_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand. Load those three tools and ${QUALIFIED_CHECK_TOOL_NAME} with one ToolSearch call.
+} Read the plan level in Context first. A plan without Level is detailed and follows the existing workflow below. For direct plans, implement, check and review the diff directly in the plan worktree; for standard plans, use one worker for related edits and its check, review once and resume the worker for corrections when supported. Preserve start/finish tools, worktrees, statuses and checks; the finish tool requires PASS, so for direct plans record your own evidence-based PASS review. Exact code and separate reviewer agents are required only for detailed plans. The full worker/reviewer loop below applies to detailed plans. A plan's status changes through ${QUALIFIED_START_TOOL_NAME}, ${QUALIFIED_FINISH_TOOL_NAME} and, for blocked, ${QUALIFIED_STATUS_TOOL_NAME}; never edit ${INDEX_FILE_NAME} or a status line by hand. Load those three tools and ${QUALIFIED_CHECK_TOOL_NAME} with one ToolSearch call.
 
 Plans not done (file, title, kind, status, depends on, check command):
 ${planLines.join("\n")}
@@ -2459,7 +2460,7 @@ export const register: Register = (on) => {
       description:
         "Split work into small plans a small model can build, then build a set or one plan with small-model agents. Words: build [set] [order], handoff, rename, review [set] [order], board.",
       argumentHint:
-        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename [set] [new name] | review [set] [plan order]",
+        "[work to plan] | handoff [id] [extra context] | build [set] [plan order] | rename [set] [new name] | review [set] [plan order] | board",
     });
     await $.tool.register({
       name: WRITE_TOOL_NAME,

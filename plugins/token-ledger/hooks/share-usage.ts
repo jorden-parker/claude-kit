@@ -147,6 +147,39 @@ export function usageSample(
   };
 }
 
+// Standard short-context USD reference rates per million tokens, reviewed 2026-11-27.
+const referenceRates = new Map<string, Rates>([
+  ["claude-opus-5-5", { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20 }],
+  [
+    "claude-sonnet-5-5",
+    { input: 2, cacheWrite: 2.5, cacheRead: 0.1, output: 10 },
+  ],
+  [
+    "claude-haiku-5-5",
+    { input: 0.1, cacheWrite: 0.125, cacheRead: 0.01, output: 0.5 },
+  ],
+  ["gpt-6.2-sol", { input: 2, cacheWrite: 2.5, cacheRead: 0.1, output: 10 }],
+]);
+
+function aggregateEstimate(row: UsageRow, configured?: Rates) {
+  const rate = configured ?? referenceRates.get(row.model);
+  const present = fields.filter((field) => row.tokens[field] !== undefined);
+  if (!rate || !present.length) return;
+  const subtotal =
+    present.reduce((sum, field) => sum + row.tokens[field]! * rate[field], 0) /
+    1_000_000;
+  const partial =
+    present.length < fields.length ? " · known categories only" : "";
+  return (
+    subtotal.toFixed(4) +
+    (configured ? "" : " USD") +
+    '<small class="cost-reason">' +
+    (configured ? "Configured rates" : "Reference estimate") +
+    partial +
+    "</small>"
+  );
+}
+
 export function shareUsagePage(
   entries: LedgerEntry[],
   rates: Record<string, Rates>,
@@ -164,10 +197,11 @@ export function shareUsagePage(
       number(row.calls),
       ...fields.map((f) => number(row.tokens[f])),
       row.cost === undefined
-        ? 'Unknown<small class="cost-reason">' +
-          "Ledger: " +
-          [...row.costIssues].join(" · ") +
-          "</small>"
+        ? (aggregateEstimate(row, rates[row.model]) ??
+          'Unknown<small class="cost-reason">' +
+            "Ledger: " +
+            [...row.costIssues].join(" · ") +
+            "</small>")
         : money(row.cost),
     ]
       .map((v) => "<td>" + v + "</td>")
@@ -282,5 +316,5 @@ export function shareUsagePage(
   <section class="panel"><div class="panel-heading"><h2>Usage by model and role</h2></div><div class="table-scroll"><table class="usage"><thead><tr>${["Model", "Role", "Sessions", "Calls", "Input", "Cache write", "Cache read", "Output", "Est. cost"].map((label) => "<th>" + label + "</th>").join("")}</tr></thead><tbody>${cbRows}${localRows.map((row) => '<tr><th class="model-name" scope="row">' + html(row.model) + "</th>" + rowCells(row) + "</tr>").join("")}</tbody></table></div><p class="panel-footer">${external ? html((cb ? "Codeburn matched " + cb.matched.size + " of " + entries.length + " sessions. " : "") + external.message) + " " : ""}${cbRows || localRows.length ? "Sessions can appear in multiple rows. Unknown means the recorded usage or configured rates are incomplete." : "No recorded model usage in this sample."}</p></section>
   ${supplemental && cb ? "<p>Codeburn session-only total · " + supplemental.sessions.size + " sessions · " + money(supplemental.cost) + " " + html(cb.currency) + ". Included in session statistics; model allocation unavailable.</p>" : ""}
   ${top && sample.priced === entries.length && top.cost !== undefined ? '<section class="panel share-line"><h2>Largest cost contributor</h2><p>' + html(top.model) + " · " + top.role + " · " + number(top.calls) + " calls · estimated cost " + money(top.cost) + "</p></section>" : ""}
-  <details id="recording" class="details"><summary>Rates used for estimates</summary><div class="details-body"><p>Current TOKEN_LEDGER_PRICING per million tokens, in your configured currency. Estimates cover recorded usage and may differ from billing.</p>${ratesUsed.map((m) => "<p>" + html(m) + " · " + fields.map((f) => f + " " + rates[m][f]).join(" · ") + "</p>").join("") || "<p>No matching rates configured. Set TOKEN_LEDGER_PRICING in the shell that starts this report, using the exact model IDs above and your provider’s input, output, cacheRead and cacheWrite prices per million tokens. Then relaunch the report.</p>"}</div></details></main><script>${liveVerifyScript}</script></html>`;
+  <details id="recording" class="details"><summary>Rates used for estimates</summary><div class="details-body"><p>Reference estimates use published standard USD prices on 2026-11-27, short-context requests and short cache writes (Claude 5 minutes, Sol 30 minutes). Your billing route, prompt size, and retention can change the charge. These benchmarks are excluded from session cost statistics. <a href="https://platform.claude.com/docs/en/about-claude/pricing">Anthropic rates</a> · <a href="https://developers.openai.com/api/docs/models/gpt-6.2-sol">OpenAI rates</a></p><p>Current TOKEN_LEDGER_PRICING per million tokens, in your configured currency. Estimates cover recorded usage and may differ from billing.</p>${ratesUsed.map((m) => "<p>" + html(m) + " · " + fields.map((f) => f + " " + rates[m][f]).join(" · ") + "</p>").join("") || "<p>No matching rates configured. Set TOKEN_LEDGER_PRICING in the shell that starts this report, using the exact model IDs above and your provider’s input, output, cacheRead and cacheWrite prices per million tokens. Then relaunch the report.</p>"}</div></details></main><script>${liveVerifyScript}</script></html>`;
 }

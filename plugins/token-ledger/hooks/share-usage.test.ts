@@ -63,3 +63,30 @@ test("cost cells identify missing rates, old records and absent counters indepen
     })
   ).not.toContain("No matching rate ·");
 });
+
+test("legacy Opus readings get a labeled reference estimate independent of call count", () => {
+  const main = {
+    "claude-opus-5-5": {
+      input: 506,
+      cacheWrite: 451685,
+      cacheRead: 14840309,
+      output: 82225,
+    },
+  };
+  const source = {
+    ...entry,
+    main,
+    subagents: {},
+    tasks: undefined,
+    workerTasks: undefined,
+  };
+  expect(shareUsagePage([source], {})).toContain(
+    '6.8730 USD<small class="cost-reason">Reference estimate'
+  );
+  const partial = {
+    ...source,
+    main: { "claude-opus-5-5": { ...main["claude-opus-5-5"], cacheRead: 0 } },
+  };
+  expect(shareUsagePage([partial], {})).toContain("known categories only");
+  expect(usageSample([source], {}).priced).toBe(0);
+});

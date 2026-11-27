@@ -1,3 +1,5 @@
+import { shareUsagePage } from "./share-usage.ts";
+import { parseRates } from "./usage-metrics.ts";
 import { compareModelCohorts } from "./model-comparison.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -64,6 +66,27 @@ export function startVerifyServer(
       const fix =
         fixes.find((fix) => fix.appliedAt === selectedDeployment) ?? fixes[0];
       const collection = await collect(fix?.appliedAt);
+      const query = new URL(request.url).searchParams;
+      if (
+        !requested &&
+        !query.has("cohort") &&
+        query.get("view") !== "comparison"
+      ) {
+        return new Response(
+          shareUsagePage(
+            readNewestEntries(userHome, 20),
+            parseRates(process.env.TOKEN_LEDGER_PRICING)
+          ),
+          {
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "no-store",
+              "Referrer-Policy": "no-referrer",
+              "X-Frame-Options": "DENY",
+            },
+          }
+        );
+      }
       const sessions = readNewestEntries(userHome, Infinity);
       const models = fix
         ? compareModelCohorts(

@@ -23,7 +23,10 @@ test("live report reads new session results without restarting", async () => {
     discover: async () => ({ roots: [], message: "Test discovery" }),
   });
   try {
-    const first = await fetch(url);
+    expect(await (await fetch(url)).text()).toContain(
+      "Usage by model and role"
+    );
+    const first = await fetch(url + "?view=comparison");
     expect(first.headers.get("cache-control")).toBe("no-store");
     const initial = await first.text();
     expect(initial).toContain("After<small>0 sessions");
@@ -42,7 +45,7 @@ test("live report reads new session results without restarting", async () => {
         resultCharactersByTool: {},
       })
     );
-    const updated = await (await fetch(url)).text();
+    const updated = await (await fetch(url + "?view=comparison")).text();
     expect(updated).toContain("After<small>1 sessions");
     expect(updated).toContain("D4 · Receiving After results");
     expect(updated).toContain("2026-11-27T01:01:00Z");
@@ -161,7 +164,9 @@ test("a report records raw transcripts without Stop hooks and preserves selected
     }),
   });
   try {
-    expect(await (await fetch(url)).text()).toContain("After<small>0 sessions");
+    expect(await (await fetch(url + "?view=comparison")).text()).toContain(
+      "After<small>0 sessions"
+    );
     const selected = await (
       await fetch(url + "?deployment=" + encodeURIComponent(original))
     ).text();

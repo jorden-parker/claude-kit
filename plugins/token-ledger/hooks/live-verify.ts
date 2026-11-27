@@ -1,3 +1,5 @@
+import { loadDay } from "./codeburn-usage.ts";
+import { dailyPage } from "./daily-page.ts";
 import { liveCodeburn, type loadCodeburnUsage } from "./codeburn-usage.ts";
 import { shareUsagePage } from "./share-usage.ts";
 import { parseRates } from "./usage-metrics.ts";
@@ -24,6 +26,11 @@ export function startVerifyServer(
   const external = liveCodeburn(userHome, options.loadUsage, () => {
     for (const listener of listeners) listener.enqueue(event);
   });
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const days = new Map<
+    string,
+    { at: number; result: ReturnType<typeof loadDay> }
+  >();
   const path = "/" + crypto.randomUUID();
   const comparisonPath = join(
     userHome,
@@ -79,6 +86,31 @@ export function startVerifyServer(
       if (pathname !== path) return new Response("Not found", { status: 404 });
       if (request.method !== "GET")
         return new Response("Method not allowed", { status: 405 });
+      const day = new URL(request.url).searchParams.get("day");
+      if (day !== null) {
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(day) ||
+          !Number.isFinite(Date.parse(day)) ||
+          new Date(day).toISOString().slice(0, 10) !== day
+        )
+          return new Response("Invalid date", { status: 400 });
+        let cached = days.get(day);
+        if (!cached || Date.now() - cached.at > 60000) {
+          if (days.size >= 16) days.delete(days.keys().next().value!);
+          cached = { at: Date.now(), result: loadDay(userHome, day, zone) };
+          days.set(day, cached);
+        }
+        const report = await cached.result.then(
+          (data) => dailyPage(day, zone, data),
+          () => dailyPage(day, zone)
+        );
+        return new Response(report, {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        });
+      }
       const fixes = readFixes(userHome).sort((a, b) =>
         b.appliedAt.localeCompare(a.appliedAt)
       );

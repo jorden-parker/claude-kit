@@ -113,3 +113,35 @@ test("macOS desktop engine uses the packaged launcher or its bundled Electron ru
     rmSync(app, { recursive: true, force: true });
   }
 });
+
+test("daily cost uses only the selected day's call totals in export currency", async () => {
+  const { parseDay } = await import("./codeburn-usage.ts");
+  const day = "2026-11-27";
+  expect(
+    parseDay(
+      {
+        ...base,
+        periods: [
+          {
+            daily: [
+              { Date: "2026-11-26", "Cost (GBP)": 90 },
+              { Date: day, "Cost (GBP)": 3.71, "API Calls": 50 },
+            ],
+          },
+        ],
+      },
+      day
+    )
+  ).toMatchObject({ cost: 3.71, currency: "GBP", calls: 50 });
+  expect(
+    parseDay(
+      {
+        ...base,
+        schema: "codeburn.export.v3",
+        records: [{ unpriced: true }],
+        periods: [{ daily: [{ date: day, cost: 4.19, apiCalls: 7 }] }],
+      },
+      day
+    )
+  ).toMatchObject({ cost: 4.19, unpriced: true });
+});

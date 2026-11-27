@@ -103,3 +103,5 @@ The live report reads both Codeburn JSON export formats, v2 and v3. When a sessi
 On macOS, a desktop-only CodeBurn installation in `/Applications` or `~/Applications` also works. The ledger runs the app’s bundled engine for discovery and exports.
 
 After restoring Claude Code history to `~/.claude/projects`, run `claude-ledger rescan` once. It checks all transcript dates, includes subagent usage under the parent session, and fills missing ledger details when the restored totals match. Repeating the command skips up-to-date records. Historical imports retain their original usage dates. The live usage table still shows only the newest 20 sessions.
+
+In the live usage report, choose a date under **Daily cost** and select **Show total**. This uses Codeburn’s daily Claude Code totals across projects in the machine’s local timezone, including calls outside the most recent 20 sessions. Unpriced usage marks the figure as a subtotal.

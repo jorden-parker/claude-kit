@@ -1,3 +1,4 @@
+import { dayPicker } from "./daily-page.ts";
 import type { ExternalUsage } from "./codeburn-usage.ts";
 import type { LedgerEntry } from "./ledger.ts";
 import type { Rates, RequestUsage } from "./usage-metrics.ts";
@@ -285,7 +286,7 @@ export function shareUsagePage(
     .filter((m, i, a) => a.indexOf(m) === i && rates[m]);
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Session usage · Token Ledger</title><style>${geistStyle}
   main{max-width:1440px}.usage th,.usage td{padding:10px}.usage tbody th{width:auto}.usage td{text-align:right}.usage td:first-of-type{text-align:left}.cost-reason{display:block;max-width:24ch;font:12px/1.4 Geist,system-ui,sans-serif}.share-line{overflow-wrap:anywhere;padding:12px 20px}.stats{margin:18px 0}.panel{margin-bottom:14px}</style>${productHeader("Session usage", true)}<main><div class="page-heading"><div><h1>Usage from the last ${entries.length} sessions</h1><p>${dates.length ? "Last updated " + dates[0] + " to " + dates.at(-1) + " UTC · " : ""}Newest 20 local records · ${sample.finished} with latest response finished</p></div><a class="button" href="?view=comparison">Compare deployments</a></div>
-  <div class="stats">${[
+  ${dayPicker(new Date().toLocaleDateString("sv-SE"))}<div class="stats">${[
     [
       "Fully priced sessions",
       (cb?.matched.size ? totals.length : sample.priced) +

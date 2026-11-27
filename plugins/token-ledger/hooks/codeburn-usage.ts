@@ -178,13 +178,14 @@ export function parseExport(data: any, entries: LedgerEntry[]): ExternalUsage {
     costs,
   };
 }
-export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
+async function exportUsage(
+  home: string,
+  from: string,
+  to: string,
+  zone: string
+) {
   const engine = codeburnEngine(home);
   if (!engine) throw Error("Codeburn unavailable");
-  const dates = entries
-    .flatMap((e) => [e.startedAt, e.updatedAt])
-    .filter((s): s is string => !!s)
-    .sort();
   const dir = await mkdtemp(join(tmpdir(), "ledger-codeburn-"));
   try {
     const file = join(dir, "usage.json");
@@ -192,14 +193,14 @@ export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
       [
         ...engine.command,
         "--timezone",
-        "UTC",
+        zone,
         "export",
         "--provider",
         "claude",
         "--from",
-        dates[0].slice(0, 10),
+        from,
         "--to",
-        dates.at(-1)!.slice(0, 10),
+        to,
         "--format",
         "json",
         "--output",
@@ -217,10 +218,63 @@ export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
     } finally {
       clearTimeout(timer);
     }
-    return parseExport(JSON.parse(await readFile(file, "utf8")), entries);
+    return JSON.parse(await readFile(file, "utf8"));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+export async function loadCodeburnUsage(home: string, entries: LedgerEntry[]) {
+  const dates = entries
+    .flatMap((e) => [e.startedAt, e.updatedAt])
+    .filter((s): s is string => !!s)
+    .sort();
+  return parseExport(
+    await exportUsage(
+      home,
+      dates[0].slice(0, 10),
+      dates.at(-1)!.slice(0, 10),
+      "UTC"
+    ),
+    entries
+  );
+}
+export async function loadDay(home: string, day: string, zone: string) {
+  return parseDay(await exportUsage(home, day, day, zone), day);
+}
+export function parseDay(data: any, day: string) {
+  const v3 = data?.schema === "codeburn.export.v3";
+  if (
+    (!v3 && data?.schema !== "codeburn.export.v2") ||
+    !Array.isArray(data.periods) ||
+    !Array.isArray(data.records) ||
+    !/^[A-Z]{3}$/.test(data.currency?.code ?? "")
+  )
+    throw Error("Unsupported Codeburn export");
+  const currency = data.currency.code as string;
+  const daily = data.periods
+    .flatMap((period: any) => period.daily ?? [])
+    .find((row: any) => (v3 ? row.date : row.Date) === day);
+  const unpriced = data.records.some(
+    (r: any) =>
+      r.unpriced ||
+      r.costBasis === "unpriced" ||
+      (r.cost === 0 &&
+        !["included", "recorded", "calculated"].includes(r.costBasis) &&
+        (r.inputTokens ||
+          r.outputTokens ||
+          r.cacheReadTokens ||
+          r.cacheWriteTokens))
+  );
+  return {
+    currency,
+    cost: daily
+      ? numeric(v3 ? daily.cost : daily["Cost (" + currency + ")"])
+      : data.records.length
+        ? undefined
+        : 0,
+    unpriced,
+    calls: daily ? numeric(v3 ? daily.apiCalls : daily["API Calls"]) : 0,
+  };
 }
 export function liveCodeburn(
   home: string,

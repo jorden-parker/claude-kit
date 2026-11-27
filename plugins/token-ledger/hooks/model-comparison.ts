@@ -13,6 +13,8 @@ export function modelCohort(entry: LedgerEntry) {
   const main = modelNames(entry.main);
   const workers = modelNames(entry.subagents);
   return {
+    main,
+    workers,
     key: JSON.stringify([main, workers]),
     label:
       "Main: " +
@@ -139,6 +141,9 @@ export function compareModelCohorts(
     normalizedBefore: normalized(matchedBefore),
     normalizedAfter: normalized(matchedAfter),
     distribution: options.map((option) => ({
+      main: option.main,
+      workers: option.workers,
+      selected: option.key === selected?.key,
       label: option.label,
       before: before.filter((entry) => modelCohort(entry).key === option.key)
         .length,

@@ -1,3 +1,4 @@
+import { geistStyle, productHeader } from "./geist-style.ts";
 import type { compareModelCohorts } from "./model-comparison.ts";
 import {
   formatRecordingStatus,
@@ -24,27 +25,18 @@ export function verifyPage(
   }
 ) {
   const cell = (index: number, value?: number) =>
-    "<td><strong>" +
+    '<td><strong class="transfer-code">' +
     answer(index, value).code +
-    "</strong><small>" +
+    '</strong><span class="reading">' +
     (value === undefined ? "Unknown" : value.toLocaleString("en-US")) +
-    "</small></td>";
+    "</span></td>";
   let content =
     '<p>No deployments recorded yet. Run <code>claude-ledger --fixed "description"</code> when a change reaches this machine.</p>';
   if (check) {
     const after = groupValues(check.after);
     const excluded = check.spanningSessions ?? 0;
     content =
-      '<p class="deployment">' +
-      html(check.title) +
-      " · " +
-      html(check.since.slice(0, 10)) +
-      "</p>" +
-      "<p>On your personal laptop, open <code>claude-ledger</code> and choose <b>Record work results</b>. Select the matching codes for each column.</p>" +
-      "<p>Source: all locally recorded sessions across projects, including subagent totals. When model matching is shown above, the readings below use only that selected model mix. Excludes " +
-      excluded +
-      " sessions spanning deployment or missing a start time. Sessions on other machines are not included automatically.</p>" +
-      "<table><caption>Work-machine readings · " +
+      '<section class="panel"><div class="panel-heading"><div><h2>Laptop check-in</h2><p>On your personal laptop, open <code>claude-ledger</code>, choose <b>Record work results</b> and select these codes.</p></div></div><div class="table-scroll"><table><caption class="sr-only">Work-machine readings · ' +
       scale +
       "</caption><thead><tr><th>Measurement</th><th>Before<small>" +
       check.before.sessions +
@@ -62,7 +54,9 @@ export function verifyPage(
             "</tr>"
         )
         .join("") +
-      "</tbody></table>" +
+      '</tbody></table></div><p class="panel-footer">Source: all locally recorded sessions across projects, including subagent totals, filtered to the selected model mix. Excludes ' +
+      excluded +
+      " sessions spanning deployment or missing a start time. Sessions on other machines have separate reports.</p></section>" +
       (check.after.sessions < 5
         ? '<p class="note">Fewer than five follow-up sessions. Save the baseline now and check again after more sessions.</p>'
         : "");
@@ -70,8 +64,37 @@ export function verifyPage(
   const models = check?.models;
   const number = (value: number | undefined) =>
     value === undefined ? "Unknown" : Math.round(value * 100) / 100 + "";
+  const names = (values: string[], fallback: string) =>
+    values
+      .map((name) => '<span class="model-name">' + html(name) + "</span>")
+      .join("") || fallback;
+  const modelTable = models
+    ? '<section class="panel"><div class="panel-heading"><div><h2>Models by deployment period</h2><p>Session counts for each main and worker model combination.</p></div></div><div class="table-scroll"><table class="model-table"><thead><tr><th>Main models</th><th>Worker models</th><th class="number">Before</th><th class="number">After</th></tr></thead><tbody>' +
+      [...models.distribution]
+        .sort(
+          (a, b) =>
+            Number(b.selected) - Number(a.selected) ||
+            b.after - a.after ||
+            b.before - a.before
+        )
+        .map(
+          (row) =>
+            '<tr><th scope="row">' +
+            names(row.main, "Unknown") +
+            (row.selected ? '<span class="badge">Selected</span>' : "") +
+            "</th><td>" +
+            names(row.workers, "None recorded") +
+            '</td><td class="number">' +
+            row.before +
+            '</td><td class="number">' +
+            row.after +
+            "</td></tr>"
+        )
+        .join("") +
+      "</tbody></table></div></section>"
+    : "";
   const fairness = models
-    ? '<section><h2>Comparison limits</h2><p class="note">' +
+    ? '<section class="notice"><div><h2>Comparison limits</h2><p>' +
       (models.enough
         ? "Descriptive comparison only. Model matching and five sessions per side do not establish that the plugin caused a change."
         : "Insufficient comparable data. At least five sessions on each side with the same recorded main and worker model mix are needed for a descriptive summary.") +
@@ -83,9 +106,10 @@ export function verifyPage(
       models.before.sessions +
       " Before, " +
       models.after.sessions +
-      " After.</p><p>" +
-      html(models.selected?.label ?? "No model data") +
-      "</p><p>Reasoning effort, provider/billing route and workload are not reliably recorded in these sessions. Task size and completed-task quality are uncontrolled. Per-call tokens reduce session-length bias; they do not establish savings.</p><table><caption>Session length and measurement coverage</caption><thead><tr><th>Measurement</th><th>Before</th><th>After</th></tr></thead><tbody>" +
+      " After.</p></div></section>" +
+      modelTable +
+      content +
+      '<section class="panel"><div class="panel-heading"><div><h2>Session length and measurement coverage</h2><p>Reasoning effort, workload and billing route can differ within a model mix. Per-call readings alone do not establish savings.</p></div></div><div class="table-scroll"><table><thead><tr><th>Measurement</th><th>Before</th><th>After</th></tr></thead><tbody>' +
       [
         [
           "Sessions with complete per-call measurements",
@@ -143,23 +167,10 @@ export function verifyPage(
             "</td></tr>"
         )
         .join("") +
-      "</tbody></table><details><summary>Recorded model mix in each period</summary><ul>" +
-      models.distribution
-        .map(
-          (row) =>
-            "<li>" +
-            html(row.label) +
-            ": " +
-            row.before +
-            " Before, " +
-            row.after +
-            " After</li>"
-        )
-        .join("") +
-      "</ul></details></section>"
-    : "";
+      "</tbody></table></div></section>"
+    : content;
   const picker = deployments
-    ? '<form method="get"><label for="deployment">Compare since</label> <select id="deployment" name="deployment" onchange="this.form.submit()">' +
+    ? '<form class="filters" method="get"><div class="field"><label for="deployment">Compare since</label> <select id="deployment" name="deployment" onchange="this.form.submit()">' +
       deployments.options
         .map(
           (option) =>
@@ -172,9 +183,9 @@ export function verifyPage(
             "</option>"
         )
         .join("") +
-      "</select>" +
+      "</select></div>" +
       (models
-        ? '<label for="cohort"> Model mix </label><select id="cohort" name="cohort">' +
+        ? '<div class="field"><label for="cohort"> Model mix </label><select id="cohort" name="cohort">' +
           models.options
             .map(
               (option) =>
@@ -187,12 +198,12 @@ export function verifyPage(
                 "</option>"
             )
             .join("") +
-          "</select>"
+          "</select></div>"
         : "") +
-      '<button type="submit">Use comparison</button><p>Keep the original cost-change deployment selected when installing report updates.</p></form>'
+      '<button class="primary" type="submit">Use comparison</button><p class="filter-note">Keep the original cost-change deployment selected when installing report updates.</p></form>'
     : "";
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Token Ledger · Deployment check-in</title><style>
-*{box-sizing:border-box}body{margin:0;background:#fafafa;color:#171717;font:16px/1.5 "Geist",system-ui,sans-serif}header{border-bottom:1px solid #ddd;background:white;padding:14px max(5vw,20px);font-weight:650}main{max-width:800px;margin:36px auto;padding:0 20px}h1{font-size:clamp(28px,5vw,44px);letter-spacing:-.055em;margin:0}p{max-width:64ch}.deployment,small{color:#565656}.deployment{font-family:ui-monospace,monospace;overflow-wrap:anywhere}table{width:100%;background:white;border:1px solid #ddd;border-spacing:0;border-radius:10px;overflow:hidden}caption{text-align:left;font-weight:600;padding:6px 0}th,td{text-align:left;padding:7px clamp(7px,2vw,18px);border-bottom:1px solid #eee}thead{background:#f3f3f3}tbody th{font-size:14px;font-weight:550}tr:last-child td,tr:last-child th{border-bottom:0}strong{font:650 20px/1.1 ui-monospace,monospace}small{display:block;font:12px/1.5 ui-monospace,monospace}.note{border-left:3px solid #888;padding-left:12px;font-size:14px}</style><header>Token Ledger${live ? '<p id="live-status" role="status" aria-live="polite">Live · checks for new recorded results every 2 seconds</p>' : ""}</header><main><h1>Deployment check-in</h1>${picker}${fairness}${content}${diagnostics ? '<section aria-labelledby="recording-title"><h2 id="recording-title">Recording status</h2><p>Tell me the D-code below; no terminal output is needed.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + html(formatRecordingStatus(diagnostics)) + "</pre></section>" : ""}</main>${live ? "<script>" + liveVerifyScript + "</script>" : ""}</html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Token Ledger · Deployment check-in</title><style>${geistStyle}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.transfer-code{margin:0 12px 0 0;color:var(--ds-gray-1000);font-weight:600}.model-table th:first-child{width:34%}.reading{display:inline-block}.note{margin:-12px 0 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere}.panel-heading code{white-space:nowrap}</style>${productHeader("Verification", live)}<main><div class="page-heading"><div><h1>Deployment check-in</h1>${check ? "<p>" + html(check.title) + " · " + html(check.since.slice(0, 10)) + "</p>" : ""}</div></div>${picker}${fairness}${diagnostics ? '<details class="details" id="recording"><summary>Recording status</summary><div class="details-body"><pre>' + html(formatRecordingStatus(diagnostics)) + "</pre></div></details>" : ""}</main>${live ? "<script>" + liveVerifyScript + "</script>" : ""}</html>`;
 }
 
 export const liveVerifyScript = `
@@ -205,7 +216,12 @@ async function refreshReadings() {
     const next = new DOMParser().parseFromString(await response.text(), "text/html").querySelector("main");
     const current = document.querySelector("main");
     if (!next || !current) throw new Error("Invalid report");
-    if (next.innerHTML !== current.innerHTML && !getSelection()?.toString() && document.activeElement?.tagName !== "SELECT") current.innerHTML = next.innerHTML;
+    if (next.innerHTML !== current.innerHTML && !getSelection()?.toString() && document.activeElement?.tagName !== "SELECT") {
+      const expanded = document.getElementById("recording")?.open;
+      current.innerHTML = next.innerHTML;
+      const recording = document.getElementById("recording");
+      if (recording && expanded) recording.open = true;
+    }
     status.textContent = "Live · checks for new recorded results every 2 seconds";
   } catch {
     status.textContent = "Disconnected · showing last results; retrying automatically. Keep claude-ledger verify browser running.";

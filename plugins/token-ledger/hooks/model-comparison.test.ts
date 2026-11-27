@@ -60,6 +60,10 @@ test("70 historical sessions on another model are not pooled with a single Sol s
     ...result,
     models: result,
   });
+  expect(page).toContain("<th>Main models</th><th>Worker models</th>");
+  expect(page).toContain(
+    '<span class="model-name">sol</span><span class="badge">Selected</span>'
+  );
   expect(page).toContain("Insufficient comparable data");
   expect(page).toContain("70 Before, 1 After");
   expect(page).toContain("Reasoning effort");

@@ -26,8 +26,24 @@ export function startVerifyServer(
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      if (new URL(request.url).pathname !== path)
-        return new Response("Not found", { status: 404 });
+      const pathname = new URL(request.url).pathname;
+      if (
+        request.method === "GET" &&
+        ["/assets/geist-sans.woff2", "/assets/geist-mono.woff2"].includes(
+          pathname
+        )
+      ) {
+        return new Response(
+          Bun.file(new URL(".." + pathname, import.meta.url)),
+          {
+            headers: {
+              "Content-Type": "font/woff2",
+              "Cache-Control": "private, max-age=86400",
+            },
+          }
+        );
+      }
+      if (pathname !== path) return new Response("Not found", { status: 404 });
       if (request.method !== "GET")
         return new Response("Method not allowed", { status: 405 });
       const fixes = readFixes(userHome).sort((a, b) =>

@@ -5,7 +5,8 @@ export function recordingStatus(
   entries: LedgerEntry[],
   cutoff?: string,
   recorder?: RecorderStatus,
-  launch?: RecorderStatus
+  launch?: RecorderStatus,
+  collection?: { transcript: string; codeburn: string }
 ) {
   const latest = [...entries].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt)
@@ -30,7 +31,7 @@ export function recordingStatus(
   const messages: Record<string, string> = {
     D0: "No deployment recorded. There is no After cutoff yet.",
     D1: "No session results recorded on this machine yet.",
-    D2: "No results recorded since this deployment. The recording hook has not delivered a new result.",
+    D2: "No results recorded since this deployment. No newer session usage has reached the ledger.",
     D3: "Results are arriving, but their sessions started before deployment or have no recorded start time. They are excluded from After.",
     D4: "Receiving After results. The session count increases only for another qualifying session; another response updates the existing session's readings.",
   };
@@ -44,6 +45,7 @@ export function recordingStatus(
     excludedSessions: updated.length - qualifying.length,
     recorder,
     launch,
+    collection,
   };
 }
 
@@ -66,6 +68,12 @@ export function formatRecordingStatus(
           " · " +
           status.recorder.updatedAt
         : "No runtime attempt recorded yet"),
+    ...(status.collection
+      ? [
+          "Transcript collector: " + status.collection.transcript,
+          "Codeburn: " + status.collection.codeburn,
+        ]
+      : []),
     "After sessions: " +
       status.qualifyingSessions +
       "; excluded since deployment: " +

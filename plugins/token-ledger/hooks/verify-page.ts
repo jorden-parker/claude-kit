@@ -15,7 +15,11 @@ export function verifyPage(
     spanningSessions?: number;
   },
   live = false,
-  diagnostics?: ReturnType<typeof recordingStatus>
+  diagnostics?: ReturnType<typeof recordingStatus>,
+  deployments?: {
+    selected: string;
+    options: { title: string; since: string }[];
+  }
 ) {
   const cell = (index: number, value?: number) =>
     "<td><strong>" +
@@ -61,8 +65,24 @@ export function verifyPage(
         ? '<p class="note">Fewer than five follow-up sessions. Save the baseline now and check again after more sessions.</p>'
         : "");
   }
+  const picker = deployments
+    ? '<form method="get"><label for="deployment">Compare since</label> <select id="deployment" name="deployment" onchange="this.form.submit()">' +
+      deployments.options
+        .map(
+          (option) =>
+            '<option value="' +
+            html(option.since) +
+            '"' +
+            (option.since === deployments.selected ? " selected" : "") +
+            ">" +
+            html(option.title + " · " + option.since) +
+            "</option>"
+        )
+        .join("") +
+      '</select><button type="submit">Use deployment</button><p>Keep the original cost-change deployment selected when installing report updates.</p></form>'
+    : "";
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Token Ledger · Deployment check-in</title><style>
-*{box-sizing:border-box}body{margin:0;background:#fafafa;color:#171717;font:16px/1.5 "Geist",system-ui,sans-serif}header{border-bottom:1px solid #ddd;background:white;padding:14px max(5vw,20px);font-weight:650}main{max-width:800px;margin:36px auto;padding:0 20px}h1{font-size:clamp(28px,5vw,44px);letter-spacing:-.055em;margin:0}p{max-width:64ch}.deployment,small{color:#565656}.deployment{font-family:ui-monospace,monospace;overflow-wrap:anywhere}table{width:100%;background:white;border:1px solid #ddd;border-spacing:0;border-radius:10px;overflow:hidden}caption{text-align:left;font-weight:600;padding:6px 0}th,td{text-align:left;padding:7px clamp(7px,2vw,18px);border-bottom:1px solid #eee}thead{background:#f3f3f3}tbody th{font-size:14px;font-weight:550}tr:last-child td,tr:last-child th{border-bottom:0}strong{font:650 20px/1.1 ui-monospace,monospace}small{display:block;font:12px/1.5 ui-monospace,monospace}.note{border-left:3px solid #888;padding-left:12px;font-size:14px}</style><header>Token Ledger${live ? '<p id="live-status" role="status" aria-live="polite">Live · checks for new recorded results every 2 seconds</p>' : ""}</header><main><h1>Deployment check-in</h1>${content}${diagnostics ? '<section aria-labelledby="recording-title"><h2 id="recording-title">Recording status</h2><p>Tell me the D-code below; no terminal output is needed.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + html(formatRecordingStatus(diagnostics)) + "</pre></section>" : ""}</main>${live ? "<script>" + liveVerifyScript + "</script>" : ""}</html>`;
+*{box-sizing:border-box}body{margin:0;background:#fafafa;color:#171717;font:16px/1.5 "Geist",system-ui,sans-serif}header{border-bottom:1px solid #ddd;background:white;padding:14px max(5vw,20px);font-weight:650}main{max-width:800px;margin:36px auto;padding:0 20px}h1{font-size:clamp(28px,5vw,44px);letter-spacing:-.055em;margin:0}p{max-width:64ch}.deployment,small{color:#565656}.deployment{font-family:ui-monospace,monospace;overflow-wrap:anywhere}table{width:100%;background:white;border:1px solid #ddd;border-spacing:0;border-radius:10px;overflow:hidden}caption{text-align:left;font-weight:600;padding:6px 0}th,td{text-align:left;padding:7px clamp(7px,2vw,18px);border-bottom:1px solid #eee}thead{background:#f3f3f3}tbody th{font-size:14px;font-weight:550}tr:last-child td,tr:last-child th{border-bottom:0}strong{font:650 20px/1.1 ui-monospace,monospace}small{display:block;font:12px/1.5 ui-monospace,monospace}.note{border-left:3px solid #888;padding-left:12px;font-size:14px}</style><header>Token Ledger${live ? '<p id="live-status" role="status" aria-live="polite">Live · checks for new recorded results every 2 seconds</p>' : ""}</header><main><h1>Deployment check-in</h1>${picker}${content}${diagnostics ? '<section aria-labelledby="recording-title"><h2 id="recording-title">Recording status</h2><p>Tell me the D-code below; no terminal output is needed.</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">' + html(formatRecordingStatus(diagnostics)) + "</pre></section>" : ""}</main>${live ? "<script>" + liveVerifyScript + "</script>" : ""}</html>`;
 }
 
 export const liveVerifyScript = `
@@ -75,7 +95,7 @@ async function refreshReadings() {
     const next = new DOMParser().parseFromString(await response.text(), "text/html").querySelector("main");
     const current = document.querySelector("main");
     if (!next || !current) throw new Error("Invalid report");
-    if (next.innerHTML !== current.innerHTML && !getSelection()?.toString()) current.innerHTML = next.innerHTML;
+    if (next.innerHTML !== current.innerHTML && !getSelection()?.toString() && document.activeElement?.tagName !== "SELECT") current.innerHTML = next.innerHTML;
     status.textContent = "Live · checks for new recorded results every 2 seconds";
   } catch {
     status.textContent = "Disconnected · showing last results; retrying automatically. Keep claude-ledger verify browser running.";

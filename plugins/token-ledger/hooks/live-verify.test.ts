@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startVerifyServer } from "./live-verify.ts";
@@ -13,7 +19,9 @@ test("live report reads new session results without restarting", async () => {
     JSON.stringify({ title: "Update", appliedAt: "2026-11-27T00:00:00Z" }) +
       "\n"
   );
-  const { server, url } = startVerifyServer(home);
+  const { server, url } = startVerifyServer(home, {
+    discover: async () => ({ roots: [], message: "Test discovery" }),
+  });
   try {
     const first = await fetch(url);
     expect(first.headers.get("cache-control")).toBe("no-store");
@@ -114,4 +122,59 @@ test("browser refresh retains readings on disconnect and defers replacing select
   disconnected = false;
   await timers.shift()!();
   expect(status.textContent).toContain("Live");
+});
+
+test("a report records raw transcripts without Stop hooks and preserves selected comparison", async () => {
+  const home = mkdtempSync(join(tmpdir(), "live-source-"));
+  const ledger = join(home, ".cache/token-ledger");
+  const project = join(home, ".claude/projects/project");
+  mkdirSync(ledger, { recursive: true });
+  mkdirSync(project, { recursive: true });
+  const original = "2026-11-27T13:00:00.000Z";
+  writeFileSync(
+    join(ledger, "fixes.jsonl"),
+    [
+      { title: "Cost change", appliedAt: original },
+      { title: "Report update", appliedAt: "2026-11-27T16:00:00.000Z" },
+    ]
+      .map((fix) => JSON.stringify(fix))
+      .join("\n")
+  );
+  writeFileSync(
+    join(project, "new.jsonl"),
+    JSON.stringify({
+      timestamp: "2026-11-27T15:00:00.000Z",
+      cwd: "/work",
+      message: {
+        id: "reply",
+        model: "sol",
+        usage: { input_tokens: 4, output_tokens: 1 },
+        content: [],
+        stop_reason: "tool_use",
+      },
+    }) + "\n"
+  );
+  const { server, url } = startVerifyServer(home, {
+    discover: async () => ({
+      roots: [project],
+      message: "Connected to Codeburn",
+    }),
+  });
+  try {
+    expect(await (await fetch(url)).text()).toContain("After<small>0 sessions");
+    const selected = await (
+      await fetch(url + "?deployment=" + encodeURIComponent(original))
+    ).text();
+    expect(selected).toContain("After<small>1 sessions");
+    expect(selected).toContain("Connected to Codeburn");
+    expect(selected).toContain("Compare since");
+    expect((await fetch(url + "?deployment=invalid")).status).toBe(400);
+    expect(
+      JSON.parse(readFileSync(join(ledger, "verify-comparison.json"), "utf8"))
+        .since
+    ).toBe(original);
+  } finally {
+    server.stop(true);
+    rmSync(home, { recursive: true, force: true });
+  }
 });

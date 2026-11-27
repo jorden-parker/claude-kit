@@ -1,3 +1,4 @@
+import { createUsageCollector } from "./usage-collector.ts";
 import { recordHook, readRecorderStatus } from "./recorder.ts";
 import { recordingStatus, formatRecordingStatus } from "./recording-status.ts";
 import { startVerifyServer } from "./live-verify.ts";
@@ -29,13 +30,15 @@ if (command === "diagnose") {
   const fix = readFixes(userHome).sort((a, b) =>
     b.appliedAt.localeCompare(a.appliedAt)
   )[0];
+  const collection = await createUsageCollector(userHome)(fix?.appliedAt);
   console.log(
     formatRecordingStatus(
       recordingStatus(
         readNewestEntries(userHome, Infinity),
         fix?.appliedAt,
         readRecorderStatus(userHome),
-        readRecorderStatus(userHome, "recorder-launch.json")
+        readRecorderStatus(userHome, "recorder-launch.json"),
+        collection
       )
     )
   );

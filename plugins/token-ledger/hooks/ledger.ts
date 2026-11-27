@@ -15,6 +15,7 @@ import {
   rmSync,
   statSync,
   writeFileSync,
+  renameSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -269,30 +270,35 @@ function nudgeGrowth(): number {
 export function recordSession(
   event: StopEvent,
   userHome: string,
-  now: Date
+  now: Date,
+  options: { background?: boolean } = {}
 ): { systemMessage: string } | null {
   const transcriptPath = event.transcript_path;
   if (!event.session_id || !transcriptPath || !existsSync(transcriptPath))
     return null;
   const entryPath = join(ledgerFolder(userHome), `${event.session_id}.json`);
-  const mainSummary = summarizeTranscript(readFileSync(transcriptPath, "utf8"));
+  const transcript = readFileSync(transcriptPath, "utf8");
+  const subagentTranscripts = readSubagentTranscripts(transcriptPath);
+  const mainSummary = summarizeTranscript(transcript);
   const thresholdTokens = mainSummary.startContextTokens + nudgeGrowth();
   const lastNudgeTokens =
     mainSummary.contextTokens < thresholdTokens
       ? 0
       : (readEntry(entryPath)?.lastNudgeTokens ?? 0);
-  const nudge = composeNudge(
-    mainSummary.contextTokens,
-    lastNudgeTokens,
-    thresholdTokens,
-    mainSummary.startContextTokens
-  );
+  const nudge = options.background
+    ? null
+    : composeNudge(
+        mainSummary.contextTokens,
+        lastNudgeTokens,
+        thresholdTokens,
+        mainSummary.startContextTokens
+      );
   const entry: LedgerEntry = {
     tasks: taskMetrics(
-      readFileSync(transcriptPath, "utf8"),
+      transcript,
       parseRates(process.env.TOKEN_LEDGER_PRICING)
     ),
-    workerTasks: readSubagentTranscripts(transcriptPath).map((transcript) =>
+    workerTasks: subagentTranscripts.map((transcript) =>
       taskMetrics(transcript, parseRates(process.env.TOKEN_LEDGER_PRICING))
     ),
     session: event.session_id,
@@ -303,14 +309,18 @@ export function recordSession(
     lastNudgeTokens: nudge ? mainSummary.contextTokens : lastNudgeTokens,
     main: mainSummary.byModel,
     subagents: mergeByModel(
-      readSubagentTranscripts(transcriptPath).map(
+      subagentTranscripts.map(
         (transcript) => summarizeTranscript(transcript).byModel
       )
     ),
     resultCharactersByTool: mainSummary.resultCharactersByTool,
   };
   mkdirSync(dirname(entryPath), { recursive: true });
-  writeFileSync(entryPath, `${JSON.stringify(entry, null, 2)}\n`);
+  const temporary = entryPath + "." + crypto.randomUUID() + ".tmp";
+  writeFileSync(temporary, `${JSON.stringify(entry, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  renameSync(temporary, entryPath);
   return {
     systemMessage: [composeSummary(entry), ...(nudge ? [nudge] : [])].join(
       "\n"
@@ -413,6 +423,7 @@ export function readNewestEntries(
   const folder = ledgerFolder(userHome);
   if (!existsSync(folder)) return [];
   return readdirSync(folder)
+    .filter((fileName) => fileName.endsWith(".json"))
     .map((fileName) => join(folder, fileName))
     .sort((first, second) => statSync(second).mtimeMs - statSync(first).mtimeMs)
     .slice(0, count)

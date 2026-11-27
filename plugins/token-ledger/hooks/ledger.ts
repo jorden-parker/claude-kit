@@ -1,3 +1,4 @@
+import { groupAnswers, scale } from "./checkins.ts";
 import {
   taskMetrics,
   parseRates,
@@ -675,4 +676,23 @@ export function formatVerification(
   checks: { title: string; since: string }[]
 ): string {
   return checks.map((check) => describeCheck(entries, check)).join("\n\n");
+}
+
+export function verificationAnswers(
+  entries: LedgerEntry[],
+  checks: { title: string; since: string }[]
+) {
+  return checks
+    .map((check) => {
+      const groups = compareSessions(entries, check.since);
+      return [
+        check.title,
+        "Laptop check-in · " + scale,
+        "Before",
+        groupAnswers(groups.before),
+        "After",
+        groupAnswers(groups.after),
+      ].join("\n");
+    })
+    .join("\n\n");
 }

@@ -391,7 +391,10 @@ function foldMcpTools(
   return folded;
 }
 
-export function composeLedgerPage(entries: LedgerEntry[]): string {
+export function composeLedgerPage(
+  entries: LedgerEntry[],
+  checkinSection = ""
+): string {
   const rows = entries.flatMap((entry) => {
     const scopedRows = scopedModels(entry);
     const sessionTotal = scopedRows.reduce(
@@ -405,7 +408,7 @@ export function composeLedgerPage(entries: LedgerEntry[]): string {
   const flaggedCount = entries
     .flatMap(scopedModels)
     .filter((scoped) => hasCacheProblem(scoped.totals)).length;
-  const head = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Token Ledger</title><style>${STYLE}</style></head><body><main><h1 id="ledger-title">Token Ledger</h1>`;
+  const head = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Token Ledger</title><style>${STYLE}</style></head><body><main><h1 id="ledger-title">Token Ledger</h1>${checkinSection}`;
   const tail = "</main></body></html>";
   if (rows.length === 0) {
     return `${head}<p>No sessions recorded yet.</p>${tail}`;

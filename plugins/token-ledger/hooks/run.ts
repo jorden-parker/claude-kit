@@ -1,10 +1,11 @@
-import { writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { entries, formPage, html, save, summary } from "./checkin-form.ts";
+import { sessionAnswers, scale } from "./checkins.ts";
 import { composeLedgerPage } from "./ledger-page.ts";
 import {
   formatReport,
   formatVerification,
+  verificationAnswers,
   readFixes,
   readNewestEntries,
   recordFix,
@@ -32,37 +33,117 @@ if (command === "report") {
   console.log(`Recorded fix: ${title}`);
 } else if (command === "verify") {
   const date = process.argv[3];
-  if (date === undefined) {
-    const fixes = readFixes(userHome);
-    console.log(
-      fixes.length === 0
-        ? "No fixes recorded. Pass a date: claude-ledger --verify YYYY-MM-DD"
-        : formatVerification(
-            readNewestEntries(userHome, Infinity),
-            fixes.map((fix) => ({ title: fix.title, since: fix.appliedAt }))
-          )
-    );
-  } else if (Number.isNaN(Date.parse(date))) {
+  if (date !== undefined && Number.isNaN(Date.parse(date))) {
     console.error("Usage: claude-ledger --verify [YYYY-MM-DD]");
     process.exit(2);
-  } else {
-    console.log(
-      formatVerification(readNewestEntries(userHome, Infinity), [
+  }
+  const checks = date
+    ? [
         {
-          title: `Sessions before and after ${date}`,
+          title: "Sessions before and after " + date,
           since: new Date(date).toISOString(),
         },
-      ])
-    );
-  }
-} else if (command === "table") {
-  const pagePath = join(tmpdir(), "claude-ledger.html");
-  writeFileSync(
-    pagePath,
-    composeLedgerPage(readNewestEntries(userHome, sessionCount))
+      ]
+    : readFixes(userHome).map((fix) => ({
+        title: fix.title,
+        since: fix.appliedAt,
+      }));
+  const sessions = readNewestEntries(userHome, Infinity);
+  console.log(
+    checks.length
+      ? formatVerification(sessions, checks) +
+          "\n\n" +
+          verificationAnswers(sessions, checks)
+      : "No fixes recorded. Pass a date: claude-ledger --verify YYYY-MM-DD"
   );
-  Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", pagePath]);
-  console.log(pagePath);
+} else if (command === "checkins") {
+  console.log(summary(entries(userHome)));
+} else if (command === "table") {
+  const prefix = "/" + crypto.randomUUID();
+  const formPath = prefix + "/record";
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    maxRequestBodySize: 8192,
+    async fetch(request) {
+      const url = new URL(request.url);
+      const response = (body: string) =>
+        new Response(body, {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "X-Frame-Options": "DENY",
+          },
+        });
+      if (url.pathname === formPath && request.method === "POST") {
+        if (request.headers.get("origin") !== url.origin)
+          return new Response("Forbidden", { status: 403 });
+        const form = new URLSearchParams(await request.text());
+        try {
+          save(userHome, form);
+        } catch {
+          return new Response("Could not save selections", { status: 400 });
+        }
+        const query = new URLSearchParams({
+          experiment: form.get("experiment")!.trim(),
+          phase: form.get("phase")!,
+          saved: "1",
+        });
+        return Response.redirect(url.origin + formPath + "?" + query, 303);
+      }
+      if (request.method !== "GET")
+        return new Response("Method not allowed", { status: 405 });
+      if (url.pathname === formPath)
+        return response(formPage(entries(userHome), url.searchParams));
+      if (url.pathname !== prefix)
+        return new Response("Unknown page", { status: 404 });
+      const sessions = readNewestEntries(userHome, Infinity);
+      const fixes = readFixes(userHome).map((fix) => ({
+        title: fix.title,
+        since: fix.appliedAt,
+      }));
+      const shown = sessions.slice(0, sessionCount);
+      const section =
+        "<section><h2>Laptop check-in · " +
+        scale +
+        '</h2><a href="' +
+        formPath +
+        '">Record work results</a>' +
+        fixes
+          .map(
+            (fix) =>
+              "<details><summary>" +
+              html(fix.title) +
+              "</summary><pre>" +
+              html(verificationAnswers(sessions, [fix])) +
+              "</pre></details>"
+          )
+          .join("") +
+        shown
+          .map(
+            (session) =>
+              "<details><summary>Single session · " +
+              html(
+                session.project +
+                  " · " +
+                  session.updatedAt +
+                  " · " +
+                  session.session
+              ) +
+              "</summary><pre>" +
+              html(sessionAnswers(session)) +
+              "</pre></details>"
+          )
+          .join("") +
+        "</section>";
+      return response(composeLedgerPage(shown, section));
+    },
+  });
+  const url = "http://127.0.0.1:" + server.port + prefix;
+  console.log(url);
+  Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", url]);
+  console.log("Press Ctrl-C to close this local report.");
 } else {
   try {
     const event = JSON.parse(await Bun.stdin.text());

@@ -11,6 +11,8 @@ Cut what this machine's Claude Code sessions spend on context, tokens and cost, 
 
 The main session's context is reread on every turn, so anything that stays in it is paid for again on each turn. Changes that keep text out of the main context save the most.
 
+For both read and verify, run `claude-ledger --checkins`. Identify these as manually entered work-machine observations. Compare matching workloads and deployed versions, flag fewer than five follow-up sessions or unknown counts, and report overlapping bands as direction uncertain. Use the quality answer to identify rework. Leave monetary savings unknown without pricing and adequate usage data.
+
 ## Read
 
 1. Run `claude-ledger --text 40 > "${TMPDIR:-/tmp}/ledger-report.txt"`, then read that file with the Read tool. Reading the file keeps the output caps from hiding the middle of the report. It lists the newest 40 sessions and, at the end, the biggest tool results beside the guards caps. If the command is missing, run `claude-kit-update` once and try again.

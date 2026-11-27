@@ -3,6 +3,9 @@ set -euo pipefail
 
 script_path="$(realpath "$0")"
 plugin_folder="$(dirname "$(dirname "$script_path")")"
+if [ "${1:-}" = "--checkins" ]; then
+  exec bun "$plugin_folder/hooks/run.ts" checkins
+fi
 if [ "${1:-}" = "--text" ]; then
   shift
   exec bun "$plugin_folder/hooks/run.ts" report "$@"

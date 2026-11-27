@@ -1,3 +1,4 @@
+import { recordingStatus, formatRecordingStatus } from "./recording-status.ts";
 import { startVerifyServer } from "./live-verify.ts";
 import { homedir } from "node:os";
 import { entries, formPage, html, save, summary } from "./checkin-form.ts";
@@ -28,7 +29,16 @@ function printWorkResults() {
   console.log("\nManually entered work results\n" + summary(entries(userHome)));
 }
 
-if (command === "analyze") {
+if (command === "diagnose") {
+  const fix = readFixes(userHome).sort((a, b) =>
+    b.appliedAt.localeCompare(a.appliedAt)
+  )[0];
+  console.log(
+    formatRecordingStatus(
+      recordingStatus(readNewestEntries(userHome, Infinity), fix?.appliedAt)
+    )
+  );
+} else if (command === "analyze") {
   const limit = Number(process.argv[3] ?? 40);
   if (process.argv.length > 4 || !Number.isSafeInteger(limit) || limit < 1) {
     console.error("Usage: claude-ledger analyze [positive session count]");
@@ -226,5 +236,7 @@ if (command === "analyze") {
       if (output) console.log(JSON.stringify(output));
       recordReplyMeter(event, userHome);
     }
-  } catch {}
+  } catch (error) {
+    console.error("token-ledger: recording failed: " + String(error));
+  }
 }

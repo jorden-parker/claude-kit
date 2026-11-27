@@ -17,7 +17,9 @@ test("live report reads new session results without restarting", async () => {
   try {
     const first = await fetch(url);
     expect(first.headers.get("cache-control")).toBe("no-store");
-    expect(await first.text()).toContain("After<small>0 sessions");
+    const initial = await first.text();
+    expect(initial).toContain("After<small>0 sessions");
+    expect(initial).toContain("D1 · No session results recorded");
     writeFileSync(
       join(folder, "sessions", "new.json"),
       JSON.stringify({
@@ -34,6 +36,8 @@ test("live report reads new session results without restarting", async () => {
     );
     const updated = await (await fetch(url)).text();
     expect(updated).toContain("After<small>1 sessions");
+    expect(updated).toContain("D4 · Receiving After results");
+    expect(updated).toContain("2026-11-27T01:01:00Z");
     expect(updated).toContain("setTimeout(refreshReadings, 2000)");
     expect(updated).toContain("!getSelection()?.toString()");
     expect((await fetch(url, { method: "POST" })).status).toBe(405);

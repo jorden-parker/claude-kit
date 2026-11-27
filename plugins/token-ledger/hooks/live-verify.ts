@@ -1,3 +1,4 @@
+import { recordingStatus } from "./recording-status.ts";
 import { compareSessions, readFixes, readNewestEntries } from "./ledger.ts";
 import { verifyPage } from "./verify-page.ts";
 
@@ -14,17 +15,16 @@ export function startVerifyServer(userHome: string) {
       const fix = readFixes(userHome).sort((a, b) =>
         b.appliedAt.localeCompare(a.appliedAt)
       )[0];
+      const sessions = readNewestEntries(userHome, Infinity);
       return new Response(
         verifyPage(
           fix && {
             title: fix.title,
             since: fix.appliedAt,
-            ...compareSessions(
-              readNewestEntries(userHome, Infinity),
-              fix.appliedAt
-            ),
+            ...compareSessions(sessions, fix.appliedAt),
           },
-          true
+          true,
+          recordingStatus(sessions, fix?.appliedAt)
         ),
         {
           headers: {

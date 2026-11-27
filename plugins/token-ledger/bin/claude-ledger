@@ -4,6 +4,7 @@ set -euo pipefail
 script_path="$(realpath "$0")"
 plugin_folder="$(dirname "$(dirname "$script_path")")"
 case "${1:-}" in
+  diagnose) exec bun "$plugin_folder/hooks/run.ts" diagnose ;;
   analyze) shift; exec bun "$plugin_folder/hooks/run.ts" analyze "$@" ;;
   verify)
     shift

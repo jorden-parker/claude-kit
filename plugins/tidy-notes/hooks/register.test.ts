@@ -1,4 +1,9 @@
-import type { EngineInterface, On } from "claude-code";
+import type {
+  EngineInterface,
+  On,
+  PromptAutocompleteInput,
+  PromptAutocompleteResult,
+} from "claude-code";
 import { expect, mock, test, type Engine } from "claude-code/testing";
 import { tidyStores } from "./register";
 
@@ -258,4 +263,51 @@ test("/tidy-notes apply asks Claude to apply", async ($, on) => {
   const { submittedPrompts } = await runCommand($, on, "apply");
 
   expect(submittedPrompts[0]).toContain("apply: true");
+});
+
+const autocompleteAt = (text: string) => {
+  const start = text.search(/\S*$/);
+  return { text, cursor: text.length, token: text.slice(start), start };
+};
+
+type AutocompleteCall = {
+  autocomplete: (
+    input: PromptAutocompleteInput
+  ) => Promise<PromptAutocompleteResult>;
+};
+
+const autocomplete = ($: Engine, text: string) =>
+  ($.prompt as unknown as AutocompleteCall).autocomplete(autocompleteAt(text));
+
+const suggestedTexts = (reply: { suggestions: readonly { text: string }[] }) =>
+  reply.suggestions.map((suggestion) => suggestion.text);
+
+test("typing the first word after /tidy-notes suggests apply", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const reply = await autocomplete($, "/tidy-notes ");
+
+  expect(suggestedTexts(reply)).toEqual(["apply"]);
+});
+
+test("a partly typed /tidy-notes action narrows the suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const matchingReply = await autocomplete($, "/tidy-notes ap");
+  const otherReply = await autocomplete($, "/tidy-notes x");
+
+  expect(suggestedTexts(matchingReply)).toEqual(["apply"]);
+  expect(suggestedTexts(otherReply)).toEqual([]);
+});
+
+test("later words, other words and other commands get no /tidy-notes suggestions", async ($, on) => {
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+
+  const laterWordReply = await autocomplete($, "/tidy-notes apply ap");
+  const otherReply = await autocomplete($, "/optimize ap");
+  const commandReply = await autocomplete($, "/tidy-notes");
+
+  expect(suggestedTexts(laterWordReply)).toEqual([]);
+  expect(suggestedTexts(otherReply)).toEqual([]);
+  expect(suggestedTexts(commandReply)).toEqual([]);
 });

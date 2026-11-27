@@ -12,6 +12,10 @@ const COMMAND_NAME = "tidy-notes";
 const TOOL_NAME = "tidy_notes";
 const QUALIFIED_TOOL_NAME = `mcp__tidy-notes__${TOOL_NAME}`;
 const APPLY_ARGUMENT = /^apply$/i;
+const TIDY_NOTES_COMMAND_PREFIX = `/${COMMAND_NAME} `;
+const SUBCOMMAND_SUGGESTIONS = [
+  { text: "apply", description: "Write the changes instead of a dry run" },
+];
 
 const buildInstruction = (isApply: boolean) =>
   isApply
@@ -130,5 +134,17 @@ export const register: Register = (on) => {
     if (e.tool !== (QUALIFIED_TOOL_NAME as string)) return next(e);
     const { apply } = e as unknown as { apply?: boolean };
     return { result: await tidyStores($, apply === true) };
+  });
+
+  on("prompt.autocomplete", async (_, e, next) => {
+    const isFirstTidyNotesArgument =
+      e.text.startsWith(TIDY_NOTES_COMMAND_PREFIX) &&
+      e.start === TIDY_NOTES_COMMAND_PREFIX.length;
+    if (!isFirstTidyNotesArgument) return next(e);
+    const { suggestions } = await next(e);
+    const matchingSubcommands = SUBCOMMAND_SUGGESTIONS.filter((subcommand) =>
+      subcommand.text.startsWith(e.token)
+    );
+    return { suggestions: [...suggestions, ...matchingSubcommands] };
   });
 };

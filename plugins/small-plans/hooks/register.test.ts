@@ -1562,22 +1562,52 @@ test("/small-plans review with only a set submits one prompt naming that set", a
     { [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT }
   );
 
-  expect(reply.text).toBe("Reviewing a set of small plans…");
+  expect(reply.text).toBe(`Reviewing the plans of set ${HANDOFF_SET}…`);
   expect(submittedPrompts).toHaveLength(1);
-  expect(submittedPrompts[0]).toContain("fix-login");
-  expect(submittedPrompts[0]).toContain("list_small_plans");
+  expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${HANDOFF_SET}`);
   expect(submittedPrompts[0]).toContain("update_small_plan");
   expect(submittedPrompts[0]).toContain("Proposed changes");
+  expect(submittedPrompts[0]).not.toContain("AskUserQuestion");
 });
 
-test("/small-plans review with no set asks which set", async ($, on) => {
+test("/small-plans review with one saved set reviews it without asking", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
   const { reply, submittedPrompts } = await runCommand($, on, "review", {
     [HANDOFF_SET_PLAN]: FIX_LOGIN_PLAN_TEXT,
   });
 
-  expect(reply.text).toBe("Reviewing a set of small plans…");
+  expect(askedQuestions).toHaveLength(0);
+  expect(reply.text).toBe(`Reviewing the plans of set ${HANDOFF_SET}…`);
   expect(submittedPrompts).toHaveLength(1);
-  expect(submittedPrompts[0]).toContain("ask the user with AskUserQuestion");
+  expect(submittedPrompts[0]).toContain(`${PROJECT_FOLDER}/${HANDOFF_SET}`);
+  expect(submittedPrompts[0]).toContain("update_small_plan");
+  expect(submittedPrompts[0]).toContain("Proposed changes");
+  expect(submittedPrompts[0]).not.toContain("AskUserQuestion");
+});
+
+test("/small-plans review with several saved sets lists them newest first before reviewing", async ($, on) => {
+  const askedQuestions = answerAskUserQuestion(on);
+  const { submittedPrompts } = await runCommand($, on, "review", {
+    [HANDOFF_SET_PLAN]: "older, from a handoff",
+    [STANDALONE_SET_PLAN]: "newer, planned on its own",
+  });
+
+  expect(askedLabels(askedQuestions)).toEqual([
+    "Add a Dark Mode Toggle · Nov 19, 10:00",
+    "Handoff 002 Fix Login · Nov 18, 09:00",
+  ]);
+  expect(submittedPrompts).toHaveLength(0);
+});
+
+test("/small-plans review says so when no set matches", async ($, on) => {
+  const { reply, submittedPrompts } = await runCommand($, on, "review nope", {
+    [STANDALONE_SET_PLAN]: "newer",
+  });
+
+  expect(reply.text).toBe(
+    'No plans are saved for this project in a set named like "nope". Run /small-plans <work to plan> first.'
+  );
+  expect(submittedPrompts).toHaveLength(0);
 });
 
 test("/small-plans review followed by several words plans that work instead", async ($, on) => {

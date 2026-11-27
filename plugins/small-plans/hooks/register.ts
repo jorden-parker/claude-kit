@@ -1482,40 +1482,6 @@ const askClaudeToRename = (engine: EngineInterface, requestedSet: string) => {
   return { text: "Renaming a set of small plans…" };
 };
 
-const askClaudeToReview = (engine: EngineInterface, requestedSet: string) => {
-  askClaude(
-    engine,
-    [
-      `Review the plans of one saved set of small plans${requestedSet ? `. The user typed "${requestedSet}": if a saved set's name holds it, that is the set to review.` : "."} Call ${QUALIFIED_LIST_TOOL_NAME} to find it: the set this conversation made or talks about, else ask the user with AskUserQuestion which of the newest sets they mean.`,
-      "",
-      "Read every plan of the set in full, and read the code and files each plan refers to, so your review rests on what is really there.",
-      "",
-      "For each plan, check:",
-      "- Steps that are missing, out of order, or depend on something not yet built",
-      "- Claims about the code that are wrong (names, paths, behaviour)",
-      "- Risks: data loss, security, breaking callers, no way to test or roll back",
-      "- Scope: work nobody asked for, or parts of the goal left out",
-      "- Conflicts or overlap between the plans in this set",
-      "",
-      'Then write a "Proposed changes" list, grouped by plan. Each entry: the problem, the change, and why, in one or two lines. Leave out anything that is only taste.',
-      "",
-      `Then apply the proposed changes with ${QUALIFIED_UPDATE_TOOL_NAME}. Keep each plan's structure and voice, change only what the list names, and leave a plan that is in progress or done unchanged.`,
-      "",
-      "Finish with a short summary: what changed in each plan, and anything you left unchanged because it needs the user's decision.",
-    ].join("\n")
-  );
-  return { text: "Reviewing a set of small plans…" };
-};
-
-const runReviewCommand = (
-  engine: EngineInterface,
-  laterWords: string[],
-  requestedWork: string
-) =>
-  laterWords.length <= 1
-    ? askClaudeToReview(engine, laterWords[0] ?? "")
-    : planWork(engine, requestedWork);
-
 const runRenameCommand = (engine: EngineInterface, laterWords: string[]) => {
   const requestedSet = laterWords[0] ?? "";
   const newName = laterWords.slice(1).join(" ");
@@ -1965,14 +1931,12 @@ const buildSet = async (
   );
 };
 
-const buildPlans = async (
+const listSetNamesNotDone = async (
   engine: EngineInterface,
-  requestedName: string,
-  requestedPlan: string
-) => {
-  const projectFolder = await resolveProjectFolder(engine);
-  const savedSetNames = await listSetsNewestFirst(engine);
-  const setNamesNotDone = (
+  projectFolder: string,
+  savedSetNames: string[]
+) =>
+  (
     await Promise.all(
       savedSetNames.map(async (name) =>
         (await listPlanNamesNotDone(engine, `${projectFolder}/${name}`))
@@ -1982,6 +1946,19 @@ const buildPlans = async (
       )
     )
   ).filter(Boolean);
+
+const buildPlans = async (
+  engine: EngineInterface,
+  requestedName: string,
+  requestedPlan: string
+) => {
+  const projectFolder = await resolveProjectFolder(engine);
+  const savedSetNames = await listSetsNewestFirst(engine);
+  const setNamesNotDone = await listSetNamesNotDone(
+    engine,
+    projectFolder,
+    savedSetNames
+  );
   if (
     !requestedName &&
     savedSetNames.length > 0 &&
@@ -2010,6 +1987,83 @@ const buildPlans = async (
       )
     : buildPicked(requestedName);
 };
+
+const askClaudeToReview = (
+  engine: EngineInterface,
+  setName: string,
+  setFolder: string
+) => {
+  askClaude(
+    engine,
+    [
+      `Review the plans of the saved set of small plans "${setName}", in ${setFolder}.`,
+      "",
+      "Read every plan of the set in full, and read the code and files each plan refers to, so your review rests on what is really there.",
+      "",
+      "For each plan, check:",
+      "- Steps that are missing, out of order, or depend on something not yet built",
+      "- Claims about the code that are wrong (names, paths, behaviour)",
+      "- Risks: data loss, security, breaking callers, no way to test or roll back",
+      "- Scope: work nobody asked for, or parts of the goal left out",
+      "- Conflicts or overlap between the plans in this set",
+      "",
+      'Then write a "Proposed changes" list, grouped by plan. Each entry: the problem, the change, and why, in one or two lines. Leave out anything that is only taste.',
+      "",
+      `Then apply the proposed changes with ${QUALIFIED_UPDATE_TOOL_NAME}. Keep each plan's structure and voice, change only what the list names, and leave a plan that is in progress or done unchanged.`,
+      "",
+      "Finish with a short summary: what changed in each plan, and anything you left unchanged because it needs the user's decision.",
+    ].join("\n")
+  );
+  return { text: `Reviewing the plans of set ${setName}…` };
+};
+
+const reviewSet = async (
+  engine: EngineInterface,
+  projectFolder: string,
+  setNames: string[],
+  pickedName: string | undefined,
+  requestedName: string
+): Promise<{ text: string }> => {
+  if (pickedName === undefined)
+    return {
+      text: `No set was picked. Run /${COMMAND_NAME} review <set> with one of: ${setNames.join(", ")}.`,
+    };
+  const setName = matchSetNames(setNames, pickedName)[0];
+  if (!setName)
+    return {
+      text: `No plans are saved for this project${requestedName ? ` in a set named like "${requestedName}"` : ""}. Run /${COMMAND_NAME} <work to plan> first.`,
+    };
+  return askClaudeToReview(engine, setName, `${projectFolder}/${setName}`);
+};
+
+const reviewPlans = async (engine: EngineInterface, requestedName: string) => {
+  const projectFolder = await resolveProjectFolder(engine);
+  const savedSetNames = await listSetsNewestFirst(engine);
+  const setNames = requestedName
+    ? savedSetNames
+    : await listSetNamesNotDone(engine, projectFolder, savedSetNames);
+  const reviewPicked = (pickedName: string | undefined) =>
+    reviewSet(engine, projectFolder, setNames, pickedName, requestedName);
+  return !requestedName && setNames.length > 1
+    ? chooseFromList(
+        engine,
+        "Plan set",
+        SET_QUESTION,
+        setNames,
+        labelSet,
+        reviewPicked
+      )
+    : reviewPicked(requestedName);
+};
+
+const runReviewCommand = (
+  engine: EngineInterface,
+  laterWords: string[],
+  requestedWork: string
+) =>
+  laterWords.length <= 1
+    ? reviewPlans(engine, laterWords[0] ?? "")
+    : planWork(engine, requestedWork);
 
 type BoardPlan = {
   name: string;

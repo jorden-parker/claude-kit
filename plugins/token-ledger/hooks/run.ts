@@ -1,3 +1,4 @@
+import { createTranscriptSync } from "./transcript-sync.ts";
 import { compareModelCohorts, modelCohort } from "./model-comparison.ts";
 import { createUsageCollector } from "./usage-collector.ts";
 import { recordHook, readRecorderStatus } from "./recorder.ts";
@@ -27,7 +28,18 @@ function printWorkResults() {
   console.log("\nManually entered work results\n" + summary(entries(userHome)));
 }
 
-if (command === "diagnose") {
+if (command === "rescan") {
+  const sync = createTranscriptSync(
+    userHome,
+    process.env.CLAUDE_CONFIG_DIR,
+    true
+  );
+  const status = sync(undefined);
+  console.log(
+    `Scanned ${status.found} transcript files; imported or refreshed ${status.synced} session records. ${status.pending} without usable timestamped usage; ${status.errors} read errors.`
+  );
+  if (status.errors) process.exitCode = 1;
+} else if (command === "diagnose") {
   const fix = readFixes(userHome).sort((a, b) =>
     b.appliedAt.localeCompare(a.appliedAt)
   )[0];

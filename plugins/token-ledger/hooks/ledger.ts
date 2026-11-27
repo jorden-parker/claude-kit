@@ -17,6 +17,7 @@ import {
   statSync,
   writeFileSync,
   renameSync,
+  utimesSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -356,6 +357,7 @@ export function recordSession(
   writeFileSync(temporary, `${JSON.stringify(entry, null, 2)}\n`, {
     mode: 0o600,
   });
+  if (options.background) utimesSync(temporary, now, now);
   renameSync(temporary, entryPath);
   return {
     systemMessage: [composeSummary(entry), ...(nudge ? [nudge] : [])].join(

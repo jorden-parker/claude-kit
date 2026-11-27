@@ -42,11 +42,12 @@ function sourceMetadata(text: string) {
 }
 export function createTranscriptSync(
   home: string,
-  configRoot = process.env.CLAUDE_CONFIG_DIR
+  configRoot = process.env.CLAUDE_CONFIG_DIR,
+  allHistory = false
 ) {
   const seen = new Map<string, string>();
   const legacy = new Map(
-    readNewestEntries(home, 20)
+    (allHistory ? [] : readNewestEntries(home, 20))
       .filter((entry) => !entry.tasks || !entry.workerTasks)
       .map((entry) => [entry.session, entry])
   );
@@ -60,7 +61,7 @@ export function createTranscriptSync(
       previousCutoff = cutoff;
     }
     const status = { synced: 0, found: 0, errors: 0, pending: 0 };
-    const boundary = cutoff ? Date.parse(cutoff) : Infinity;
+    const boundary = allHistory ? 0 : cutoff ? Date.parse(cutoff) : Infinity;
     if (!legacy.size && !Number.isFinite(boundary)) return status;
     const roots = new Set([
       join(home, ".claude/projects"),
@@ -79,7 +80,15 @@ export function createTranscriptSync(
       try {
         const stats = statSync(path);
         const id = basename(path, ".jsonl");
-        const old = legacy.get(id);
+        const target = join(home, ".cache/token-ledger/sessions", id + ".json");
+        let existing;
+        try {
+          existing = JSON.parse(readFileSync(target, "utf8"));
+        } catch {}
+        const old =
+          allHistory && existing && (!existing.tasks || !existing.workerTasks)
+            ? existing
+            : legacy.get(id);
         if (old) {
           const recovered = recordSession(
             { session_id: id, transcript_path: path, cwd: old.project },
@@ -127,11 +136,6 @@ export function createTranscriptSync(
           seen.set(path, signature);
           continue;
         }
-        const target = join(home, ".cache/token-ledger/sessions", id + ".json");
-        let existing;
-        try {
-          existing = JSON.parse(readFileSync(target, "utf8"));
-        } catch {}
         if (
           existing?.updatedAt &&
           Date.parse(existing.updatedAt) >= Date.parse(lastSourceTime)

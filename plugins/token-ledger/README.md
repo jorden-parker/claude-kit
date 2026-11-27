@@ -101,3 +101,5 @@ When Codeburn is installed, the live usage view matches its local Claude export 
 The live report reads both Codeburn JSON export formats, v2 and v3. When a session has both detailed records and a session total, the detailed records take precedence. See the [Codeburn export format](https://codeburn.app/docs/export-format).
 
 On macOS, a desktop-only CodeBurn installation in `/Applications` or `~/Applications` also works. The ledger runs the app’s bundled engine for discovery and exports.
+
+After restoring Claude Code history to `~/.claude/projects`, run `claude-ledger rescan` once. It checks all transcript dates, includes subagent usage under the parent session, and fills missing ledger details when the restored totals match. Repeating the command skips up-to-date records. Historical imports retain their original usage dates. The live usage table still shows only the newest 20 sessions.

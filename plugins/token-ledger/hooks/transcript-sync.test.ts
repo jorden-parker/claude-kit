@@ -158,3 +158,18 @@ test("recovers historical per-call detail only when archived totals match", () =
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("full rescan imports restored historical usage once and preserves its chronological position", () => {
+  const { home, path, record } = fixture();
+  try {
+    writeFileSync(path, usageLine("2026-10-01T10:00:00.000Z"));
+    const rescan = () => createTranscriptSync(home, undefined, true)(undefined);
+    expect(rescan().synced).toBe(1);
+    const result = JSON.parse(readFileSync(record, "utf8"));
+    expect(result.updatedAt).toBe("2026-10-01T10:00:00.000Z");
+    expect(result.tasks[0].requests).toHaveLength(1);
+    expect(rescan().synced).toBe(0);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

@@ -49,3 +49,44 @@ test("updating a follow-up preserves the baseline and compares only known bands"
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("CLI analysis and verification read saved work answers without local sessions", () => {
+  const home = mkdtempSync(join(tmpdir(), "ledger-cli-"));
+  const cli = join(import.meta.dir, "../bin/claude-ledger");
+  const run = (...args: string[]) =>
+    Bun.spawnSync([cli, ...args], { env: { ...process.env, HOME: home } });
+  try {
+    const form = new URLSearchParams({
+      version: "v1",
+      experiment: "test workload",
+      phase: "Before",
+      quality: "First try",
+      B: "B3",
+    });
+    save(home, form);
+    form.set("phase", "After");
+    form.set("A", "A2");
+    form.set("B", "B2");
+    save(home, form);
+    for (const args of [
+      ["analyze", "1"],
+      ["verify"],
+      ["verify", "since", "2026-11-25"],
+      ["--verify", "2026-11-25"],
+    ]) {
+      const result = run(...args);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).toContain("B2 · 40k–<80k (lower)");
+      expect(result.stdout.toString()).toContain("too early");
+    }
+    for (const args of [
+      ["analyze", "0"],
+      ["verify", "since", "2026-02-30"],
+      ["verify", "since"],
+    ]) {
+      expect(run(...args).exitCode).toBe(2);
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

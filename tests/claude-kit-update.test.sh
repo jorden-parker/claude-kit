@@ -16,6 +16,7 @@ echo "$*" >> "$CLAUDE_CALLS"
 case "$*" in
   "plugin marketplace list --json") cat "$MARKETPLACES_JSON" ;;
   "plugin list --available --json") cat "$PLUGINS_JSON" ;;
+  "plugin install token-ledger@claude-kit --scope user") [ -z "${INSTALL_FAILS:-}" ] || exit 1 ;;
   "plugin update broken@claude-kit --scope user") exit 1 ;;
   "plugin update guards@claude-kit --scope user")
     if [ -n "${GUARDS_UP_TO_DATE:-}" ]; then
@@ -357,4 +358,14 @@ HOME="$home_override" BRAINSTORM_DIR="$sandbox/work-brainstorm" run_update >/dev
 expect "BRAINSTORM_DIR set leaves the old brainstorm folder where it is" [ "$(cat "$home_override/.claude/brainstorm/alpha/set-one/01-step.md")" = kept ]
 expect "BRAINSTORM_DIR set creates no new brainstorm folder" [ ! -e "$home_override/.local/share/brainstorm" ]
 
+echo '{"installed":[{"id":"ledger-tune@claude-kit","scope":"user"}]}' > "$sandbox/plugins.json"
+INSTALL_FAILS=1 run_update >/dev/null
+expect "failed collector install is reported" [ "$?" -eq 1 ]
+expect "failed install preserves the old plugin" not_called "plugin uninstall"
+run_update >/dev/null
+expect "retry installs collector before retiring old plugin" calls_in_order "plugin install token-ledger@claude-kit --scope user" "plugin uninstall ledger-tune@claude-kit --scope user"
+echo '{"installed":[{"id":"ledger-tune@claude-kit","scope":"user"},{"id":"token-ledger@claude-kit","scope":"user"}]}' > "$sandbox/plugins.json"
+run_update >/dev/null
+expect "existing collector updates before retiring old plugin" calls_in_order "plugin update token-ledger@claude-kit --scope user" "plugin uninstall ledger-tune@claude-kit --scope user"
+expect "existing collector avoids reinstall" not_called "plugin install"
 [ "$failures" -eq 0 ] || exit 1

@@ -1,3 +1,4 @@
+import { summarizeRuns } from "../bin/compare-runs.ts";
 import { groupAnswers, scale } from "./checkins.ts";
 import {
   taskMetrics,
@@ -630,13 +631,22 @@ export function compareSessions(
   entries: LedgerEntry[],
   since: string
 ): { before: SessionGroup; after: SessionGroup; spanningSessions: number } {
+  const { before, after, spanningSessions } = groupEntries(entries, since);
+  return {
+    before: describeGroup(before),
+    after: describeGroup(after),
+    spanningSessions,
+  };
+}
+
+function groupEntries(entries: LedgerEntry[], since: string) {
   const updatedAfter = entries.filter((entry) => entry.updatedAt >= since);
   const after = updatedAfter.filter(
     (entry) => entry.startedAt !== undefined && entry.startedAt >= since
   );
   return {
-    before: describeGroup(entries.filter((entry) => entry.updatedAt < since)),
-    after: describeGroup(after),
+    before: entries.filter((entry) => entry.updatedAt < since),
+    after,
     spanningSessions: updatedAfter.length - after.length,
   };
 }
@@ -684,7 +694,17 @@ export function verificationAnswers(
 ) {
   return checks
     .map((check) => {
-      const groups = compareSessions(entries, check.since);
+      const samples = groupEntries(entries, check.since);
+      const groups = {
+        before: describeGroup(samples.before),
+        after: describeGroup(samples.after),
+      };
+      const meanCost = (sample: LedgerEntry[]) => {
+        const cost = summarizeRuns(sample).estimatedCost;
+        return typeof cost === "number"
+          ? (cost / sample.length).toFixed(6)
+          : "unknown";
+      };
       return [
         check.title,
         "Laptop check-in · " + scale,
@@ -692,7 +712,52 @@ export function verificationAnswers(
         groupAnswers(groups.before),
         "After",
         groupAnswers(groups.after),
+        "Mean estimated cost per session: " +
+          meanCost(samples.before) +
+          " before → " +
+          meanCost(samples.after) +
+          " after",
+        ...(
+          [
+            "medianContextTokens",
+            "medianToolResultCharacters",
+            "medianTokens",
+            "cacheReadPercent",
+          ] as const
+        ).map((metric) => {
+          const delta = groups.after[metric] - groups.before[metric];
+          const direction =
+            !groups.before.sessions || !groups.after.sessions
+              ? "unknown"
+              : delta === 0
+                ? "unchanged"
+                : delta > 0
+                  ? "higher"
+                  : "lower";
+          return metric + ": " + direction;
+        }),
       ].join("\n");
     })
     .join("\n\n");
+}
+
+export function formatAnalysis(entries: LedgerEntry[]) {
+  if (!entries.length) return "No local sessions recorded yet.";
+  const usage = summarizeRuns(entries);
+  const covered = entries.filter((entry) => entry.tasks !== undefined).length;
+  return [
+    "Local usage · " + entries.length + " sessions",
+    groupAnswers(describeGroup(entries)),
+    "Worker calls: " +
+      (covered
+        ? usage.workerCalls +
+          " recorded (" +
+          covered +
+          "/" +
+          entries.length +
+          " sessions with task data)"
+        : "unknown"),
+    "Estimated cost across sessions: " + usage.estimatedCost,
+    ...describeToolCaps(entries),
+  ].join("\n");
 }

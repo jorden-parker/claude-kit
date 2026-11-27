@@ -4,6 +4,7 @@ import { sessionAnswers, scale } from "./checkins.ts";
 import { composeLedgerPage } from "./ledger-page.ts";
 import {
   formatReport,
+  formatAnalysis,
   formatVerification,
   verificationAnswers,
   readFixes,
@@ -21,7 +22,19 @@ const userHome = process.env.HOME ?? homedir();
 const command = process.argv[2];
 const sessionCount = Number(process.argv[3]) || Infinity;
 
-if (command === "report") {
+function printWorkResults() {
+  console.log("\nManually entered work results\n" + summary(entries(userHome)));
+}
+
+if (command === "analyze") {
+  const limit = Number(process.argv[3] ?? 40);
+  if (process.argv.length > 4 || !Number.isSafeInteger(limit) || limit < 1) {
+    console.error("Usage: claude-ledger analyze [positive session count]");
+    process.exit(2);
+  }
+  console.log(formatAnalysis(readNewestEntries(userHome, limit)));
+  printWorkResults();
+} else if (command === "report") {
   console.log(formatReport(readNewestEntries(userHome, sessionCount)));
 } else if (command === "fixed") {
   const title = process.argv[3];
@@ -33,7 +46,12 @@ if (command === "report") {
   console.log(`Recorded fix: ${title}`);
 } else if (command === "verify") {
   const date = process.argv[3];
-  if (date !== undefined && Number.isNaN(Date.parse(date))) {
+  if (
+    date !== undefined &&
+    (Number.isNaN(Date.parse(date)) ||
+      (/^\d{4}-\d{2}-\d{2}$/.test(date) &&
+        new Date(date).toISOString().slice(0, 10) !== date))
+  ) {
     console.error("Usage: claude-ledger --verify [YYYY-MM-DD]");
     process.exit(2);
   }
@@ -56,6 +74,7 @@ if (command === "report") {
           verificationAnswers(sessions, checks)
       : "No fixes recorded. Pass a date: claude-ledger --verify YYYY-MM-DD"
   );
+  printWorkResults();
 } else if (command === "checkins") {
   console.log(summary(entries(userHome)));
 } else if (command === "table") {

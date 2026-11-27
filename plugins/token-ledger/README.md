@@ -55,8 +55,15 @@ New records optionally include `tasks` and `workerTasks`, with requested/resolve
 Set `TOKEN_LEDGER_PRICING` to a JSON object keyed by exact returned model ID; each value has nonnegative `input`, `output`, `cacheRead` and `cacheWrite` rates per million tokens in one currency. Incomplete usage or missing rates produces unknown cost. Estimates are not authoritative billing. Worker usage is retained separately when parent-task attribution is unavailable; use one task per session when comparing complete task costs. See [comparison instructions](../../docs/cost-comparison.md) and `bun bin/compare-runs.ts <baseline-folder> <candidate-folder>`.
 
 Cache labels describe observed reuse, not waste. Model token shares do not establish whether delegation saves money. Context nudges recommend a reset only at a task boundary when old context is no longer useful.
+
 ### Record work results across two machines
 
 At work, open `claude-ledger` and expand a fix or a single session under **Laptop check-in**. The terminal comparison `claude-ledger --verify [YYYY-MM-DD]` also prints the Before and After answers for a fix. On the laptop, open `claude-ledger`, choose **Record work results**, and match each displayed code and version. Name the experiment and workload once. Choose Before, After, or Single session and open its selections. Saving the same experiment and phase updates that observation. Use a separate experiment name to retain another window. The report server runs on loopback until Ctrl-C.
 
 Read saved selections with `claude-ledger --checkins`. Records live in `~/.cache/token-ledger/work-checkins.sqlite` on the recording machine. Single-session token counts include the main agent and all subagents. Equal ranges leave the direction uncertain. An updated work report requires the released plugin and CLI.
+
+### Local analysis and verification
+
+Run `claude-ledger analyze` for the latest 40 local sessions, or `claude-ledger analyze 10` to select a different sample. It reports median usage, tool-result sizes, recorded worker calls and estimated cost where pricing is complete. Saved work-machine selections appear in a separate section.
+
+Run `claude-ledger verify` to compare sessions around recorded deployments, or `claude-ledger verify since 2026-11-25` to supply a boundary. Read the answer codes on the work screen and select them in the laptop form. Both commands run locally without calling a model. The collector continues recording automatically. For recommendations, ask your assistant to review `claude-ledger analyze` or `claude-ledger --checkins`.

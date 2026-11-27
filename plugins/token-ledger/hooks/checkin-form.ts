@@ -96,6 +96,13 @@ export function summary(records: Entry[]) {
           record.version +
           " · quality: " +
           record.quality,
+        ...(record.phase === "After" && ["A1", "A2"].includes(codes[0])
+          ? ["Fewer than five follow-up sessions: too early to judge."]
+          : []),
+        ...(record.phase === "After" && codes[0] === "A?"
+          ? ["Follow-up sample size unknown."]
+          : []),
+        "Estimated cost: unknown",
         ...relevant(record.phase).map((row, i) => {
           const chosen = row.choices.find((c) => c.code === codes[i]);
           const before = row.choices.find((c) => c.code === prior[i]);

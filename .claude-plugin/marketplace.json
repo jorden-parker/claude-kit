@@ -73,11 +73,6 @@
       "name": "token-ledger",
       "source": "./plugins/token-ledger",
       "description": "Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool) under ~/.cache/token-ledger, shows a one-line summary after each turn, prints a report of recent sessions, and suggests /handoff then /clear when the context grows large"
-    },
-    {
-      "name": "ledger-tune",
-      "source": "./plugins/ledger-tune",
-      "description": "Reads the token-ledger data, recommends changes that cut context, tokens and cost, applies the ones you pick and verifies them against later sessions."
     }
   ]
 }

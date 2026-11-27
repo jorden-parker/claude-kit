@@ -66,13 +66,14 @@ write_profile() {
   mkdir -p .claude
   [ -f "$settings_path" ] || echo '{}' > "$settings_path"
   jq --arg profile "$profile_name" '
-    ["guards", "token-ledger", "ledger-tune", "handoff", "adhd-style"] as $base |
+    ["guards", "token-ledger", "handoff", "adhd-style"] as $base |
     (if $profile == "coding" then ["code-style", "tdd", "quality-gates", "project-notes"]
      elif $profile == "ui" then ["code-style", "tdd", "quality-gates", "ui-design", "project-notes"]
      elif $profile == "planning" then ["brainstorm", "small-plans", "project-notes", "prompt-optimizer"]
      else ["project-notes", "tidy-notes"] end) as $extras |
     ($base + $extras) as $enabled |
-    reduce ["guards", "token-ledger", "ledger-tune", "handoff", "adhd-style", "code-style", "tdd", "quality-gates", "ui-design", "project-notes", "brainstorm", "small-plans", "prompt-optimizer", "tidy-notes"][] as $plugin
+    del(.enabledPlugins["ledger-tune@claude-kit"]) |
+    reduce ["guards", "token-ledger", "handoff", "adhd-style", "code-style", "tdd", "quality-gates", "ui-design", "project-notes", "brainstorm", "small-plans", "prompt-optimizer", "tidy-notes"][] as $plugin
       (. ; .enabledPlugins[($plugin + "@claude-kit")] = ($enabled | index($plugin) != null)) |
     .enabledPlugins["vercel@claude-plugins-official"] = ($profile == "ui") |
     .enabledPlugins["frontend-design@claude-plugins-official"] = ($profile == "ui")
@@ -99,9 +100,26 @@ echo "Updating the claude-kit marketplace"
 claude plugin marketplace update claude-kit
 
 updated_items=()
+failed_collectors=()
 update_pattern='updated from ([^[:space:]]+) to ([^[:space:]]+)'
-while IFS=$'\t' read -r plugin_id plugin_scope; do
-  if update_output="$(claude plugin update "$plugin_id" --scope "$plugin_scope" 2>&1)"; then
+inventory="$(claude plugin list --available --json)"
+while IFS=$'\t' read -r plugin_id plugin_scope project_path; do
+  plugin_directory="${project_path:-$PWD}"
+  if [ "$plugin_id" = "ledger-tune@claude-kit" ]; then
+    for failed_collector in "${failed_collectors[@]+"${failed_collectors[@]}"}"; do
+      if [ "$failed_collector" = "$plugin_scope:$plugin_directory" ]; then continue 2; fi
+    done
+    if ! jq -e --arg scope "$plugin_scope" --arg project "$project_path" '.installed[] | select(.id == "token-ledger@claude-kit" and .scope == $scope and (.projectPath // "") == $project)' <<<"$inventory" >/dev/null; then
+      if ! (cd "$plugin_directory" && claude plugin install token-ledger@claude-kit --scope "$plugin_scope"); then
+        failed_steps+=("install token-ledger in $plugin_scope scope")
+        continue
+      fi
+      updated_items+=("installed token-ledger")
+    fi
+    (cd "$plugin_directory" && claude plugin uninstall "$plugin_id" --scope "$plugin_scope") || failed_steps+=("remove $plugin_id")
+    continue
+  fi
+  if update_output="$(cd "$plugin_directory" && claude plugin update "$plugin_id" --scope "$plugin_scope" 2>&1)"; then
     if [[ "$update_output" =~ $update_pattern ]]; then
       updated_items+=("${plugin_id%@*} ${BASH_REMATCH[1]} to ${BASH_REMATCH[2]}")
       echo "Updated ${plugin_id%@*} from ${BASH_REMATCH[1]} to ${BASH_REMATCH[2]}"
@@ -109,8 +127,9 @@ while IFS=$'\t' read -r plugin_id plugin_scope; do
   else
     echo "$update_output" >&2
     failed_steps+=("update $plugin_id")
+    if [ "$plugin_id" = token-ledger@claude-kit ]; then failed_collectors+=("$plugin_scope:$plugin_directory"); fi
   fi
-done < <(claude plugin list --available --json | jq -r '.installed[] | select(.id | endswith("@claude-kit")) | [.id, .scope] | @tsv')
+done < <(jq -r '.installed | sort_by(.id == "ledger-tune@claude-kit")[] | select(.id | endswith("@claude-kit")) | [.id, .scope, (.projectPath // "")] | @tsv' <<<"$inventory")
 
 move_store_folder small-plans "small plans" SMALL_PLANS_DIR || failed_steps+=("move small plans")
 move_store_folder handoffs "handoffs" HANDOFFS_DIR || failed_steps+=("move handoffs")

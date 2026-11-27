@@ -22,7 +22,6 @@ install any of them on its own. Sync scripts install the same plugins into
 | [tidy-notes](plugins/tidy-notes/) | `/tidy-notes` reformats the Markdown notes in the handoffs, project-notes, small-plans and brainstorm stores so they are consistently formatted without changing their content; a dry run lists what would change and what looks wrong, and `/tidy-notes apply` writes the changes |
 | [small-plans](plugins/small-plans/) | `/small-plans` breaks work into small plans a weaker model can implement and review, saved under `~/.local/share/small-plans/<project>/<set>/`: the work you name, what the conversation leaves, or with `handoff` what a saved handoff leaves; `build` has Haiku agents implement a whole set or one plan while the session reviews and sends back fixes; `rename <set> <new name>` renames a set. |
 | [token-ledger](plugins/token-ledger/) | Records each session's token use (main session and subagents, per model, cache reads and writes, tool result size per tool), shows a one-line summary after each turn, prints a report of recent sessions, and suggests `/handoff` then `/clear` when the context grows large. |
-| [ledger-tune](plugins/ledger-tune/) | Reads the token-ledger data, recommends changes that cut context, tokens and cost, applies the ones you pick and verifies them against later sessions. |
 
 ## Saved notes
 
@@ -87,7 +86,7 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 
 ## Set up and update
 
-`claude-kit-update` sets up a machine and brings every installed claude-kit plugin up to date in one run. It never installs a plugin you do not have; a new one is installed with `claude plugin install <plugin>@claude-kit --scope user`. Each plugin update is recorded as a fix, so `/ledger-tune verify` can compare sessions before and after it. The first run, by its path, links it onto the PATH; after that `claude-kit-update` works from any terminal:
+`claude-kit-update` sets up a machine and brings every installed claude-kit plugin up to date in one run. When retiring ledger-tune, it installs token-ledger in the same scope if needed. Otherwise, a new one is installed with `claude plugin install <plugin>@claude-kit --scope user`. Each plugin update is recorded as a fix, so `claude-ledger verify` can compare sessions before and after it. The first run, by its path, links it onto the PATH; after that `claude-kit-update` works from any terminal:
 
 ```
 ~/src/claude-kit/claude-kit-update
@@ -107,7 +106,7 @@ It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not 
 
 Use `claude-kit-update profile coding|ui|planning|notes` in a project to load the plugins it needs. `code` aliases `coding`; `web` aliases `ui`.
 
-- Every profile keeps guards, token-ledger, ledger-tune, handoff and adhd-style.
+- Every profile keeps guards, token-ledger, handoff and adhd-style.
 - Coding adds code-style, TDD, quality-gates and project-notes.
 - UI adds those plus ui-design, Vercel and frontend-design.
 - Planning adds brainstorm, small-plans, project-notes and prompt-optimizer.

@@ -1,6 +1,6 @@
 {
   "name": "token-ledger",
-  "version": "0.15.4",
+  "version": "0.15.5",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc -p ."

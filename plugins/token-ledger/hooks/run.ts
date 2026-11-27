@@ -1,6 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { verifyPage } from "./verify-page.ts";
+import { startVerifyServer } from "./live-verify.ts";
 import { homedir } from "node:os";
 import { entries, formPage, html, save, summary } from "./checkin-form.ts";
 import { groupCodes, sessionAnswers, scale } from "./checkins.ts";
@@ -39,26 +37,16 @@ if (command === "analyze") {
   console.log(formatAnalysis(readNewestEntries(userHome, limit)));
   printWorkResults();
 } else if (command === "browser-verify") {
-  const fix = readFixes(userHome).sort((a, b) =>
-    b.appliedAt.localeCompare(a.appliedAt)
-  )[0];
-  const page = verifyPage(
-    fix && {
-      title: fix.title,
-      since: fix.appliedAt,
-      ...compareSessions(readNewestEntries(userHome, Infinity), fix.appliedAt),
-    }
-  );
-  const folder = join(userHome, ".cache/token-ledger");
-  mkdirSync(folder, { recursive: true });
-  const path = join(folder, "deployment-check-in.html");
-  writeFileSync(path, page, { mode: 0o600 });
-  console.log(path);
+  const { url } = startVerifyServer(userHome);
+  console.log(url);
   const opener = Bun.spawn([
     process.platform === "darwin" ? "open" : "xdg-open",
-    path,
+    url,
   ]);
   process.exitCode = await opener.exited;
+  console.log(
+    "Live deployment check-in. Keep this command running; Ctrl-C closes the local report."
+  );
 } else if (command === "report") {
   console.log(formatReport(readNewestEntries(userHome, sessionCount)));
 } else if (command === "fixed") {

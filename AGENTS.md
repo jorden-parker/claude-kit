@@ -13,6 +13,11 @@ A plugin's completion is set up when all four of these are true:
 
 Copy the pattern from `plugins/handoff/` or `plugins/brainstorm/`.
 
+Two kinds of command need fewer parts:
+
+- A command that takes only free text, such as `/optimize`, has no subcommands to suggest, so it needs parts 1 and 4 only.
+- A command that is itself a skill, such as `ledger-tune`, already appears in skill menus with its own `argument-hint`, so it needs parts 2 and 3 only.
+
 ### When a command changes
 
 When you add, rename or remove a subcommand, update all of these in the same change:

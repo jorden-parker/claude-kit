@@ -28,6 +28,13 @@ export type CommandDefinition = {
 
 export type Outcome = { text: string; isError: boolean };
 
+type DirectOutcome = Outcome & {
+  replyText: string;
+  filledPrompts: string[];
+  submittedPrompts: string[];
+  isModelReplyMissing: boolean;
+};
+
 export type Suggestion = { text: string; description?: string };
 
 export type AskChoices = { header: string; options: string[] };
@@ -50,6 +57,7 @@ type Turn = {
   submittedPrompts: string[];
   filledPrompts: string[];
   scheduledWork: Promise<unknown>[];
+  isModelReplyMissing: boolean;
 };
 
 const CALLER_MESSAGE =
@@ -67,6 +75,7 @@ const startTurn = (modelReply?: string): Turn => ({
   submittedPrompts: [],
   filledPrompts: [],
   scheduledWork: [],
+  isModelReplyMissing: false,
 });
 
 const matchesFilter = (filter: HookFilter, event: PluginEvent) =>
@@ -215,10 +224,12 @@ export const createPluginHost = ({
       },
     },
     model: {
-      complete: async () =>
-        turn.modelReply === undefined
-          ? { isAnswered: false, reason: NO_MODEL_REPLY_REASON }
-          : { isAnswered: true, text: turn.modelReply },
+      complete: async () => {
+        if (turn.modelReply !== undefined)
+          return { isAnswered: true, text: turn.modelReply };
+        turn.isModelReplyMissing = true;
+        return { isAnswered: false, reason: NO_MODEL_REPLY_REASON };
+      },
     },
     ui: {
       toast: () => undefined,
@@ -300,20 +311,37 @@ export const createPluginHost = ({
       .filter((section) => section)
       .join("\n\n");
 
-  const describeReply = (reply: any, unansweredText: string): Outcome => {
-    if (reply == null) return { text: unansweredText, isError: true };
+  const readTurnReply = (reply: any, unansweredText: string) => {
+    if (reply == null) return { replyText: unansweredText, isError: true };
     if (reply.deny !== undefined) {
-      return { text: stringifyResult(reply.deny), isError: true };
+      return { replyText: stringifyResult(reply.deny), isError: true };
     }
-    return { text: describeTurn(readReplyText(reply)), isError: false };
+    return { replyText: readReplyText(reply), isError: false };
   };
+
+  const describeOutcome = (
+    replyText: string,
+    isError: boolean
+  ): DirectOutcome => ({
+    text: isError ? replyText : describeTurn(replyText),
+    isError,
+    replyText,
+    filledPrompts: turn.filledPrompts,
+    submittedPrompts: turn.submittedPrompts,
+    isModelReplyMissing: turn.isModelReplyMissing,
+  });
+
+  const toOutcome = ({ text, isError }: Outcome): Outcome => ({
+    text,
+    isError,
+  });
 
   const runTurn = (
     eventNames: string[],
     event: PluginEvent,
     unansweredText: string,
     modelReply?: string
-  ): Promise<Outcome> => {
+  ): Promise<DirectOutcome> => {
     const outcome = earlierCalls.then(async () => {
       turn = startTurn(modelReply);
       try {
@@ -322,14 +350,32 @@ export const createPluginHost = ({
           reply ??= await dispatch(eventName, event);
         }
         await finishScheduledWork();
-        return describeReply(reply, unansweredText);
+        const { replyText, isError } = readTurnReply(reply, unansweredText);
+        return describeOutcome(replyText, isError);
       } catch (error) {
-        return { text: describeError(error), isError: true };
+        return describeOutcome(describeError(error), true);
       }
     });
     earlierCalls = outcome;
     return outcome;
   };
+
+  const runCommandTurn = (
+    commandName: string,
+    args: string,
+    modelReply?: string
+  ) =>
+    runTurn(
+      ["command.run"],
+      {
+        command: commandName,
+        args,
+        origin: { kind: "composer" },
+        presentation: { isFullscreen: false, columns: 80 },
+      },
+      `No hook answered /${commandName}.`,
+      modelReply
+    );
 
   return {
     pluginName,
@@ -353,7 +399,7 @@ export const createPluginHost = ({
         ["tool.call", "tool.run"],
         { ...input, tool: qualifyToolName(pluginName, toolName) },
         `No hook answered ${qualifyToolName(pluginName, toolName)}.`
-      ),
+      ).then(toOutcome),
     suggestCompletions: async (composerText: string): Promise<Suggestion[]> => {
       const start = composerText.search(/\S*$/);
       try {
@@ -368,17 +414,9 @@ export const createPluginHost = ({
       }
     },
     runCommand: (commandName: string, args: string, modelReply?: string) =>
-      runTurn(
-        ["command.run"],
-        {
-          command: commandName,
-          args,
-          origin: { kind: "composer" },
-          presentation: { isFullscreen: false, columns: 80 },
-        },
-        `No hook answered /${commandName}.`,
-        modelReply
-      ),
+      runCommandTurn(commandName, args, modelReply).then(toOutcome),
+    runCommandDirectly: (commandName: string, args: string) =>
+      runCommandTurn(commandName, args),
   };
 };
 

@@ -169,31 +169,38 @@ store) and offers what it registers to each tool in the form that tool loads:
 | | Qwen Code | pi |
 | --- | --- | --- |
 | Tools | an MCP server, declared in the extension's `.mcp.json` | a pi extension that calls `pi.registerTool` |
-| Slash commands | `commands/<name>.md` | prompt templates, `prompts/<name>.md` |
+| Slash commands | `commands/<name>.md` | the same pi extension, which calls `pi.registerCommand` |
 | Store | `~/.qwen/claude-kit-store/<plugin>.json` | `~/.pi/agent/claude-kit-store/<plugin>.json` |
 
 - Tools keep their Claude Code names, such as `mcp__brainstorm__render_brainstorm`,
   so the skills call them unchanged.
-- Each registered command also becomes a tool, `mcp__<plugin>__run_<command>`. The
-  generated slash command tells the model to call it with the arguments and to do
-  what the reply says, so the command's real logic runs.
+- Each registered command also becomes a tool, `mcp__<plugin>__run_<command>`. In
+  Qwen Code the generated slash command tells the model to call it with the arguments
+  and to do what the reply says, so the command's real logic runs.
+- In pi a slash command runs at once, with no model turn, so it works with any model,
+  including a local one that calls no tools. Its reply shows as a notification, a
+  prompt it fills goes into pi's editor, and a prompt it submits is sent to the
+  model. Only a command that needs the model's own words, `/handoff save`, sends its
+  `prompts/<name>.md` text to the model instead. A plugin with no extension, such as
+  `prompt-optimizer`, keeps its commands as pi prompt templates.
 - To word a command yourself, add `portable-commands/<name>.md` to the plugin, with
   `{{args}}` where the arguments go. It replaces the generated command on both tools.
   `handoff` does this because the model writes the recap itself, and
   `prompt-optimizer` because `/optimize` is only a prompt there.
 - A picker, such as the plan set list of `/brainstorm` and `/small-plans` or the
   handoff list of `/handoff resume`, asks its question in the tool's own prompt: an
-  MCP elicitation in Qwen Code, and a select dialog (`ctx.ui.select`) in pi. The
-  dialog opens when the model calls the command's tool. Where the tool cannot ask, as
-  in a headless run, nothing is picked and the command says so; `/handoff resume`
-  takes the latest handoff there.
+  MCP elicitation in Qwen Code, and a select dialog (`ctx.ui.select`) in pi. In pi
+  the dialog opens as soon as the command is entered; in Qwen Code it opens when the
+  model calls the command's tool. Where the tool cannot ask, as in a headless run,
+  nothing is picked and the command says so; `/handoff resume` takes the latest
+  handoff there.
 - In pi, a command's subcommands are suggested after its name, such as `save`, `list`
-  and `resume` after `/handoff `. The extension adds an autocomplete provider to pi's
-  editor that asks the plugin's `prompt.autocomplete` hook. Qwen Code shows the
-  argument hint only.
-- Left in Claude Code, because neither tool has a place for them: panes, filling the
-  composer, toasts, and starting a new session from a command. A plugin's start-up
-  host commands do not run either.
+  and `resume` after `/handoff `. Each pi command answers `getArgumentCompletions`
+  from the plugin's `prompt.autocomplete` hook. Qwen Code shows the argument hint
+  only.
+- Left in Claude Code, because neither tool has a place for them: panes, toasts, and
+  starting a new session from a command. Filling the composer works in pi only. A
+  plugin's start-up host commands do not run either.
 
 ### What each script installs
 

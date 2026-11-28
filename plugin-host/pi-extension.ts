@@ -1,9 +1,11 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   createPluginHost,
   NO_QUESTION_PROMPT_REASON,
   qualifyToolName,
   type AskQuestion,
+  type CommandDefinition,
   type PluginHost,
   type Register,
 } from "./engine";
@@ -17,73 +19,36 @@ export type HostedPlugin = {
   askQuestion?: AskQuestion;
 };
 
-type PiSuggestions = {
-  items: { value: string; label: string; description?: string }[];
-  prefix: string;
-};
-
-type PiAutocompleteProvider = {
-  triggerCharacters?: string[];
-  getSuggestions: (
-    lines: string[],
-    cursorLine: number,
-    cursorCol: number,
-    options: unknown
-  ) => Promise<PiSuggestions | null>;
-  applyCompletion: (...completionArguments: any[]) => unknown;
-  shouldTriggerFileCompletion?: (...cursorPosition: any[]) => boolean;
-};
+type PiCompletion = { value: string; label: string; description?: string };
 
 type PiContext = {
   hasUI: boolean;
   ui: {
     select: (title: string, options: string[]) => Promise<string | undefined>;
-    addAutocompleteProvider?: (
-      wrapProvider: (current: PiAutocompleteProvider) => PiAutocompleteProvider
-    ) => unknown;
+    notify: (message: string, kind?: "info" | "warning" | "error") => unknown;
+    setEditorText: (editorText: string) => unknown;
   };
 };
 
 type PiExtensionApi = {
   registerTool: (tool: any) => unknown;
-  on: (
-    eventName: "session_start",
-    handler: (event: unknown, piContext: PiContext) => unknown
+  registerCommand: (
+    commandName: string,
+    options: {
+      description: string;
+      getArgumentCompletions: (
+        argumentPrefix: string
+      ) => Promise<PiCompletion[] | null>;
+      handler: (args: string, piContext: PiContext) => Promise<void>;
+    }
   ) => unknown;
+  sendUserMessage: (message: string) => unknown;
 };
 
-const LAST_WORD = /\S*$/;
-
-const suggestCommandArguments =
-  (host: PluginHost) =>
-  (current: PiAutocompleteProvider): PiAutocompleteProvider => ({
-    triggerCharacters: current.triggerCharacters,
-    getSuggestions: async (lines, cursorLine, cursorCol, options) => {
-      const typedText = (lines[cursorLine] ?? "").slice(0, cursorCol);
-      const isCommandArgument =
-        cursorLine === 0 &&
-        host.commands.some(({ name }) => typedText.startsWith(`/${name} `));
-      const suggestions = isCommandArgument
-        ? await host.suggestCompletions(typedText)
-        : [];
-      if (suggestions.length === 0)
-        return current.getSuggestions(lines, cursorLine, cursorCol, options);
-      return {
-        items: suggestions.map(({ text, description }) => ({
-          value: text,
-          label: text,
-          description,
-        })),
-        prefix: typedText.slice(typedText.search(LAST_WORD)),
-      };
-    },
-    applyCompletion: (...completionArguments) =>
-      current.applyCompletion(...completionArguments),
-    shouldTriggerFileCompletion: (...cursorPosition) =>
-      current.shouldTriggerFileCompletion?.(...cursorPosition) ?? true,
-  });
-
 const CANCELLED_QUESTION_REASON = "The user cancelled the question.";
+const PROMPT_FOLDER = "prompts";
+const PROMPT_ARGUMENTS_PLACEHOLDER = "$ARGUMENTS";
+const FRONT_MATTER = /^---\n[\s\S]*?\n---\n\s*/;
 
 export const startHostedPlugin = async ({
   pluginName,
@@ -102,6 +67,41 @@ export const startHostedPlugin = async ({
   });
   await host.start();
   return host;
+};
+
+const describeCommand = ({ description, argumentHint }: CommandDefinition) =>
+  argumentHint ? `${argumentHint} — ${description}` : description;
+
+const completeArguments =
+  (host: PluginHost, commandName: string) => async (argumentPrefix: string) => {
+    const suggestions = await host.suggestCompletions(
+      `/${commandName} ${argumentPrefix}`
+    );
+    return suggestions.length === 0
+      ? null
+      : suggestions.map(({ text, description }) => ({
+          value: text,
+          label: text,
+          description,
+        }));
+  };
+
+const readPromptTemplate = async (
+  pluginRoot: string,
+  commandName: string,
+  args: string
+) => {
+  try {
+    const template = await readFile(
+      join(pluginRoot, PROMPT_FOLDER, `${commandName}.md`),
+      "utf8"
+    );
+    return template
+      .replace(FRONT_MATTER, "")
+      .replaceAll(PROMPT_ARGUMENTS_PLACEHOLDER, args);
+  } catch {
+    return undefined;
+  }
 };
 
 export const createPiExtension =
@@ -123,11 +123,44 @@ export const createPiExtension =
       ...plugin,
       askQuestion: plugin.askQuestion ?? askInSelectDialog,
     });
-    if (host.commands.length > 0) {
-      pi.on("session_start", (_event, piContext) =>
-        piContext.ui.addAutocompleteProvider?.(suggestCommandArguments(host))
-      );
+
+    const runCommand = async (
+      commandName: string,
+      args: string,
+      piContext: PiContext
+    ) => {
+      latestContext = piContext;
+      const outcome = await host.runCommandDirectly(commandName, args);
+      if (!piContext.hasUI) {
+        pi.sendUserMessage(outcome.text);
+        return;
+      }
+      const promptTemplate = outcome.isModelReplyMissing
+        ? await readPromptTemplate(plugin.pluginRoot, commandName, args)
+        : undefined;
+      if (promptTemplate) {
+        pi.sendUserMessage(promptTemplate);
+        return;
+      }
+      if (outcome.replyText)
+        piContext.ui.notify(
+          outcome.replyText,
+          outcome.isError ? "error" : "info"
+        );
+      for (const filledPrompt of outcome.filledPrompts)
+        piContext.ui.setEditorText(filledPrompt);
+      for (const submittedPrompt of outcome.submittedPrompts)
+        pi.sendUserMessage(submittedPrompt);
+    };
+
+    for (const command of host.commands) {
+      pi.registerCommand(command.name, {
+        description: describeCommand(command),
+        getArgumentCompletions: completeArguments(host, command.name),
+        handler: (args, piContext) => runCommand(command.name, args, piContext),
+      });
     }
+
     for (const tool of listHostTools(host)) {
       pi.registerTool({
         name: qualifyToolName(host.pluginName, tool.name),

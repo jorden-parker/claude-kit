@@ -43,7 +43,7 @@ sync_plugin() {
     hooks_note=". Its command hooks run in a second pi extension, minus the events pi cannot run (see the README)"
   fi
   if [ -f "$package_folder/plugin-host-extension.js" ]; then
-    echo "$plugin_name: $installed_where Its tools run in a pi extension and its slash commands as prompt templates; panes, autocomplete, composer fill and subagents stay in Claude Code$hooks_note"
+    echo "$plugin_name: $installed_where Its tools run in a pi extension, as do its slash commands; panes and subagents stay in Claude Code$hooks_note"
   elif [ -n "$hooks_note" ]; then
     echo "$plugin_name: $installed_where Its command hooks run in a pi extension, minus the events pi cannot run (see the README)."
   else

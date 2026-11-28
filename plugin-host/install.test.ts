@@ -62,7 +62,7 @@ test("qwen: the MCP server is declared in .mcp.json and commands call the run to
   expect(existsSync(join(installedFolder, "hooks", "hooks.json"))).toBe(false);
 });
 
-test("pi: the package manifest names the extension, skills and prompts, and prompts use $ARGUMENTS", async () => {
+test("pi: a plugin whose commands run in the extension lists no prompts, and keeps the prompt file for the commands that need the model", async () => {
   const { installedFolder } = await installPlugin("pi", "brainstorm");
   expect(
     JSON.parse(await readFile(join(installedFolder, "package.json"), "utf8"))
@@ -73,7 +73,6 @@ test("pi: the package manifest names the extension, skills and prompts, and prom
     pi: {
       extensions: ["./plugin-host-extension.js"],
       skills: ["./skills"],
-      prompts: ["./prompts"],
     },
   });
   const promptText = await readFile(

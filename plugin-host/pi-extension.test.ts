@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Register } from "./engine";
@@ -55,7 +55,8 @@ const loadCounter = async () => {
     register: registerCounter,
   })({
     registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool),
-    on: () => undefined,
+    registerCommand: () => undefined,
+    sendUserMessage: () => undefined,
   });
   return { registeredTools, storeFolder };
 };
@@ -131,7 +132,8 @@ const loadPickTool = async () => {
     register: registerPicker,
   })({
     registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool),
-    on: () => undefined,
+    registerCommand: () => undefined,
+    sendUserMessage: () => undefined,
   });
   return registeredTools[0]!;
 };
@@ -178,9 +180,15 @@ const PICK_SUGGESTIONS = [
   { text: "beta", description: "The second plan" },
 ];
 
-const registerCompleter: Register = (registerHook) => {
+const registerCommands: Register = (registerHook) => {
   registerHook("session.start", async ($, event, next) => {
-    await $.command.register({ name: "pick", description: "Picks a plan" });
+    await $.command.register({
+      name: "pick",
+      description: "Picks a plan",
+      argumentHint: "[alpha|beta]",
+    });
+    await $.command.register({ name: "recap", description: "Writes a recap" });
+    await $.command.register({ name: "refuse", description: "Refuses" });
     return next(event);
   });
   registerHook("prompt.autocomplete", async (_engine, event, next) => {
@@ -197,94 +205,146 @@ const registerCompleter: Register = (registerHook) => {
       ],
     };
   });
+  registerHook("command.run", { command: "pick" }, async ($, event) => {
+    const answer = await $.ui.ask("Which plan?", {
+      header: "Plans",
+      options: ["Alpha", "Beta"],
+    });
+    await $.prompt.fill({ text: `Draft for ${answer}` });
+    await $.prompt.submit({ text: `Build ${answer} ${event.args}` });
+    return { text: `chose ${answer}` };
+  });
+  registerHook("command.run", { command: "recap" }, async ($) => {
+    const reply = await $.model.complete({ prompt: "Recap" });
+    return { text: reply.isAnswered ? reply.text : "No recap." };
+  });
+  registerHook("command.run", { command: "refuse" }, () => ({
+    deny: "Not here.",
+  }));
 };
 
-const EDITOR_SUGGESTIONS = { items: [{ value: "file.ts", label: "file.ts" }], prefix: "fi" };
-const APPLIED_COMPLETION = { lines: ["/pick beta"], cursorLine: 0, cursorCol: 10 };
-
-const editorProvider = {
-  triggerCharacters: ["@"],
-  getSuggestions: async () => EDITOR_SUGGESTIONS,
-  applyCompletion: () => APPLIED_COMPLETION,
-  shouldTriggerFileCompletion: () => false,
+type RegisteredPiCommand = {
+  name: string;
+  description: string;
+  getArgumentCompletions: (argumentPrefix: string) => Promise<unknown>;
+  handler: (args: string, piContext: unknown) => Promise<void>;
 };
 
-type PiProvider = typeof editorProvider & {
-  getSuggestions: (
-    lines: string[],
-    cursorLine: number,
-    cursorCol: number,
-    options: unknown
-  ) => Promise<unknown>;
-  applyCompletion: (...completionArguments: unknown[]) => unknown;
-};
-
-const startSession = async (register: Register) => {
-  const sessionStartHandlers: ((event: unknown, piContext: unknown) => unknown)[] = [];
-  const providerFactories: ((current: typeof editorProvider) => PiProvider)[] = [];
+const loadCommands = async (pluginRoot = "/plugin-root") => {
+  const registeredCommands: RegisteredPiCommand[] = [];
+  const sentMessages: string[] = [];
   await createPiExtension({
     pluginName: "completer",
-    pluginRoot: "/plugin-root",
+    pluginRoot,
     storeFolder: await mkdtemp(join(tmpdir(), "plugin-host-pi-")),
-    register,
+    register: registerCommands,
   })({
     registerTool: () => undefined,
-    on: (eventName: string, handler: (event: unknown, piContext: unknown) => unknown) => {
-      if (eventName === "session_start") sessionStartHandlers.push(handler);
-    },
+    registerCommand: (
+      name: string,
+      options: Omit<RegisteredPiCommand, "name">
+    ) => registeredCommands.push({ name, ...options }),
+    sendUserMessage: (message: string) => sentMessages.push(message),
   });
-  for (const handler of sessionStartHandlers) {
-    await handler(
-      { reason: "startup" },
-      {
-        hasUI: true,
-        ui: {
-          select: async () => undefined,
-          addAutocompleteProvider: (
-            factory: (current: typeof editorProvider) => PiProvider
-          ) => providerFactories.push(factory),
-        },
-      }
-    );
-  }
-  return providerFactories;
+  const findCommand = (commandName: string) =>
+    registeredCommands.find((command) => command.name === commandName)!;
+  return { registeredCommands, sentMessages, findCommand };
 };
 
-const suggestAt = (provider: PiProvider, typedText: string) =>
-  provider.getSuggestions([typedText], 0, typedText.length, {});
+const createPiContext = (hasUI = true) => {
+  const shown = {
+    dialogs: [] as { title: string; options: string[] }[],
+    notifications: [] as { message: string; kind?: string }[],
+    editorTexts: [] as string[],
+  };
+  const piContext = {
+    hasUI,
+    ui: {
+      select: async (title: string, options: string[]) => {
+        shown.dialogs.push({ title, options });
+        return "Beta";
+      },
+      notify: (message: string, kind?: string) =>
+        shown.notifications.push({ message, kind }),
+      setEditorText: (editorText: string) => shown.editorTexts.push(editorText),
+    },
+  };
+  return { piContext, shown };
+};
 
-test("a command's subcommands are suggested in pi's editor after the command name", async () => {
-  const [wrapProvider] = await startSession(registerCompleter);
-  const provider = wrapProvider!(editorProvider);
-  expect(await suggestAt(provider, "/pick ")).toEqual({
-    items: [
-      { value: "alpha", label: "alpha", description: "The first plan" },
-      { value: "beta", label: "beta", description: "The second plan" },
-    ],
-    prefix: "",
-  });
-  expect(await suggestAt(provider, "/pick be")).toEqual({
-    items: [{ value: "beta", label: "beta", description: "The second plan" }],
-    prefix: "be",
-  });
+test("each command is registered as a pi command, with its argument hint before its description", async () => {
+  const { registeredCommands } = await loadCommands();
+  expect(
+    registeredCommands.map(({ name, description }) => ({ name, description }))
+  ).toEqual([
+    { name: "pick", description: "[alpha|beta] — Picks a plan" },
+    { name: "recap", description: "Writes a recap" },
+    { name: "refuse", description: "Refuses" },
+  ]);
 });
 
-test("pi's own suggestions are kept wherever the plugin suggests nothing", async () => {
-  const [wrapProvider] = await startSession(registerCompleter);
-  const provider = wrapProvider!(editorProvider);
-  expect(await suggestAt(provider, "/pick zz")).toBe(EDITOR_SUGGESTIONS);
-  expect(await suggestAt(provider, "/pick alpha be")).toBe(EDITOR_SUGGESTIONS);
-  expect(await suggestAt(provider, "/other ")).toBe(EDITOR_SUGGESTIONS);
-  expect(await provider.getSuggestions(["notes", "/pick "], 1, 6, {})).toBe(
-    EDITOR_SUGGESTIONS
-  );
-  expect(provider.applyCompletion(["/pick be"], 0, 8, {}, "be")).toBe(
-    APPLIED_COMPLETION
-  );
-  expect(provider.shouldTriggerFileCompletion()).toBe(false);
-  expect(provider.triggerCharacters).toEqual(["@"]);
+test("a pi command completes its first argument from the plugin's autocomplete hook", async () => {
+  const { findCommand } = await loadCommands();
+  const pickCommand = findCommand("pick");
+  expect(await pickCommand.getArgumentCompletions("")).toEqual([
+    { value: "alpha", label: "alpha", description: "The first plan" },
+    { value: "beta", label: "beta", description: "The second plan" },
+  ]);
+  expect(await pickCommand.getArgumentCompletions("be")).toEqual([
+    { value: "beta", label: "beta", description: "The second plan" },
+  ]);
+  expect(await pickCommand.getArgumentCompletions("alpha be")).toBeNull();
+  expect(await findCommand("recap").getArgumentCompletions("")).toBeNull();
 });
 
-test("a plugin with no command adds no suggestions to pi's editor", async () => {
-  expect(await startSession(() => undefined)).toEqual([]);
+test("a pi command runs at once: it asks in pi's dialog, shows the reply, fills the editor and sends the submitted prompt", async () => {
+  const { findCommand, sentMessages } = await loadCommands();
+  const { piContext, shown } = createPiContext();
+  await findCommand("pick").handler("now", piContext);
+  expect(shown).toEqual({
+    dialogs: [{ title: "Plans: Which plan?", options: ["Alpha", "Beta"] }],
+    notifications: [{ message: "chose Beta", kind: "info" }],
+    editorTexts: ["Draft for Beta"],
+  });
+  expect(sentMessages).toEqual(["Build Beta now"]);
+});
+
+test("a pi command whose hook refuses shows the reason as an error", async () => {
+  const { findCommand, sentMessages } = await loadCommands();
+  const { piContext, shown } = createPiContext();
+  await findCommand("refuse").handler("", piContext);
+  expect(shown.notifications).toEqual([{ message: "Not here.", kind: "error" }]);
+  expect(sentMessages).toEqual([]);
+});
+
+test("a pi command that needs the model's own words sends its prompt template instead", async () => {
+  const pluginRoot = await mkdtemp(join(tmpdir(), "plugin-host-pi-root-"));
+  await mkdir(join(pluginRoot, "prompts"));
+  await writeFile(
+    join(pluginRoot, "prompts", "recap.md"),
+    '---\ndescription: "Writes a recap"\n---\n\nWrite the recap, then call the tool.\n\n<arguments>\n$ARGUMENTS\n</arguments>\n'
+  );
+  const { findCommand, sentMessages } = await loadCommands(pluginRoot);
+  const { piContext, shown } = createPiContext();
+  await findCommand("recap").handler("the parser", piContext);
+  expect(sentMessages).toEqual([
+    "Write the recap, then call the tool.\n\n<arguments>\nthe parser\n</arguments>\n",
+  ]);
+  expect(shown.notifications).toEqual([]);
+});
+
+test("a pi command that needs the model but has no prompt template shows its reply", async () => {
+  const { findCommand, sentMessages } = await loadCommands();
+  const { piContext, shown } = createPiContext();
+  await findCommand("recap").handler("", piContext);
+  expect(shown.notifications).toEqual([{ message: "No recap.", kind: "info" }]);
+  expect(sentMessages).toEqual([]);
+});
+
+test("a pi command run where pi has no dialogs hands its whole reply to the model", async () => {
+  const { findCommand, sentMessages } = await loadCommands();
+  const { piContext, shown } = createPiContext(false);
+  await findCommand("refuse").handler("", piContext);
+  expect(sentMessages).toEqual(["Not here."]);
+  expect(shown.notifications).toEqual([]);
 });

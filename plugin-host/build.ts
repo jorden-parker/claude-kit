@@ -132,7 +132,9 @@ const TARGETS: Record<TargetName, Target> = {
         pi: {
           ...(extensionPaths.length > 0 ? { extensions: extensionPaths } : {}),
           ...(skillFolder ? { skills: [`./${skillFolder}`] } : {}),
-          ...(promptFolder ? { prompts: [`./${promptFolder}`] } : {}),
+          ...(promptFolder && !hasBundle
+            ? { prompts: [`./${promptFolder}`] }
+            : {}),
         },
       });
     },

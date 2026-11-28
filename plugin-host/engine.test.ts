@@ -394,3 +394,58 @@ test("fs.exists tells a file or folder that is there from one that is not", asyn
     (await host.runCommand("find", `${import.meta.dir}/no-such-file`)).text
   ).toBe("false");
 });
+
+const startDirectHost = async (register: Register) => {
+  const host = createPluginHost({
+    pluginName: "direct",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register,
+  });
+  await host.start();
+  return host;
+};
+
+test("runCommandDirectly keeps the reply, the filled prompt and the submitted prompts apart", async () => {
+  const host = await startDirectHost((registerHook) => {
+    registerHook("command.run", { command: "build" }, async (engine, event) => {
+      await engine.prompt.fill({ text: `Draft for ${event.args}` });
+      await engine.prompt.submit({ text: "Build the parser." });
+      return { text: "Building…" };
+    });
+  });
+  expect(await host.runCommandDirectly("build", "the parser")).toEqual({
+    text: "Building…\n\nShow the user this text, word for word, as the prompt to send next:\n\nDraft for the parser\n\nNow carry out these instructions:\n\nBuild the parser.",
+    isError: false,
+    replyText: "Building…",
+    filledPrompts: ["Draft for the parser"],
+    submittedPrompts: ["Build the parser."],
+    isModelReplyMissing: false,
+  });
+});
+
+test("runCommandDirectly says when the command asked the model and no reply was passed", async () => {
+  const host = await startDirectHost((registerHook) => {
+    registerHook("command.run", { command: "recap" }, async (engine) => {
+      const reply = await engine.model.complete({ prompt: "Recap" });
+      return { text: reply.isAnswered ? reply.text : "No recap." };
+    });
+    registerHook("command.run", { command: "refuse" }, () => ({
+      deny: "Not here.",
+    }));
+  });
+  expect(await host.runCommandDirectly("recap", "")).toMatchObject({
+    replyText: "No recap.",
+    isModelReplyMissing: true,
+  });
+  expect(await host.runCommandDirectly("refuse", "")).toMatchObject({
+    replyText: "Not here.",
+    isError: true,
+    isModelReplyMissing: false,
+  });
+  expect(await host.runCommand("recap", "", "The recap")).toEqual({
+    text: "The recap",
+    isError: false,
+  });
+});

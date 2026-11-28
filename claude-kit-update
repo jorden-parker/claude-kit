@@ -89,7 +89,13 @@ if [ "${1:-}" = "profile" ]; then
 fi
 
 echo "Pulling $repository_root"
+script_path="$(realpath "$0")"
+script_before_pull="$(cksum < "$script_path")"
 git -C "$repository_root" pull --ff-only || failed_steps+=("pull $repository_root")
+if [ -z "${CLAUDE_KIT_UPDATE_RESTARTED:-}" ] && [ "$(cksum < "$script_path")" != "$script_before_pull" ]; then
+  echo "claude-kit-update itself changed in the pull, so the new one takes over"
+  CLAUDE_KIT_UPDATE_RESTARTED=1 exec "$script_path"
+fi
 
 if ! has_claude_kit_marketplace; then
   echo "Adding the claude-kit marketplace from $repository_root"
@@ -137,14 +143,24 @@ move_store_folder project-notes "project notes" PROJECT_NOTES_DIR || failed_step
 move_store_folder brainstorm "brainstorm" BRAINSTORM_DIR || failed_steps+=("move brainstorm")
 
 sync_directory="${CLAUDE_KIT_SYNC_DIR:-$repository_root}"
+missing_harnesses=()
 for harness in qwen pi opencode crush; do
-  command -v "$harness" >/dev/null || continue
+  if ! command -v "$harness" >/dev/null; then
+    missing_harnesses+=("$harness")
+    continue
+  fi
   echo "Syncing the plugins into $harness"
   if ! sync_output="$("$sync_directory/sync-$harness" 2>&1)"; then
     echo "$sync_output" >&2
     failed_steps+=("sync $harness")
   fi
 done
+if [ "${#missing_harnesses[@]}" -gt 0 ]; then
+  echo "Not on the PATH, so not synced: ${missing_harnesses[*]}"
+fi
+if [ -e "$repository_root/.pi/settings.json" ]; then
+  failed_steps+=("delete $repository_root/.pi: inside this checkout pi runs its old packages instead of the updated ones")
+fi
 
 if [ "${#updated_items[@]}" -gt 0 ]; then
   ledger_command="${CLAUDE_KIT_LEDGER_COMMAND:-$repository_root/plugins/token-ledger/bin/claude-ledger}"

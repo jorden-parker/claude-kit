@@ -92,11 +92,11 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 ~/src/claude-kit/claude-kit-update
 ```
 
-1. Pulls this checkout (`git pull --ff-only`)
+1. Pulls this checkout (`git pull --ff-only`). When the pull changes `claude-kit-update` itself, the new script takes over the run
 2. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
 3. Updates the claude-kit marketplace
 4. Updates every installed claude-kit plugin in its own scope
-5. Runs `./sync-qwen`, `./sync-pi`, `./sync-opencode` and `./sync-crush`, each only when its tool (`qwen`, `pi`, `opencode`, `crush`) is on the PATH. Each installs every plugin for your user; a project set up with `./sync-pi --local` is not refreshed
+5. Runs `./sync-qwen`, `./sync-pi`, `./sync-opencode` and `./sync-crush`, each only when its tool (`qwen`, `pi`, `opencode`, `crush`) is on the PATH. Each installs every plugin for your user. The tools it did not find are named in one line, so a missing sync shows. A checkout that still has a `.pi/settings.json` from the old project-level setup is reported as a failure, with the folder to delete
 6. Links `claude-notes`, `claude-agent-models`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 
 It needs `git`, `claude` and `jq` on the PATH, plus `rsync`, `bun` and `node` when it syncs another tool. A failed pull, update or sync does not stop the others; the run ends by naming each failure and exits 1. A sync prints its output only when it fails. Start a new Claude Code session afterwards to load the updated plugins.
@@ -243,9 +243,13 @@ hook gets Claude Code's stdin JSON (`session_id`, `cwd`, `hook_event_name`,
   blocks. When several replace a tool's output, the last replacement wins.
 
 `./sync-pi --local` builds the packages under `.pi/claude-kit/` of the current folder
-and lists them in its `.pi/settings.json`, so only that project gets them. This repo
-is set up that way: `.pi/settings.json` is committed and the built packages are not,
-so run `./sync-pi --local` once after cloning, and again after changing a plugin. pi
+and lists them in its `.pi/settings.json`, so only that project gets them. Use it
+instead of the user-level sync, never with it: pi loads both copies of a plugin, the
+project's first, and then refuses the user's copy because its tools have the same
+names (`Tool "mcp__handoff__run_handoff" conflicts with ...`). The project's copy,
+however old, is the one that runs. This repository no longer carries a
+`.pi/settings.json` for that reason; `claude-kit-update` keeps the user-level packages
+current. Run `./sync-pi --local` again after changing a plugin. pi
 asks you to trust the project before it loads them.
 
 `qwen extensions link` does not work here: it wants a `qwen-extension.json` in the source folder.

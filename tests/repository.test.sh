@@ -83,4 +83,10 @@ while IFS= read -r skill_file; do
   expect "$skill_file has no unquoted colon in a frontmatter value, which pi rejects" \
     has_strict_yaml_frontmatter "$repository_root/$skill_file"
 done < <(git -C "$repository_root" ls-files '*SKILL.md')
+tracks_no_project_pi_settings() {
+  [ -z "$(git -C "$repository_root" ls-files .pi)" ]
+}
+
+expect "the repository tracks no project-level pi settings, whose packages would clash with the ones claude-kit-update installs for the user" \
+  tracks_no_project_pi_settings
 [ "$failures" -eq 0 ] || exit 1

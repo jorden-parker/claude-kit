@@ -410,4 +410,35 @@ output="$(PATH="$system_path" run_update)"
 status=$?
 expect "a machine with no other harness exits 0" [ "$status" -eq 0 ]
 expect "a machine with no other harness syncs nothing" not_called "sync-"
+expect "the tools that are not installed are named as not synced" grep -qxF "Not on the PATH, so not synced: qwen pi opencode crush" <<<"$output"
+
+output="$(PATH="$sandbox/harnesses:$system_path" run_update)"
+expect "only the missing tools are named as not synced" grep -qxF "Not on the PATH, so not synced: opencode crush" <<<"$output"
+
+copied_checkout="$sandbox/copied-checkout"
+mkdir -p "$copied_checkout"
+cp "$update_script" "$copied_checkout/claude-kit-update"
+cat > "$sandbox/bin/git" <<'STUB'
+echo "git $*" >> "$CLAUDE_CALLS"
+if [ -n "${PULL_CHANGES_SCRIPT:-}" ] && [ ! -e "$PULL_CHANGES_SCRIPT.pulled" ]; then
+  : > "$PULL_CHANGES_SCRIPT.pulled"
+  cp "$PULL_CHANGES_SCRIPT" "$PULL_CHANGES_SCRIPT.new"
+  echo 'echo "the pulled script ran"' >> "$PULL_CHANGES_SCRIPT.new"
+  mv "$PULL_CHANGES_SCRIPT.new" "$PULL_CHANGES_SCRIPT"
+fi
+STUB
+update_script="$copied_checkout/claude-kit-update"
+output="$(PULL_CHANGES_SCRIPT="$update_script" run_update)"
+status=$?
+expect "a pull that changes claude-kit-update exits 0" [ "$status" -eq 0 ]
+expect "the pulled claude-kit-update takes over the run" grep -qxF "the pulled script ran" <<<"$output"
+expect "the takeover is announced" grep -qF "claude-kit-update itself changed" <<<"$output"
+expect "the plugins are updated once, by the pulled script" [ "$(grep -cxF "plugin marketplace update claude-kit" "$claude_calls")" -eq 1 ]
+mkdir -p "$copied_checkout/.pi"
+echo '{"packages":["claude-kit/handoff"]}' > "$copied_checkout/.pi/settings.json"
+output="$(run_update)"
+status=$?
+expect "a checkout that still has project-level pi settings exits 1" [ "$status" -eq 1 ]
+expect "the leftover project-level pi settings are named with what to do" \
+  grep -qxF "Failed: delete $(cd "$copied_checkout" && pwd -P)/.pi: inside this checkout pi runs its old packages instead of the updated ones" <<<"$output"
 [ "$failures" -eq 0 ] || exit 1

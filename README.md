@@ -96,9 +96,10 @@ claude-notes small-plans      # opens on one section: handoffs, project-notes, s
 2. Adds the claude-kit marketplace from this checkout if Claude Code does not have it yet
 3. Updates the claude-kit marketplace
 4. Updates every installed claude-kit plugin in its own scope
-5. Links `claude-notes`, `claude-agent-models`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
+5. Runs `./sync-qwen`, `./sync-pi`, `./sync-opencode` and `./sync-crush`, each only when its tool (`qwen`, `pi`, `opencode`, `crush`) is on the PATH. Each installs every plugin for your user; a project set up with `./sync-pi --local` is not refreshed
+6. Links `claude-notes`, `claude-agent-models`, `claude-ledger`, `claude-kit-update` and `claude-kit-doctor` into `~/.local/bin` (`CLAUDE_KIT_LINK_DIR` picks another folder); a real file already at that path is left alone
 
-It needs `git`, `claude` and `jq` on the PATH. A failed pull or update does not stop the others; the run ends by naming each failure and exits 1. Start a new Claude Code session afterwards to load the updated plugins.
+It needs `git`, `claude` and `jq` on the PATH, plus `rsync`, `bun` and `node` when it syncs another tool. A failed pull, update or sync does not stop the others; the run ends by naming each failure and exits 1. A sync prints its output only when it fails. Start a new Claude Code session afterwards to load the updated plugins.
 
 `claude-kit-doctor` prints each claude-kit plugin's version in this checkout beside the version Claude Code has installed (from `~/.claude/plugins/installed_plugins.json`), marks each `ok`, `stale` or `not installed`, and exits 1 when any is stale.
 
@@ -180,6 +181,10 @@ store) and offers what it registers to each tool in the form that tool loads:
   `{{args}}` where the arguments go. It replaces the generated command on both tools.
   `handoff` does this because the model writes the recap itself, and
   `prompt-optimizer` because `/optimize` is only a prompt there.
+- A picker, such as the plan set list of `/brainstorm` and `/small-plans`, asks its
+  question in the tool's own prompt: an MCP elicitation in Qwen Code, and a select
+  dialog (`ctx.ui.select`) in pi. Where the tool cannot ask, as in a headless run,
+  nothing is picked and the command says so.
 - Left in Claude Code, because neither tool has a place for them: panes, flag and
   mode autocomplete, filling the composer, toasts, and starting a new session from a
   command. A plugin's start-up host commands do not run either.
@@ -360,7 +365,7 @@ notes-viewer/                     claude-notes: the local web page for saved not
 agent-models/                     claude-agent-models: the terminal UI that picks each subagent's model (Go)
 design-studio/                    standalone tool: fresh mockups from a local Qwen model, with a live monitor page
 sync-qwen, sync-pi, sync-opencode, sync-crush   install the plugins into Qwen Code, pi, OpenCode and Crush
-claude-kit-update                 sets up the marketplace, updates every installed claude-kit plugin
+claude-kit-update                 sets up the marketplace, updates every installed claude-kit plugin, syncs the other tools
 claude-kit-update profile <name>  turns plugins on or off for the project in the current folder
 claude-kit-doctor                 compares each plugin's checkout version with the installed one
 check                             runs every test suite; --staged runs only staged ones (the pre-commit hook); --changed-since <rev> runs only the ones changed since that commit (CI); fails when a plugin changed since origin/main without a version bump

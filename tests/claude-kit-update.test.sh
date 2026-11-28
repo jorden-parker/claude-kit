@@ -43,6 +43,22 @@ echo "git $*" >> "$CLAUDE_CALLS"
 STUB
 chmod +x "$sandbox/bin/git"
 
+mkdir -p "$sandbox/sync" "$sandbox/harnesses" "$sandbox/tools"
+for harness in qwen pi opencode crush; do
+  cat > "$sandbox/sync/sync-$harness" <<STUB
+echo "sync-$harness" >> "\$CLAUDE_CALLS"
+echo "sync-$harness output"
+[ "\${SYNC_FAILS:-}" != "$harness" ]
+STUB
+  chmod +x "$sandbox/sync/sync-$harness"
+done
+for harness in qwen pi; do
+  : > "$sandbox/harnesses/$harness"
+  chmod +x "$sandbox/harnesses/$harness"
+done
+ln -s "$(command -v jq)" "$sandbox/tools/jq"
+system_path="$sandbox/tools:/usr/bin:/bin"
+
 cat > "$sandbox/plugins.json" <<'JSON'
 {
   "installed": [
@@ -65,6 +81,7 @@ run_update() {
   PATH="$sandbox/bin:$PATH" CLAUDE_CALLS="$claude_calls" PLUGINS_JSON="$sandbox/plugins.json" \
     MARKETPLACES_JSON="$sandbox/marketplaces.json" CLAUDE_KIT_LINK_DIR="$link_directory" \
     CLAUDE_KIT_LEDGER_COMMAND="$sandbox/fake-ledger" LEDGER_CALLS="$ledger_calls" \
+    CLAUDE_KIT_SYNC_DIR="$sandbox/sync" \
     bash "$update_script" 2>&1
 }
 
@@ -368,4 +385,29 @@ echo '{"installed":[{"id":"ledger-tune@claude-kit","scope":"user"},{"id":"token-
 run_update >/dev/null
 expect "existing collector updates before retiring old plugin" calls_in_order "plugin update token-ledger@claude-kit --scope user" "plugin uninstall ledger-tune@claude-kit --scope user"
 expect "existing collector avoids reinstall" not_called "plugin install"
+
+echo '{"installed":[{"id":"guards@claude-kit","scope":"user"}]}' > "$sandbox/plugins.json"
+output="$(PATH="$sandbox/harnesses:$system_path" run_update)"
+status=$?
+expect "a run with two other harnesses exits 0" [ "$status" -eq 0 ]
+expect "the plugins are synced into Qwen Code when qwen is installed" called "sync-qwen"
+expect "the plugins are synced into pi when pi is installed" called "sync-pi"
+expect "a harness that is not installed is not synced" not_called "sync-opencode"
+expect "a second harness that is not installed is not synced" not_called "sync-crush"
+expect "the harnesses are synced after the Claude Code plugins are updated" \
+  calls_in_order "plugin update guards@claude-kit --scope user" "sync-qwen"
+expect "each synced harness is named" grep -qxF "Syncing the plugins into pi" <<<"$output"
+expect "the output of a sync that worked is left out" [ -z "$(grep -F "sync-pi output" <<<"$output")" ]
+
+output="$(PATH="$sandbox/harnesses:$system_path" SYNC_FAILS=qwen run_update)"
+status=$?
+expect "a failed sync exits 1" [ "$status" -eq 1 ]
+expect "the failed sync is named" grep -qF "Failed: sync qwen" <<<"$output"
+expect "the output of the failed sync is shown" grep -qF "sync-qwen output" <<<"$output"
+expect "the other harnesses are still synced after a failure" called "sync-pi"
+
+output="$(PATH="$system_path" run_update)"
+status=$?
+expect "a machine with no other harness exits 0" [ "$status" -eq 0 ]
+expect "a machine with no other harness syncs nothing" not_called "sync-"
 [ "$failures" -eq 0 ] || exit 1

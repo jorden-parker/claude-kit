@@ -38,7 +38,10 @@ type RegisteredPiTool = {
   parameters: unknown;
   execute: (
     toolCallId: string,
-    toolArguments: Record<string, unknown>
+    toolArguments: Record<string, unknown>,
+    abortSignal?: AbortSignal,
+    onUpdate?: unknown,
+    piContext?: unknown
   ) => Promise<unknown>;
 };
 
@@ -99,5 +102,67 @@ test("a denied tool call throws, which pi reports as a failed tool result", asyn
   const { registeredTools } = await loadCounter();
   expect(registeredTools[0]!.execute("call-1", {})).rejects.toThrow(
     "Say by how much."
+  );
+});
+
+const registerPicker: Register = (registerHook) => {
+  registerHook("session.start", async ($, event, next) => {
+    await $.command.register({ name: "pick", description: "Picks a plan" });
+    return next(event);
+  });
+  registerHook("command.run", { command: "pick" }, async ($) => {
+    const answer = await $.ui.ask("Which plan?", {
+      header: "Plans",
+      options: ["Alpha", "Beta"],
+    });
+    return { text: `chose ${answer}` };
+  });
+};
+
+const loadPickTool = async () => {
+  const registeredTools: RegisteredPiTool[] = [];
+  await createPiExtension({
+    pluginName: "picker",
+    pluginRoot: "/plugin-root",
+    storeFolder: await mkdtemp(join(tmpdir(), "plugin-host-pi-")),
+    register: registerPicker,
+  })({ registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool) });
+  return registeredTools[0]!;
+};
+
+const runPick = (pickTool: RegisteredPiTool, piContext: unknown) =>
+  pickTool.execute("call-1", { args: "" }, undefined, undefined, piContext);
+
+test("a question is asked in pi's select dialog and the picked option is the answer", async () => {
+  const shownDialogs: { title: string; options: string[] }[] = [];
+  const piContext = {
+    hasUI: true,
+    ui: {
+      select: async (title: string, options: string[]) => {
+        shownDialogs.push({ title, options });
+        return "Beta";
+      },
+    },
+  };
+  expect(await runPick(await loadPickTool(), piContext)).toEqual({
+    content: [{ type: "text", text: "chose Beta" }],
+    details: undefined,
+  });
+  expect(shownDialogs).toEqual([
+    { title: "Plans: Which plan?", options: ["Alpha", "Beta"] },
+  ]);
+});
+
+test("a dismissed select dialog fails the tool call", async () => {
+  const piContext = { hasUI: true, ui: { select: async () => undefined } };
+  expect(runPick(await loadPickTool(), piContext)).rejects.toThrow(
+    "The user cancelled the question."
+  );
+});
+
+test("a question fails the tool call when pi has no dialogs", async () => {
+  const piContext = { hasUI: false, ui: { select: async () => "Beta" } };
+  expect(runPick(await loadPickTool(), piContext)).rejects.toThrow(
+    "no question prompt outside Claude Code"
   );
 });

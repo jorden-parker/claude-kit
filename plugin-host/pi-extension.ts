@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import {
   createPluginHost,
+  NO_QUESTION_PROMPT_REASON,
   qualifyToolName,
   type AskQuestion,
   type Register,
@@ -16,6 +17,15 @@ export type HostedPlugin = {
 };
 
 type PiExtensionApi = { registerTool: (tool: any) => unknown };
+
+type PiContext = {
+  hasUI: boolean;
+  ui: {
+    select: (title: string, options: string[]) => Promise<string | undefined>;
+  };
+};
+
+const CANCELLED_QUESTION_REASON = "The user cancelled the question.";
 
 export const startHostedPlugin = async ({
   pluginName,
@@ -38,7 +48,23 @@ export const startHostedPlugin = async ({
 
 export const createPiExtension =
   (plugin: HostedPlugin) => async (pi: PiExtensionApi) => {
-    const host = await startHostedPlugin(plugin);
+    let latestContext: PiContext | undefined;
+    const askInSelectDialog: AskQuestion = async (
+      question,
+      { header, options }
+    ) => {
+      if (!latestContext?.hasUI) throw new Error(NO_QUESTION_PROMPT_REASON);
+      const answer = await latestContext.ui.select(
+        `${header}: ${question}`,
+        options
+      );
+      if (answer === undefined) throw new Error(CANCELLED_QUESTION_REASON);
+      return answer;
+    };
+    const host = await startHostedPlugin({
+      ...plugin,
+      askQuestion: plugin.askQuestion ?? askInSelectDialog,
+    });
     for (const tool of listHostTools(host)) {
       pi.registerTool({
         name: qualifyToolName(host.pluginName, tool.name),
@@ -47,8 +73,12 @@ export const createPiExtension =
         parameters: tool.inputSchema,
         execute: async (
           _toolCallId: string,
-          toolArguments: Record<string, any>
+          toolArguments: Record<string, any>,
+          _abortSignal?: AbortSignal,
+          _onUpdate?: unknown,
+          piContext?: PiContext
         ) => {
+          latestContext = piContext;
           const outcome = await callHostTool(host, tool.name, toolArguments);
           if (outcome.isError) throw new Error(outcome.text);
           return {

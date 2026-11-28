@@ -1,6 +1,6 @@
 ---
 name: handoff-menu
-description: Hand the work off to a fresh session: save a recap, list this project's handoffs, or resume one
+description: "Hand the work off to a fresh session: save a recap, list this project's handoffs, or resume one"
 argument-hint: "[save] [focus] | list | resume [id] [extra context] (add --topic <name> to file by topic)"
 disable-model-invocation: true
 ---

@@ -136,6 +136,16 @@ move_store_folder handoffs "handoffs" HANDOFFS_DIR || failed_steps+=("move hando
 move_store_folder project-notes "project notes" PROJECT_NOTES_DIR || failed_steps+=("move project notes")
 move_store_folder brainstorm "brainstorm" BRAINSTORM_DIR || failed_steps+=("move brainstorm")
 
+sync_directory="${CLAUDE_KIT_SYNC_DIR:-$repository_root}"
+for harness in qwen pi opencode crush; do
+  command -v "$harness" >/dev/null || continue
+  echo "Syncing the plugins into $harness"
+  if ! sync_output="$("$sync_directory/sync-$harness" 2>&1)"; then
+    echo "$sync_output" >&2
+    failed_steps+=("sync $harness")
+  fi
+done
+
 if [ "${#updated_items[@]}" -gt 0 ]; then
   ledger_command="${CLAUDE_KIT_LEDGER_COMMAND:-$repository_root/plugins/token-ledger/bin/claude-ledger}"
   joined_items="$(IFS=', '; echo "${updated_items[*]}")"

@@ -70,4 +70,17 @@ while IFS= read -r go_version_file; do
   expect "workflow go-version-file $go_version_file exists" has_go_version_file "$go_version_file"
 done < <(grep -ho 'go-version-file: .*' "$repository_root"/.github/workflows/*.yml | sed 's/go-version-file: //')
 
+has_strict_yaml_frontmatter() {
+  ! awk '
+    NR == 1 && $0 != "---" { exit }
+    NR > 1 && $0 == "---" { exit }
+    NR > 1 && /^[A-Za-z_-]+: [^"'"'"'>|[{].*: / { is_broken = 1 }
+    END { exit !is_broken }
+  ' "$1"
+}
+
+while IFS= read -r skill_file; do
+  expect "$skill_file has no unquoted colon in a frontmatter value, which pi rejects" \
+    has_strict_yaml_frontmatter "$repository_root/$skill_file"
+done < <(git -C "$repository_root" ls-files '*SKILL.md')
 [ "$failures" -eq 0 ] || exit 1

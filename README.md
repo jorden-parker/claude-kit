@@ -181,13 +181,19 @@ store) and offers what it registers to each tool in the form that tool loads:
   `{{args}}` where the arguments go. It replaces the generated command on both tools.
   `handoff` does this because the model writes the recap itself, and
   `prompt-optimizer` because `/optimize` is only a prompt there.
-- A picker, such as the plan set list of `/brainstorm` and `/small-plans`, asks its
-  question in the tool's own prompt: an MCP elicitation in Qwen Code, and a select
-  dialog (`ctx.ui.select`) in pi. Where the tool cannot ask, as in a headless run,
-  nothing is picked and the command says so.
-- Left in Claude Code, because neither tool has a place for them: panes, flag and
-  mode autocomplete, filling the composer, toasts, and starting a new session from a
-  command. A plugin's start-up host commands do not run either.
+- A picker, such as the plan set list of `/brainstorm` and `/small-plans` or the
+  handoff list of `/handoff resume`, asks its question in the tool's own prompt: an
+  MCP elicitation in Qwen Code, and a select dialog (`ctx.ui.select`) in pi. The
+  dialog opens when the model calls the command's tool. Where the tool cannot ask, as
+  in a headless run, nothing is picked and the command says so; `/handoff resume`
+  takes the latest handoff there.
+- In pi, a command's subcommands are suggested after its name, such as `save`, `list`
+  and `resume` after `/handoff `. The extension adds an autocomplete provider to pi's
+  editor that asks the plugin's `prompt.autocomplete` hook. Qwen Code shows the
+  argument hint only.
+- Left in Claude Code, because neither tool has a place for them: panes, filling the
+  composer, toasts, and starting a new session from a command. A plugin's start-up
+  host commands do not run either.
 
 ### What each script installs
 

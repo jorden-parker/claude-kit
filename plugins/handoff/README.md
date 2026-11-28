@@ -38,7 +38,7 @@ The old dashed forms (`--save`, `--list`, `--resume`) still work as the first wo
 - **Resume box** (`resume`): the same notes field, then a list of this project's ten newest handoffs. Enter in the field resumes the latest. Tab to the list, pick another with the arrows, and Enter resumes that one. The recap is already written, so the notes become the request, with the recap below it as background, in the composer where you can edit them
 - Each box has a button for the same action and a Cancel button. Esc only hands the keys back to the prompt; Cancel closes the box. Either way nothing is written and the session is left alone
 - Typing anything after the action skips the box: `/handoff save the parser`, `/handoff resume 3`, `/handoff resume start with the tests`
-- VS Code draws no band, so there the box opens in a side pane. Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), the command runs at once: `save` without notes, `resume` on the latest handoff
+- VS Code draws no band, so there the box opens in a side pane. Where a box cannot be drawn (a headless run, Qwen Code, pi, OpenCode), `save` runs at once without notes, and `resume` asks which handoff in the host's own question prompt (pi's select dialog, an MCP elicitation). Dismissing that question resumes nothing; a host that cannot ask resumes the latest handoff
 
 While a handoff runs, the band shows a small progress panel: a spinner, the current step (asking, writing, saving) and the steps done and still to come. It goes away when the handoff ends or is cancelled.
 

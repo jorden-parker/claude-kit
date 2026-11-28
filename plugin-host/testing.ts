@@ -198,6 +198,7 @@ const startPiClient = async (installed: InstalledPlugin): Promise<ToolClient> =>
   const { default: loadExtension } = await import(extensionPath);
   await loadExtension({
     registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool),
+    on: () => undefined,
   });
   const qualifiedPrefix = `mcp__${installed.pluginName}__`;
 

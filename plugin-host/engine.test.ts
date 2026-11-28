@@ -262,3 +262,135 @@ test("clock.every returns a timer that can be cancelled, and ui.place reports no
     isError: false,
   });
 });
+
+const PICK_SUGGESTIONS = [
+  { text: "alpha", description: "The first plan" },
+  { text: "beta", description: "The second plan" },
+];
+
+const registerCompleter: Register = (registerHook) => {
+  registerHook("prompt.autocomplete", async (_engine, event, next) => {
+    const isFirstPickArgument =
+      event.text.startsWith("/pick ") && event.start === "/pick ".length;
+    if (!isFirstPickArgument) return next(event);
+    const { suggestions } = await next(event);
+    return {
+      suggestions: [
+        ...suggestions,
+        ...PICK_SUGGESTIONS.filter((suggestion) =>
+          suggestion.text.startsWith(event.token)
+        ),
+      ],
+    };
+  });
+};
+
+const startCompleter = async (register: Register) => {
+  const host = createPluginHost({
+    pluginName: "completer",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register,
+  });
+  await host.start();
+  return host;
+};
+
+test("suggestCompletions asks the prompt.autocomplete hooks about the word being typed", async () => {
+  const host = await startCompleter(registerCompleter);
+  expect(await host.suggestCompletions("/pick ")).toEqual(PICK_SUGGESTIONS);
+  expect(await host.suggestCompletions("/pick be")).toEqual([
+    PICK_SUGGESTIONS[1]!,
+  ]);
+  expect(await host.suggestCompletions("/pick alpha be")).toEqual([]);
+  expect(await host.suggestCompletions("/other ")).toEqual([]);
+});
+
+test("suggestCompletions is empty for a plugin with no autocomplete hook or a failing one", async () => {
+  expect(await (await startCompleter(() => undefined)).suggestCompletions("/pick ")).toEqual([]);
+  const failingHost = await startCompleter((registerHook) => {
+    registerHook("prompt.autocomplete", () => {
+      throw new Error("broken hook");
+    });
+  });
+  expect(await failingHost.suggestCompletions("/pick ")).toEqual([]);
+});
+
+test("session.root is the folder the host started in, as session.cwd is", async () => {
+  const host = createPluginHost({
+    pluginName: "locator",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/projects/notes-app",
+    storePath: "/nonexistent/store.json",
+    register: (registerHook) => {
+      registerHook("command.run", { command: "locate" }, async (engine) => ({
+        text: `${await engine.session.root()} ${await engine.session.cwd()}`,
+      }));
+    },
+  });
+  await host.start();
+  expect(await host.runCommand("locate", "")).toEqual({
+    text: "/projects/notes-app /projects/notes-app",
+    isError: false,
+  });
+});
+
+const startToolServer = async (register: Register) => {
+  const host = createPluginHost({
+    pluginName: "server",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register,
+  });
+  await host.start();
+  return host;
+};
+
+test("a tool served at tool.run answers the call when no tool.call hook does", async () => {
+  const host = await startToolServer((registerHook) => {
+    registerHook("tool.run", { tool: "mcp__server__greet" }, (_engine, event) => ({
+      result: `Hello ${event.name}`,
+    }));
+  });
+  expect(await host.callTool("greet", { name: "Ada" })).toEqual({
+    text: "Hello Ada",
+    isError: false,
+  });
+});
+
+test("a tool.call hook that answers keeps the call from reaching tool.run", async () => {
+  const host = await startToolServer((registerHook) => {
+    registerHook("tool.call", { tool: "mcp__server__greet" }, () => ({
+      deny: "Not now.",
+    }));
+    registerHook("tool.run", { tool: "mcp__server__greet" }, () => ({
+      result: "Hello",
+    }));
+  });
+  expect(await host.callTool("greet", {})).toEqual({
+    text: "Not now.",
+    isError: true,
+  });
+});
+
+test("fs.exists tells a file or folder that is there from one that is not", async () => {
+  const host = createPluginHost({
+    pluginName: "finder",
+    pluginRoot: "/plugin-root",
+    workingDirectory: "/",
+    storePath: "/nonexistent/store.json",
+    register: (registerHook) => {
+      registerHook("command.run", { command: "find" }, async (engine, event) => ({
+        text: String(await engine.fs.exists(event.args)),
+      }));
+    },
+  });
+  await host.start();
+  expect((await host.runCommand("find", import.meta.dir)).text).toBe("true");
+  expect((await host.runCommand("find", import.meta.path)).text).toBe("true");
+  expect(
+    (await host.runCommand("find", `${import.meta.dir}/no-such-file`)).text
+  ).toBe("false");
+});

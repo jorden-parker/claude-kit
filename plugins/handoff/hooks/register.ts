@@ -113,6 +113,8 @@ type HandoffBox = { notes: string } & (
     }
 );
 
+type ResumeBox = Extract<HandoffBox, { kind: "resume" }>;
+
 const BOX_WORDING = {
   notes: {
     heading: "Notes for the next session",
@@ -803,7 +805,7 @@ const deliverRecap = async (
 const buildResumeBox = async (
   engine: EngineInterface,
   topic?: string
-): Promise<HandoffBox | undefined> => {
+): Promise<ResumeBox | undefined> => {
   const { folderPath } = await findHandoffFolder(
     engine,
     await engine.session.cwd(),
@@ -824,6 +826,33 @@ const buildResumeBox = async (
       label: describeListedHandoff(handoff),
     })),
   };
+};
+
+const RESUME_QUESTION = "Which handoff should be resumed?";
+const NOTHING_RESUMED_MESSAGE = "Nothing resumed.";
+const DISMISSED_QUESTION = /dismiss|cancel|declin/i;
+
+const askWhichHandoff = async (
+  engine: EngineInterface,
+  resumeBox: ResumeBox
+) => {
+  if (resumeBox.handoffOptions.length < 2) return resumeBox.chosenHandoffId;
+  try {
+    const answer = await engine.ui.ask(RESUME_QUESTION, {
+      header: QUESTION_DIALOG_HEADER,
+      options: resumeBox.handoffOptions.map((option) => option.label),
+    });
+    const answeredOption = resumeBox.handoffOptions.find(
+      (option) => option.label === answer
+    );
+    return answeredOption
+      ? Number(answeredOption.value)
+      : resumeBox.chosenHandoffId;
+  } catch (error) {
+    return DISMISSED_QUESTION.test(describeError(error))
+      ? undefined
+      : resumeBox.chosenHandoffId;
+  }
 };
 
 const placeBoxPane = async (engine: EngineInterface, title: string) => {
@@ -1034,6 +1063,30 @@ const showBox = async (
   return isBoxPlaced;
 };
 
+const resumeFromCommand = async (
+  engine: EngineInterface,
+  progress: HandoffProgress,
+  handoffArguments: Extract<HandoffArguments, { action: "resume" }>
+) => {
+  const isBareResume =
+    handoffArguments.handoffId === undefined && !handoffArguments.extraContext;
+  const resumeBox = isBareResume
+    ? await buildResumeBox(engine, handoffArguments.topic)
+    : undefined;
+  if (!resumeBox)
+    return resumeSavedHandoff(
+      engine,
+      handoffArguments.handoffId,
+      handoffArguments.extraContext,
+      handoffArguments.topic
+    );
+  if (await showBox(engine, progress, RESUME_BOX_TITLE, resumeBox))
+    return { text: RESUME_BOX_MESSAGE };
+  const askedHandoffId = await askWhichHandoff(engine, resumeBox);
+  if (askedHandoffId === undefined) return { text: NOTHING_RESUMED_MESSAGE };
+  return resumeSavedHandoff(engine, askedHandoffId, "", handoffArguments.topic);
+};
+
 const finishBox = async (
   engine: EngineInterface,
   progress: HandoffProgress
@@ -1228,26 +1281,8 @@ export const register: Register = (on, options) => {
     await fileLegacyHandoffs($);
     if (handoffArguments.action === "list")
       return listProjectHandoffs($, handoffArguments.topic);
-    if (handoffArguments.action === "resume") {
-      const isBareResume =
-        handoffArguments.handoffId === undefined &&
-        !handoffArguments.extraContext;
-      const resumeBox = isBareResume
-        ? await buildResumeBox($, handoffArguments.topic)
-        : undefined;
-      if (
-        resumeBox &&
-        (await showBox($, progress, RESUME_BOX_TITLE, resumeBox))
-      ) {
-        return { text: RESUME_BOX_MESSAGE };
-      }
-      return resumeSavedHandoff(
-        $,
-        handoffArguments.handoffId,
-        handoffArguments.extraContext,
-        handoffArguments.topic
-      );
-    }
+    if (handoffArguments.action === "resume")
+      return resumeFromCommand($, progress, handoffArguments);
     const isBareRecapAction =
       handoffArguments.action === "recap" &&
       handoffArguments.isSaveOnly &&

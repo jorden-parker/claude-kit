@@ -2479,6 +2479,71 @@ test(
 
 const REPOSITORY_QUESTION = "Which repository is this handoff about?";
 
+const RESUME_QUESTION = "Which handoff should be resumed?";
+const FIRST_HANDOFF_LABEL = "#1  2026-11-09 14:32  First recap";
+const SECOND_HANDOFF_LABEL = "#2  2026-11-09 14:32  Second recap";
+
+testWithSession(
+  "resume with nothing after it and no box asks which handoff, and the answer resumes it",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    seedHandoff(handoffFiles, 2, "Second recap");
+    const askedOptions = answerQuestions(on, {
+      [RESUME_QUESTION]: FIRST_HANDOFF_LABEL,
+    });
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("resume"));
+    await clock.settle();
+
+    expect(askedOptions[RESUME_QUESTION]).toEqual([
+      SECOND_HANDOFF_LABEL,
+      FIRST_HANDOFF_LABEL,
+    ]);
+    expect(handoffSteps).toEqual(["clear", "fill:First recap"]);
+  }
+);
+
+testWithSession(
+  "a dismissed resume question resumes nothing",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    seedHandoff(handoffFiles, 2, "Second recap");
+    answerQuestions(on, {});
+    const handoffSteps = collectHandoffSteps(on);
+
+    const reply = await $.command.run(handoff("resume"));
+    await clock.settle();
+
+    expect(reply.text).toBe("Nothing resumed.");
+    expect(handoffSteps).toEqual([]);
+  }
+);
+
+testWithSession(
+  "resume with a single saved handoff asks nothing",
+  [],
+  async ($, on, handoffFiles) => {
+    const clock = mock.clock(on);
+    ignoreToasts(on);
+    seedHandoff(handoffFiles, 1, "First recap");
+    const askedOptions = answerQuestions(on, {});
+    const handoffSteps = collectHandoffSteps(on);
+
+    await $.command.run(handoff("resume"));
+    await clock.settle();
+
+    expect(askedOptions).toEqual({});
+    expect(handoffSteps).toEqual(["clear", "fill:First recap"]);
+  }
+);
+
 for (const [repositoryLine, answers, projectName] of [
   ["Repository: /src/notes-app", {}, "notes-app"],
   [

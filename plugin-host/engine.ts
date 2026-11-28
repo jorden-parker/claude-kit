@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export type PluginEvent = Record<string, any>;
@@ -27,6 +27,8 @@ export type CommandDefinition = {
 };
 
 export type Outcome = { text: string; isError: boolean };
+
+export type Suggestion = { text: string; description?: string };
 
 export type AskChoices = { header: string; options: string[] };
 export type AskQuestion = (question: string, choices: AskChoices) => Promise<string>;
@@ -147,6 +149,7 @@ export const createPluginHost = ({
   const nouns: Record<string, Record<string, unknown>> = {
     session: {
       cwd: async () => workingDirectory,
+      root: async () => workingDirectory,
       id: async () => sessionId,
       messages: async () => [{ role: "user", text: CALLER_MESSAGE }],
     },
@@ -159,6 +162,11 @@ export const createPluginHost = ({
     },
     fs: {
       read: (filePath: string) => readFile(filePath, "utf8"),
+      exists: (filePath: string) =>
+        access(filePath).then(
+          () => true,
+          () => false
+        ),
       write: async (filePath: string, text: string) => {
         await mkdir(dirname(filePath), { recursive: true });
         await writeFile(filePath, text);
@@ -250,7 +258,11 @@ export const createPluginHost = ({
     );
   };
 
-  const dispatch = (eventName: string, event: PluginEvent) => {
+  const dispatch = (
+    eventName: string,
+    event: PluginEvent,
+    unhandledReply?: unknown
+  ) => {
     const matchingHooks = hooks.filter(
       (registered) =>
         registered.eventName === eventName &&
@@ -265,7 +277,7 @@ export const createPluginHost = ({
               currentEvent,
               runFrom(hookIndex + 1)
             )
-          : undefined;
+          : unhandledReply;
     return runFrom(0)(event);
   };
 
@@ -297,7 +309,7 @@ export const createPluginHost = ({
   };
 
   const runTurn = (
-    eventName: string,
+    eventNames: string[],
     event: PluginEvent,
     unansweredText: string,
     modelReply?: string
@@ -305,7 +317,10 @@ export const createPluginHost = ({
     const outcome = earlierCalls.then(async () => {
       turn = startTurn(modelReply);
       try {
-        const reply = await dispatch(eventName, event);
+        let reply: unknown;
+        for (const eventName of eventNames) {
+          reply ??= await dispatch(eventName, event);
+        }
         await finishScheduledWork();
         return describeReply(reply, unansweredText);
       } catch (error) {
@@ -335,13 +350,26 @@ export const createPluginHost = ({
     },
     callTool: (toolName: string, input: PluginEvent) =>
       runTurn(
-        "tool.call",
+        ["tool.call", "tool.run"],
         { ...input, tool: qualifyToolName(pluginName, toolName) },
         `No hook answered ${qualifyToolName(pluginName, toolName)}.`
       ),
+    suggestCompletions: async (composerText: string): Promise<Suggestion[]> => {
+      const start = composerText.search(/\S*$/);
+      try {
+        const reply = await dispatch(
+          "prompt.autocomplete",
+          { text: composerText, start, token: composerText.slice(start) },
+          { suggestions: [] }
+        );
+        return reply?.suggestions ?? [];
+      } catch {
+        return [];
+      }
+    },
     runCommand: (commandName: string, args: string, modelReply?: string) =>
       runTurn(
-        "command.run",
+        ["command.run"],
         {
           command: commandName,
           args,

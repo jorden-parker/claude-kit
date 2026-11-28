@@ -53,7 +53,10 @@ const loadCounter = async () => {
     pluginRoot: "/plugin-root",
     storeFolder,
     register: registerCounter,
-  })({ registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool) });
+  })({
+    registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool),
+    on: () => undefined,
+  });
   return { registeredTools, storeFolder };
 };
 
@@ -126,7 +129,10 @@ const loadPickTool = async () => {
     pluginRoot: "/plugin-root",
     storeFolder: await mkdtemp(join(tmpdir(), "plugin-host-pi-")),
     register: registerPicker,
-  })({ registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool) });
+  })({
+    registerTool: (tool: RegisteredPiTool) => registeredTools.push(tool),
+    on: () => undefined,
+  });
   return registeredTools[0]!;
 };
 
@@ -165,4 +171,120 @@ test("a question fails the tool call when pi has no dialogs", async () => {
   expect(runPick(await loadPickTool(), piContext)).rejects.toThrow(
     "no question prompt outside Claude Code"
   );
+});
+
+const PICK_SUGGESTIONS = [
+  { text: "alpha", description: "The first plan" },
+  { text: "beta", description: "The second plan" },
+];
+
+const registerCompleter: Register = (registerHook) => {
+  registerHook("session.start", async ($, event, next) => {
+    await $.command.register({ name: "pick", description: "Picks a plan" });
+    return next(event);
+  });
+  registerHook("prompt.autocomplete", async (_engine, event, next) => {
+    const isFirstPickArgument =
+      event.text.startsWith("/pick ") && event.start === "/pick ".length;
+    if (!isFirstPickArgument) return next(event);
+    const { suggestions } = await next(event);
+    return {
+      suggestions: [
+        ...suggestions,
+        ...PICK_SUGGESTIONS.filter((suggestion) =>
+          suggestion.text.startsWith(event.token)
+        ),
+      ],
+    };
+  });
+};
+
+const EDITOR_SUGGESTIONS = { items: [{ value: "file.ts", label: "file.ts" }], prefix: "fi" };
+const APPLIED_COMPLETION = { lines: ["/pick beta"], cursorLine: 0, cursorCol: 10 };
+
+const editorProvider = {
+  triggerCharacters: ["@"],
+  getSuggestions: async () => EDITOR_SUGGESTIONS,
+  applyCompletion: () => APPLIED_COMPLETION,
+  shouldTriggerFileCompletion: () => false,
+};
+
+type PiProvider = typeof editorProvider & {
+  getSuggestions: (
+    lines: string[],
+    cursorLine: number,
+    cursorCol: number,
+    options: unknown
+  ) => Promise<unknown>;
+  applyCompletion: (...completionArguments: unknown[]) => unknown;
+};
+
+const startSession = async (register: Register) => {
+  const sessionStartHandlers: ((event: unknown, piContext: unknown) => unknown)[] = [];
+  const providerFactories: ((current: typeof editorProvider) => PiProvider)[] = [];
+  await createPiExtension({
+    pluginName: "completer",
+    pluginRoot: "/plugin-root",
+    storeFolder: await mkdtemp(join(tmpdir(), "plugin-host-pi-")),
+    register,
+  })({
+    registerTool: () => undefined,
+    on: (eventName: string, handler: (event: unknown, piContext: unknown) => unknown) => {
+      if (eventName === "session_start") sessionStartHandlers.push(handler);
+    },
+  });
+  for (const handler of sessionStartHandlers) {
+    await handler(
+      { reason: "startup" },
+      {
+        hasUI: true,
+        ui: {
+          select: async () => undefined,
+          addAutocompleteProvider: (
+            factory: (current: typeof editorProvider) => PiProvider
+          ) => providerFactories.push(factory),
+        },
+      }
+    );
+  }
+  return providerFactories;
+};
+
+const suggestAt = (provider: PiProvider, typedText: string) =>
+  provider.getSuggestions([typedText], 0, typedText.length, {});
+
+test("a command's subcommands are suggested in pi's editor after the command name", async () => {
+  const [wrapProvider] = await startSession(registerCompleter);
+  const provider = wrapProvider!(editorProvider);
+  expect(await suggestAt(provider, "/pick ")).toEqual({
+    items: [
+      { value: "alpha", label: "alpha", description: "The first plan" },
+      { value: "beta", label: "beta", description: "The second plan" },
+    ],
+    prefix: "",
+  });
+  expect(await suggestAt(provider, "/pick be")).toEqual({
+    items: [{ value: "beta", label: "beta", description: "The second plan" }],
+    prefix: "be",
+  });
+});
+
+test("pi's own suggestions are kept wherever the plugin suggests nothing", async () => {
+  const [wrapProvider] = await startSession(registerCompleter);
+  const provider = wrapProvider!(editorProvider);
+  expect(await suggestAt(provider, "/pick zz")).toBe(EDITOR_SUGGESTIONS);
+  expect(await suggestAt(provider, "/pick alpha be")).toBe(EDITOR_SUGGESTIONS);
+  expect(await suggestAt(provider, "/other ")).toBe(EDITOR_SUGGESTIONS);
+  expect(await provider.getSuggestions(["notes", "/pick "], 1, 6, {})).toBe(
+    EDITOR_SUGGESTIONS
+  );
+  expect(provider.applyCompletion(["/pick be"], 0, 8, {}, "be")).toBe(
+    APPLIED_COMPLETION
+  );
+  expect(provider.shouldTriggerFileCompletion()).toBe(false);
+  expect(provider.triggerCharacters).toEqual(["@"]);
+});
+
+test("a plugin with no command adds no suggestions to pi's editor", async () => {
+  expect(await startSession(() => undefined)).toEqual([]);
 });

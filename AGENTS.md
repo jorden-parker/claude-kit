@@ -32,5 +32,5 @@ Subcommands are plain words (`save`, `plan`), not dashed flags.
 
 ### Limits
 
-- The `prompt.autocomplete` hook works only in Claude Code. The `sync-*` scripts do not port it, so other hosts get the argument hint only.
+- The `prompt.autocomplete` hook works in Claude Code and in pi, where `plugin-host/pi-extension.ts` asks it from pi's editor. The other `sync-*` scripts do not port it, so those hosts get the argument hint only.
 - No test and no part of `check` enforces completion, so confirm all four parts yourself before you finish.
